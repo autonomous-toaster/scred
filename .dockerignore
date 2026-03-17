@@ -1,0 +1,80 @@
+# Docker build context exclusions
+# This dramatically speeds up docker build by not copying unnecessary files
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts - but keep release binaries
+target/release/**/*.d
+target/debug/
+target/incremental/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.env.local
+
+# Documentation
+docs/
+**/*.md
+LICENSE
+
+# Test files and fixtures
+tests/fixtures/
+**/*_test.rs
+
+# Docker and container files
+docker-compose/
+Dockerfile*
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# Node, Python, etc
+node_modules/
+venv/
+env/
+*.pyc
+__pycache__/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+.tmp/
+
+# Large files
+*.tar
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# Development files
+.pi/
+.env.example
+QUICKSTART.md
+SETUP_GUIDE.md
+README.md
+
+# Keep only what's needed for build
+# Cargo files
+!Cargo.toml
+!Cargo.lock
+
+# Source code
+!crates/
+!src/
+
+# Keep release binaries for Docker deployment
+!target/release/scred-proxy-docker
+!target/release/scred-mitm-docker

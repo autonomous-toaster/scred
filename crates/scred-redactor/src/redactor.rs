@@ -45,22 +45,6 @@ impl Default for RedactionConfig {
 // Zig FFI bindings for pattern detection and redaction
 // ============================================================================
 
-#[repr(C)]
-struct ZigRedactionResult {
-    output: *mut u8,
-    output_len: usize,
-    match_count: u32,
-}
-
-extern "C" {
-    fn scred_redact_text_optimized_stub(
-        text: *const u8,
-        text_len: usize,
-    ) -> ZigRedactionResult;
-
-    fn scred_free_redaction_result_stub(result: ZigRedactionResult);
-}
-
 pub struct RedactionEngine {
     config: RedactionConfig,
     selector: Option<crate::pattern_selector::PatternSelector>,
@@ -96,6 +80,7 @@ impl RedactionEngine {
         &self.config
     }
 
+    #[inline(never)]
     pub fn redact(&self, text: &str) -> RedactionResult {
         if !self.config.enabled {
             return RedactionResult {
@@ -105,57 +90,62 @@ impl RedactionEngine {
             };
         }
 
+        // Use pure Rust SIMD pattern detection
+        use scred_detector::{detect_all, redact_text};
         
+        let text_bytes = text.as_bytes();
         
+        // Detect all patterns using Rust implementation
+        let detection_result = detect_all(text_bytes);
         
-        // Call Zig FFI for pattern detection and redaction
-        
-        unsafe {
-            let zig_result = scred_redact_text_optimized_stub(text.as_ptr(), text.len());
+        // Redact matched regions
+        let redacted_bytes = if detection_result.count() > 0 {
+            redact_text(text_bytes, &detection_result.matches)
+        } else {
+            text_bytes.to_vec()
+        };
+
+        let redacted_text = String::from_utf8_lossy(&redacted_bytes).into_owned();
+
+        // Map pattern types to tier names for selector filtering
+        let mut tier_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for m in &detection_result.matches {
+            let tier_name = match m.pattern_type {
+                0..=25 => "CRITICAL",      // SIMPLE_PREFIX patterns
+                100..=144 => "API_KEYS",   // PREFIX_VALIDATION patterns
+                200 => "API_KEYS",         // JWT pattern
+                _ => "PATTERNS",
+            };
+            *tier_counts.entry(tier_name.to_string()).or_insert(0) += 1;
+        }
+
+        // Populate warnings with tier names for ConfigurableEngine filtering
+        let warnings: Vec<RedactionWarning> = tier_counts
+            .into_iter()
+            .map(|(tier, count)| RedactionWarning {
+                pattern_type: tier,
+                count,
+            })
+            .collect();
+
+        // Create match information for each detected pattern
+        let matches = detection_result.matches.iter().map(|m| {
+            let original = &text_bytes[m.start..m.end];
+            let redacted = &redacted_bytes[m.start..m.end];
             
-            
-            // Convert Zig result to Rust result
-            if zig_result.output.is_null() || zig_result.output_len == 0 {
-                // Zig failed to allocate or redact, return original
-                let result = RedactionResult {
-                    redacted: text.to_string(),
-                    matches: Vec::new(),
-                    warnings: vec![RedactionWarning {
-                        pattern_type: "zig-ffi-error".to_string(),
-                        count: 0,
-                    }],
-                };
-                scred_free_redaction_result_stub(zig_result);
-                return result;
+            PatternMatch {
+                position: m.start,
+                pattern_type: format!("pattern-{}", m.pattern_type),
+                original_text: String::from_utf8_lossy(original).into_owned(),
+                redacted_text: String::from_utf8_lossy(redacted).into_owned(),
+                match_len: m.end - m.start,
             }
+        }).collect();
 
-            // Convert Zig output to Rust string
-            let redacted_slice = std::slice::from_raw_parts(zig_result.output, zig_result.output_len);
-            let redacted_text = String::from_utf8_lossy(redacted_slice).into_owned();
-            
-            // Create basic match info (TODO: Zig should return match details)
-            let matches = if zig_result.match_count > 0 {
-                vec![PatternMatch {
-                    position: 0,
-                    pattern_type: "detected".to_string(),
-                    original_text: text.to_string(),
-                    redacted_text: redacted_text.clone(),
-                    match_len: text.len(),
-                }]
-            } else {
-                Vec::new()
-            };
-
-            let result = RedactionResult {
-                redacted: redacted_text,
-                matches,
-                warnings: Vec::new(),
-            };
-
-            // Free Zig allocated memory
-            scred_free_redaction_result_stub(zig_result);
-            
-            result
+        RedactionResult {
+            redacted: redacted_text,
+            matches,
+            warnings,
         }
     }
 }
@@ -171,7 +161,7 @@ mod tests {
         let result = engine.redact(text);
         assert!(result.redacted.contains("AKIAxxxxxxxxxxxxxxxx"));
         assert_eq!(result.matches.len(), 1);
-        assert_eq!(result.matches[0].pattern_type, "detected");
+        assert_eq!(result.matches[0].pattern_type, "pattern-14");
     }
 
     #[test]

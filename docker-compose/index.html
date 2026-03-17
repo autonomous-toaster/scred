@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCRED Fake Upstream</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .endpoint {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .endpoint code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .test-commands {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        .test-commands pre {
+            margin: 0;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+        }
+        .patterns {
+            list-style-type: none;
+            padding: 0;
+        }
+        .patterns li {
+            padding: 8px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-left: 3px solid #28a745;
+            border-radius: 3px;
+        }
+        .success {
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐳 SCRED Fake Upstream Service</h1>
+        
+        <p>This service hosts sensitive data files for testing SCRED's response-only redaction capabilities.</p>
+        
+        <div class="warning">
+            ⚠️ <strong>Warning:</strong> This service intentionally exposes sensitive data patterns for testing purposes only. 
+            Do not use in production with real secrets.
+        </div>
+        
+        <h2>Available Endpoints</h2>
+        <div class="endpoint">
+            <code>GET /secrets.json</code> - Returns JSON file with various sensitive data patterns
+        </div>
+        <div class="endpoint">
+            <code>GET /index.html</code> - This page
+        </div>
+        
+        <h2>Sensitive Data Patterns Included</h2>
+        <ul class="patterns">
+            <li>✓ AWS IAM keys (AKIA... format)</li>
+            <li>✓ API tokens (sk-... format)</li>
+            <li>✓ GitHub tokens (ghp_, ghu_, glpat- formats)</li>
+            <li>✓ Database credentials (PostgreSQL, MySQL, MongoDB)</li>
+            <li>✓ JWT/OAuth tokens</li>
+            <li>✓ Private keys (RSA, EC, OpenSSH)</li>
+            <li>✓ GCP/Firebase service account keys</li>
+            <li>✓ Stripe live keys (sk_live_ format)</li>
+            <li>✓ Multiple secrets in single values</li>
+            <li>✓ Base64-encoded secrets</li>
+            <li>✓ Secrets in URL parameters</li>
+            <li>✓ Secrets in JSON object values</li>
+        </ul>
+        
+        <h2>Testing Scenarios</h2>
+        <p>This fake upstream is designed to be used with SCRED's response-only redaction proxies:</p>
+        
+        <h3>Scenario 1: Direct Access (No Redaction)</h3>
+        <div class="test-commands">
+            <pre>$ curl http://localhost:8001/secrets.json
+# Response: Raw secrets visible in JSON</pre>
+        </div>
+        
+        <h3>Scenario 2: Through Reverse Proxy (Response Redacted)</h3>
+        <div class="test-commands">
+            <pre>$ curl http://localhost:9998/secrets.json
+# Response: Same JSON structure, but all secrets replaced with 'x' characters</pre>
+        </div>
+        
+        <h3>Scenario 3: Through MITM Proxy (Response Redacted)</h3>
+        <div class="test-commands">
+            <pre>$ curl --proxy http://scred-mitm-response-only:8889 \
+  http://fake-upstream:8001/secrets.json
+# Response: Same as reverse proxy - secrets redacted</pre>
+        </div>
+        
+        <h2>Key Feature: Response-Only Redaction</h2>
+        <p>Both the reverse proxy and MITM proxy are configured to:</p>
+        <ul>
+            <li><strong>NOT redact requests:</strong> Your requests pass through unmodified</li>
+            <li><strong>REDACT responses:</strong> The upstream's response is filtered before returning to you</li>
+        </ul>
+        
+        <p>This is useful when:</p>
+        <ul>
+            <li>Upstream APIs expose secrets in responses (e.g., API keys, tokens)</li>
+            <li>API documentation includes example credentials</li>
+            <li>Error messages contain sensitive information</li>
+            <li>You want to protect the client from seeing upstream's secrets</li>
+        </ul>
+        
+        <h2>Character Preservation</h2>
+        <p>SCRED maintains the same length when redacting secrets:</p>
+        <ul>
+            <li>Input: <code>AKIAIOSFODNN7EXAMPLE</code> (20 chars)</li>
+            <li>Output: <code>AKIAxxxxxxxxxxxxxx</code> (20 chars)</li>
+        </ul>
+        
+        <h2>Service Information</h2>
+        <ul>
+            <li>Port: 8001</li>
+            <li>Protocol: HTTP</li>
+            <li>Server: Python built-in HTTP server</li>
+            <li>Data file: secrets.json (read-only mounted volume)</li>
+        </ul>
+        
+        <hr style="margin-top: 40px; border: none; border-top: 1px solid #ddd;">
+        <p style="color: #666; font-size: 12px;">
+            Part of SCRED testing infrastructure - <a href="https://github.com/autonomous-toaster/scred">GitHub</a>
+        </p>
+    </div>
+</body>
+</html>

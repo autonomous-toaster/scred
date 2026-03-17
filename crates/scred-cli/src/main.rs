@@ -5,7 +5,7 @@ use std::sync::Arc;
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 
-use scred_redactor::{get_all_patterns, RedactionEngine, RedactionConfig};
+use scred_redactor::{RedactionEngine, RedactionConfig, get_all_patterns};
 use scred_http::{ConfigurableEngine, PatternSelector, env_detection};
 use scred_config::ConfigLoader;
 use tracing::{info, debug};
@@ -104,28 +104,6 @@ fn parse_pattern_selectors(
     info!("[cli-config] Redact: {}", redact_selector.description());
 
     (detect_selector, redact_selector)
-}
-
-/// Load CLI configuration from file, with fallback to defaults
-fn load_cli_config() -> (PatternSelector, PatternSelector) {
-    // Try loading from config file
-    if let Ok(file_config) = ConfigLoader::load() {
-        if let Some(cli_cfg) = file_config.scred_cli {
-            let detect_str = cli_cfg.patterns.detect.join(",");
-            let redact_str = cli_cfg.patterns.redact.join(",");
-            
-            let detect = PatternSelector::from_str(&detect_str)
-                .unwrap_or_else(|_| PatternSelector::default_detect());
-            let redact = PatternSelector::from_str(&redact_str)
-                .unwrap_or_else(|_| PatternSelector::default_redact());
-            
-            info!("[cli-config] Loaded from config file");
-            return (detect, redact);
-        }
-    }
-    
-    // Fallback to defaults
-    (PatternSelector::default_detect(), PatternSelector::default_redact())
 }
 
 /// List available pattern tiers

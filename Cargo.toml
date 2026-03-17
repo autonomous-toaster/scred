@@ -2,13 +2,11 @@
 members = [
     "crates/scred-cli",
     "crates/scred-config",
+    "crates/scred-detector",
     "crates/scred-http",
-    "crates/scred-http-detector",
-    "crates/scred-http-redactor",
     "crates/scred-mitm",
     "crates/scred-proxy",
     "crates/scred-redactor",
-    "crates/scred-pattern-detector",
 ]
 resolver = "2"
 

@@ -1,38 +1,25 @@
-# SCRED Reverse Proxy - Multi-stage build optimized for Docker Desktop
+# SCRED Reverse Proxy - Copy pre-built binary
+# Fast deployment without Docker build
 
-# Stage 1: Build
-FROM rust:latest AS builder
-
-# Install minimal build tools
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config libssl-dev mold \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-
-# Copy workspace
-COPY Cargo.toml Cargo.lock ./
-COPY crates ./crates
-
-# Build with aggressive optimizations to reduce memory usage
-# mold linker is much faster and lighter than lld/bfd
-RUN RUSTFLAGS="-C link-arg=-fuse-ld=mold -C strip=symbols" \
-    cargo build --release --package scred-proxy -j 2 && \
-    chmod +x /build/target/release/scred-proxy
-
-# Stage 2: Runtime - use same rust image to match GLIBC versions
-FROM rust:latest
+FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 WORKDIR /app
 
-COPY --from=builder /build/target/release/scred-proxy /app/scred-proxy
+# Copy pre-built Linux binary from target/release
+COPY target/release/scred-proxy-docker /app/scred-proxy
+
+RUN chmod +x /app/scred-proxy && \
+    ls -lh /app/scred-proxy
 
 ENV SCRED_LISTEN="0.0.0.0:9999" \
     SCRED_LOG_LEVEL="info" \
     SCRED_LOG_FORMAT="json"
+
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=3 \
+    CMD /app/scred-proxy --version 2>/dev/null || exit 1
 
 ENTRYPOINT ["/app/scred-proxy"]

@@ -5,12 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Secret redaction CLI tool"
-build = "build.rs"
 
 [dependencies]
 scred-config = { path = "../scred-config" }
 scred-redactor = { path = "../scred-redactor" }
-scred-pattern-detector = { path = "../scred-pattern-detector" }
 scred-http = { path = "../scred-http" }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

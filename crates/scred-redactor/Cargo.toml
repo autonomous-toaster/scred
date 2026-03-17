@@ -5,13 +5,12 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Core secret pattern redaction engine (244+ patterns)"
-build = "build.rs"
 
 [dependencies]
-# regex removed - all pattern detection now via Zig FFI (patterns.zig)
+# Pure Rust SIMD pattern detection (no Zig FFI)
 serde = { workspace = true }
 lazy_static = "1.4"
-scred-pattern-detector = { path = "../scred-pattern-detector" }
+scred-detector = { path = "../scred-detector" }
 
 
 

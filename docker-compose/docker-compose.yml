@@ -1,6 +1,31 @@
 version: '3.8'
 
 services:
+  # Fake Upstream Service - serves sensitive data files
+  # Used for testing response-only redaction scenarios
+  fake-upstream:
+    image: python:3.11-slim
+    container_name: scred-fake-upstream
+    working_dir: /app
+    volumes:
+      - ./secrets.json:/app/secrets.json:ro
+      - ./index.html:/app/index.html:ro
+    command: python3 -m http.server 8001 --bind 0.0.0.0
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/secrets.json').read()\" || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
+    networks:
+      - scred-network
+    labels:
+      - "com.scred.role=fake-upstream"
+      - "com.scred.port=8001"
+      - "com.scred.description=Serves sensitive data for testing response redaction"
+
   # Backend API (httpbin) - simulates internal service
   httpbin:
     image: kennethreitz/httpbin:latest
@@ -55,6 +80,7 @@ services:
     labels:
       - "com.scred.role=reverse-proxy"
       - "com.scred.port=9999"
+      - "com.scred.redaction=request-only"
 
   # MITM Proxy (scred-mitm) - transparent client proxy
   # Can be configured as HTTP_PROXY for client applications
@@ -85,6 +111,80 @@ services:
     labels:
       - "com.scred.role=mitm-proxy"
       - "com.scred.port=8888"
+      - "com.scred.redaction=request-only"
+
+  # Reverse Proxy (Response-Only Redaction)
+  # Sits in front of fake-upstream
+  # Only redacts responses from upstream, passes requests unmodified
+  scred-proxy-response-only:
+    build:
+      context: ..
+      dockerfile: Dockerfile.proxy
+      args:
+        RUST_BACKTRACE: 1
+      x-build-memory: "2g"
+    container_name: scred-proxy-response-only
+    ports:
+      - "9998:9998"
+    environment:
+      # Backend configuration - fake upstream
+      SCRED_PROXY_UPSTREAM_URL: "http://fake-upstream:8001"
+      
+      # Proxy configuration
+      SCRED_PROXY_LISTEN_PORT: "9998"
+      
+      # IMPORTANT: Response-only redaction
+      # Requests pass unmodified, responses get redacted
+      SCRED_PROXY_REDACT_REQUEST: "false"
+      SCRED_PROXY_REDACT_RESPONSE: "true"
+      
+      # Logging
+      RUST_LOG: "debug"
+    depends_on:
+      fake-upstream:
+        condition: service_healthy
+    networks:
+      - scred-network
+    labels:
+      - "com.scred.role=reverse-proxy"
+      - "com.scred.port=9998"
+      - "com.scred.redaction=response-only"
+      - "com.scred.upstream=fake-upstream"
+
+  # MITM Proxy (Response-Only Redaction)
+  # Transparent client proxy with response-only redaction
+  # Requests forwarded unmodified, responses redacted before return
+  scred-mitm-response-only:
+    build:
+      context: ..
+      dockerfile: Dockerfile.mitm
+      args:
+        RUST_BACKTRACE: 1
+      x-build-memory: "2g"
+    container_name: scred-mitm-response-only
+    ports:
+      - "8889:8889"
+    environment:
+      # MITM proxy configuration
+      SCRED_LISTEN: "0.0.0.0:8889"
+      
+      # IMPORTANT: Response-only redaction
+      # Requests forwarded unmodified, responses redacted
+      SCRED_REDACT_REQUESTS: "false"
+      SCRED_REDACT_RESPONSES: "true"
+      
+      # Logging
+      SCRED_LOG_LEVEL: "debug"
+      SCRED_LOG_FORMAT: "json"
+      
+      # TLS configuration
+      SCRED_CERT_CACHE_DIR: "/app/certs-response-only"
+    networks:
+      - scred-network
+    labels:
+      - "com.scred.role=mitm-proxy"
+      - "com.scred.port=8889"
+      - "com.scred.redaction=response-only"
 
   # Test client - for running automated tests
   test-client:
@@ -95,6 +195,12 @@ services:
         condition: service_started
       scred-mitm:
         condition: service_started
+      scred-proxy-response-only:
+        condition: service_started
+      scred-mitm-response-only:
+        condition: service_started
+      fake-upstream:
+        condition: service_healthy
     networks:
       - scred-network
     environment:
@@ -120,26 +226,104 @@ volumes:
 
 # Labels and metadata for documentation
 x-scred-config:
-  description: "SCRED testing stack with reverse proxy + MITM proxy + httpbin backend"
+  description: "SCRED testing stack with reverse proxy + MITM proxy + httpbin backend + fake upstream"
+  
   components:
+    - name: fake-upstream
+      role: "Fake upstream API serving sensitive data"
+      port: 8001
+      url: "http://localhost:8001"
+      description: "Serves secrets.json with various sensitive patterns (AWS keys, API keys, DB credentials, etc.)"
+      test_command: "curl http://localhost:8001/secrets.json"
+    
     - name: httpbin
       role: "Internal backend API"
       port: 8000
       url: "http://localhost:8000"
+      description: "Standard httpbin for general HTTP testing"
     
     - name: scred-proxy
-      role: "Reverse proxy (selective redaction)"
+      role: "Reverse proxy (request-only redaction)"
       port: 9999
       url: "http://localhost:9999"
-      description: "Sits in front of httpbin, selectively redacts secrets before backend receives them"
+      description: "Sits in front of httpbin, redacts requests before backend (default behavior)"
+      test_command: "curl http://localhost:9999/get?api_key=sk-1234567890abcdefghijklmnopqrstuvwxyz"
     
     - name: scred-mitm
-      role: "MITM proxy (transparent client proxy)"
+      role: "MITM proxy (request-only redaction)"
       port: 8888
       url: "http://scred-mitm:8888"
-      description: "Can be used as HTTP_PROXY for client applications. Redacts all traffic."
+      description: "Transparent client proxy, redacts all outgoing requests"
+      test_command: "curl --proxy http://scred-mitm:8888 http://httpbin:80/get?api_key=sk-1234567890abcdefghijklmnopqrstuvwxyz"
+    
+    - name: scred-proxy-response-only
+      role: "Reverse proxy (response-only redaction)"
+      port: 9998
+      url: "http://localhost:9998"
+      description: "Sits in front of fake-upstream, redacts RESPONSES ONLY (requests pass unmodified)"
+      test_command: "curl http://localhost:9998/secrets.json"
+      upstream: "fake-upstream:8001"
+    
+    - name: scred-mitm-response-only
+      role: "MITM proxy (response-only redaction)"
+      port: 8889
+      url: "http://scred-mitm-response-only:8889"
+      description: "Transparent client proxy with response-only redaction (requests pass unmodified)"
+      test_command: "curl --proxy http://scred-mitm-response-only:8889 http://fake-upstream:8001/secrets.json"
   
-  test_commands:
-    - "Test reverse proxy: curl http://localhost:9999/get?api_key=sk-1234567890"
-    - "Test MITM proxy: curl --proxy http://scred-mitm:8888 http://httpbin:80/get?api_key=sk-1234567890"
-    - "Direct backend: curl http://localhost:8000/get?api_key=sk-1234567890"
+  test_scenarios:
+    - scenario: "Direct fake-upstream (no redaction)"
+      command: "curl http://localhost:8001/secrets.json"
+      expected: "Raw sensitive data in response"
+      headers: "api_key, aws_key, passwords visible"
+    
+    - scenario: "Reverse proxy response-only redaction"
+      command: "curl http://localhost:9998/secrets.json"
+      expected: "Sensitive data redacted with 'x' characters"
+      headers: "Request unmodified, response fields masked"
+    
+    - scenario: "MITM proxy response-only redaction"
+      command: "curl --proxy http://scred-mitm-response-only:8889 http://fake-upstream:8001/secrets.json"
+      expected: "Sensitive data redacted with 'x' characters"
+      headers: "Request unmodified, response fields masked"
+    
+    - scenario: "Reverse proxy request-only redaction (httpbin)"
+      command: "curl http://localhost:9999/get?api_key=sk-1234567890abcdefghijklmnopqrstuvwxyz"
+      expected: "Request redacted, response unmodified"
+      headers: "Request query params masked, httpbin response visible"
+    
+    - scenario: "Direct httpbin (no redaction)"
+      command: "curl http://localhost:8000/get?api_key=sk-1234567890abcdefghijklmnopqrstuvwxyz"
+      expected: "Raw query string in httpbin response"
+      headers: "api_key visible in response"
+
+  redaction_modes:
+    request_only:
+      description: "Redact outgoing requests, leave responses unmodified"
+      services: ["scred-proxy", "scred-mitm"]
+      use_case: "Prevent secrets from reaching untrusted upstreams"
+    
+    response_only:
+      description: "Leave outgoing requests unmodified, redact incoming responses"
+      services: ["scred-proxy-response-only", "scred-mitm-response-only"]
+      use_case: "Hide secrets exposed by upstream (API docs, error messages, etc.)"
+    
+    both:
+      description: "Redact both requests and responses (most secure)"
+      services: [] # Can be configured
+      use_case: "Maximum protection in untrusted environments"
+
+  patterns_in_secrets_json:
+    - "AWS IAM keys (AKIA...)"
+    - "API tokens (sk-...)"
+    - "GitHub tokens (ghp_, ghu_, glpat-)"
+    - "Database credentials (password fields)"
+    - "JWT/OAuth tokens (Bearer tokens)"
+    - "Private keys (RSA, EC, OpenSSH)"
+    - "GCP/Firebase service account keys"
+    - "Stripe keys (sk_live_)"
+    - "Environment variable format (KEY=VALUE)"
+    - "URLs with embedded credentials"
+    - "Multiple secrets in single value"
+    - "Base64-encoded secrets"
+    - "Secrets in comments"

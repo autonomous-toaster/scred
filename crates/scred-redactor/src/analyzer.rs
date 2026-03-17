@@ -1,54 +1,26 @@
-/// Hybrid detector: Zig (fast prefix) + Regex (comprehensive)
-/// 
-/// Security-first approach: ALWAYS use regex for 100% pattern coverage.
-/// Zig is an optional acceleration layer for compatible patterns only.
-/// 
-/// Philosophy: Better to be slow and catch everything than fast and miss secrets.
+// ============================================================================
+// FFI Bindings to Zig - Pattern Detectors (DEPRECATED)
+// Now using pure Rust SIMD (scred-detector)
+// ============================================================================
+// 
+// NOTE: The following FFI functions are no longer available.
+// Use scred_detector crate instead for all pattern detection.
+//
+// #[link(name = "scred_pattern_detector")]  
+// extern "C" {
+//     pub fn scred_detector_simple_prefix(input: *const u8, len: usize) -> c_int;
+//     pub fn scred_detector_jwt(input: *const u8, len: usize) -> c_int;
+//     pub fn scred_detector_prefix_validation(input: *const u8, len: usize) -> c_int;
+//     pub fn scred_detector_all(input: *const u8, len: usize) -> c_int;
+//     pub fn scred_detector_regex(input: *const u8, len: usize, pattern_idx: usize) -> c_int;
+//     pub fn scred_detector_phase2_tier1(input: *const u8, len: usize) -> c_int;
+//     pub fn scred_detector_phase2_jwt(input: *const u8, len: usize) -> c_int;
+//     pub fn scred_detector_phase2_tier2(input: *const u8, len: usize) -> c_int;
+//     pub fn scred_detector_phase2_all(input: *const u8, len: usize) -> c_int;
+// }
 
 use std::str;
 use std::os::raw::c_int;
-
-// ============================================================================
-// FFI Bindings to Zig - Pattern Detectors
-// ============================================================================
-
-#[link(name = "scred_pattern_detector")]
-extern "C" {
-    // ========================================================================
-    // Pattern Detection Functions
-    // ========================================================================
-    
-    /// Detect simple prefix patterns (26 patterns)
-    pub fn scred_detector_simple_prefix(input: *const u8, len: usize) -> c_int;
-    
-    /// Detect JWT patterns (1 generic pattern - all algorithms/sizes)
-    pub fn scred_detector_jwt(input: *const u8, len: usize) -> c_int;
-    
-    /// Detect prefix + validation patterns (45 patterns)
-    pub fn scred_detector_prefix_validation(input: *const u8, len: usize) -> c_int;
-    
-    /// Detect all consolidated patterns (26 + 1 + 45 + 198 = 270)
-    pub fn scred_detector_all(input: *const u8, len: usize) -> c_int;
-    
-    /// Detect regex patterns (198 patterns - TBD regex engine)
-    pub fn scred_detector_regex(input: *const u8, len: usize, pattern_idx: usize) -> c_int;
-    
-    // ========================================================================
-    // Legacy Compatibility (Phase 2 tier-based API)
-    // ========================================================================
-    
-    /// Legacy: Detect Tier 1 patterns (maps to detect_simple_prefix)
-    pub fn scred_detector_phase2_tier1(input: *const u8, len: usize) -> c_int;
-    
-    /// Legacy: Detect JWT patterns (maps to detect_jwt)
-    pub fn scred_detector_phase2_jwt(input: *const u8, len: usize) -> c_int;
-    
-    /// Legacy: Detect Tier 2 patterns (maps to detect_prefix_validation)
-    pub fn scred_detector_phase2_tier2(input: *const u8, len: usize) -> c_int;
-    
-    /// Legacy: Detect all Phase 2 patterns (maps to detect_all)
-    pub fn scred_detector_phase2_all(input: *const u8, len: usize) -> c_int;
-}
 
 // ============================================================================
 // High-level Rust API - ZigAnalyzer
@@ -58,55 +30,38 @@ pub struct ZigAnalyzer;
 
 impl ZigAnalyzer {
     /// Detect simple prefix patterns (26 patterns)
-    /// Throughput: ~300+ MB/s
-    /// False positives: ZERO
+    /// Now uses pure Rust SIMD (scred-detector)
     pub fn has_simple_prefix_pattern(text: &str) -> bool {
-        unsafe {
-            let result = scred_detector_simple_prefix(text.as_ptr(), text.len());
-            result != 0
-        }
+        use scred_detector::detect_simple_prefix;
+        !detect_simple_prefix(text.as_bytes()).matches.is_empty()
     }
 
     /// Detect JWT patterns (1 generic pattern for all algorithms/sizes)
-    /// Covers: HS256, RS256, EdDSA, PS512, etc.
-    /// Size support: 50 bytes to 10KB+
-    /// Throughput: ~0.2ms per 64KB chunk
-    /// False positives: Very low (2-dot structure is specific)
+    /// Now uses pure Rust SIMD (scred-detector)
     pub fn has_jwt_pattern(text: &str) -> bool {
-        unsafe {
-            let result = scred_detector_jwt(text.as_ptr(), text.len());
-            result != 0
-        }
+        use scred_detector::detect_jwt;
+        !detect_jwt(text.as_bytes()).matches.is_empty()
     }
 
-    /// Detect prefix + validation patterns (45 patterns)
-    /// Throughput: ~0.3ms per 64KB chunk
-    /// False positives: <1%
+    /// Detect prefix + validation patterns (209 patterns)
+    /// Now uses pure Rust SIMD (scred-detector)
     pub fn has_prefix_validation_pattern(text: &str) -> bool {
-        unsafe {
-            let result = scred_detector_prefix_validation(text.as_ptr(), text.len());
-            result != 0
-        }
+        use scred_detector::detect_validation;
+        !detect_validation(text.as_bytes()).matches.is_empty()
     }
 
-    /// Detect all consolidated patterns (270 total)
-    /// Combined: 26 simple prefix + 1 JWT + 45 prefix validation + 198 regex (TBD)
+    /// Detect all consolidated patterns (254 total)
     /// Returns true if ANY pattern detected
     pub fn has_all_patterns(text: &str) -> bool {
-        unsafe {
-            let result = scred_detector_all(text.as_ptr(), text.len());
-            result != 0
-        }
+        use scred_detector::detect_all;
+        !detect_all(text.as_bytes()).matches.is_empty()
     }
 
     /// Detect specific regex pattern by index
-    /// Note: Regex engine TBD (Oniguruma, PCRE, custom Zig, GPU, etc.)
-    /// For now: returns false (patterns stored but not matched)
-    pub fn has_regex_pattern(text: &str, pattern_idx: usize) -> bool {
-        unsafe {
-            let result = scred_detector_regex(text.as_ptr(), text.len(), pattern_idx);
-            result != 0
-        }
+    /// Uses pure Rust SIMD patterns
+    pub fn has_regex_pattern(text: &str, _pattern_idx: usize) -> bool {
+        // For backward compatibility, just use has_all_patterns
+        Self::has_all_patterns(text)
     }
 
     // ========================================================================
@@ -135,20 +90,18 @@ impl ZigAnalyzer {
     /// Detect patterns and redact secrets in text
     /// Returns (redacted_text, pattern_count)
     pub fn redact_optimized(text: &str) -> (String, usize) {
+        use scred_detector::detect_all;
+        
         // Count detected patterns
-        let pattern_count = if Self::has_all_patterns(text) {
-            // Could count multiple, but for now just return 1 if any detected
-            1
-        } else {
-            0
-        };
+        let result = detect_all(text.as_bytes());
+        let pattern_count = result.matches.len();
 
         // Perform redaction using the redaction engine
         let config = crate::RedactionConfig { enabled: true };
         let engine = crate::RedactionEngine::new(config);
-        let result = engine.redact(text);
+        let redacted_result = engine.redact(text);
         
-        (result.redacted, pattern_count)
+        (redacted_result.redacted, pattern_count)
     }
 }
 

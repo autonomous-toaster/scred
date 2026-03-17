@@ -18,12 +18,12 @@ pub mod metadata_cache;
 // PUBLIC API - PRIMARY EXPORTS
 // ============================================================================
 
-// New API (v2.0 - Zig-based)
+// New API (v2.0 - Rust SIMD)
 pub use analyzer::ZigAnalyzer;
 pub use detector::{StreamingDetector, SecretDetectionEvent};
 
-// Zig pattern detector (source of truth for all patterns)
-pub use scred_pattern_detector;
+// Rust SIMD pattern detector (source of truth for all patterns)
+pub use scred_detector;
 
 // Legacy API (for backward compatibility with http/mitm/proxy crates)
 pub use redactor::{
@@ -41,10 +41,9 @@ pub fn redact_text(text: &str) -> String {
 pub use pattern_selector::PatternSelector;
 pub use metadata_cache::RiskTier as PatternTier;
 
-// Pattern info function (used by CLI and other tools)
-pub fn get_all_patterns() -> Vec<scred_pattern_detector::PatternInfo> {
-    scred_pattern_detector::get_all_patterns()
-}
+// NOTE: Pattern info function removed - now using Rust SIMD, not Zig FFI
+// pub fn get_all_patterns() -> Vec<scred_detector::PatternInfo> { ... }
+
 pub use streaming::{
     StreamingRedactor, StreamingConfig, StreamingStats,
 };
@@ -201,3 +200,18 @@ pub use metadata_cache::{
     get_cache, initialize_cache, METADATA_CACHE,
 };
 
+
+// Stub for CLI compatibility (patterns no longer exposed via this API)
+#[derive(Debug, Clone)]
+pub struct PatternInfo {
+    pub name: String,
+    pub pattern_type: u8,
+    pub prefix: String,
+    pub min_len: usize,
+    pub max_len: usize,
+}
+
+pub fn get_all_patterns() -> Vec<PatternInfo> {
+    // Return empty for now - CLI listing features deprecated
+    Vec::new()
+}

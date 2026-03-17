@@ -1440,7 +1440,6 @@ dependencies = [
  "libc",
  "scred-config",
  "scred-http",
- "scred-pattern-detector",
  "scred-redactor",
  "tracing",
  "tracing-subscriber",
@@ -1463,6 +1462,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "scred-detector"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "memchr",
+]
+
+[[package]]
 name = "scred-http"
 version = "0.1.0"
 dependencies = [
@@ -1476,8 +1483,6 @@ dependencies = [
  "regex",
  "rustls",
  "scred-redactor",
- "scred_http_detector",
- "scred_http_redactor",
  "serde",
  "serde_yaml",
  "tempfile",
@@ -1518,17 +1523,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scred-pattern-detector"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "criterion",
- "libc",
- "regex",
- "tracing",
-]
-
-[[package]]
 name = "scred-proxy"
 version = "0.1.0"
 dependencies = [
@@ -1541,7 +1535,6 @@ dependencies = [
  "scred-config",
  "scred-http",
  "scred-redactor",
- "scred_http_redactor",
  "tokio",
  "tokio-rustls",
  "tracing",
@@ -1556,39 +1549,8 @@ dependencies = [
  "aho-corasick",
  "criterion",
  "lazy_static",
- "scred-pattern-detector",
+ "scred-detector",
  "serde",
-]
-
-[[package]]
-name = "scred_http_detector"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "http 1.4.0",
- "scred-pattern-detector",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "urlencoding",
-]
-
-[[package]]
-name = "scred_http_redactor"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytes",
- "h2 0.4.13",
- "http 1.4.0",
- "scred-redactor",
- "scred_http_detector",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -2133,12 +2095,6 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
-
-[[package]]
-name = "urlencoding"
-version = "2.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "utf8_iter"
