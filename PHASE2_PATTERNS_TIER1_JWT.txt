@@ -1,0 +1,63 @@
+TIER 1 PATTERNS (26 patterns - Pure Prefix)
+
+These patterns have FIXED prefixes with ZERO length validation.
+Used for streaming: search for prefix anywhere in chunk.
+
+1. age-secret-key                       → AGE-SECRET-KEY-1
+2. apideck                              → sk_live_
+3. artifactoryreferencetoken            → cmVmdGtu
+4. azure_storage                        → AccountName
+5. azureappconfigconnectionstring       → Endpoint=https://
+6. coinbase                             → organizations/
+7. fleetbase                            → flb_live_
+8. flutterwave-public-key               → FLWPUBK_TEST-
+9. linear-api-key                       → lin_api_
+10. linearapi                           → lin_api_
+11. openaiadmin                         → sk-admin-
+12. pagarme                             → ak_live_
+13. planetscale-1                       → pscale_tkn_
+14. planetscaledb-1                     → pscale_pw_
+15. pypi-upload-token                   → pypi-AgEIcHlwaS5vcmc
+16. ramp                                → ramp_id_
+17. ramp-1                              → ramp_sec_
+18. rubygems                            → rubygems_
+19. saladcloudapikey                    → salad_cloud_
+20. stripepaymentintent-2               → pk_live_
+21. travisoauth                         → travis_
+22. tumblr-api-key                      → tumblr_
+23. (from existing)                     → travisoauth (duplicate?)
+24. (from existing)                     → (add more tier1 from gitleaks)
+25. (need full list)
+26. (from PATTERN_TIERS)
+
+Plus from existing patterns:
+- sentry-access-token                   → bsntrys_eyJpYXQiO
+- sentryorgtoken                        → sntrys_eyJ
+
+JWT PATTERN (1 pattern - Special Handling)
+
+detect_jwt(input) → searches for "eyJ" prefix + validates 2 dots
+
+TIER 2 PATTERNS (45 patterns - Prefix + Validation)
+
+These require prefix + optional length/charset validation.
+Examples:
+
+1. anthropic                            → sk-ant- + validation
+2. artifactory-api-key                  → AKCp + exactly 69 chars
+3. github-pat                           → ghp_ + validation
+4. 1password-service-account-token      → ops_eyJ + base64 validation
+... (45 total)
+
+STRATEGY:
+
+For now, implement:
+1. Tier 1: Pure prefix (26 patterns) - simple array of prefixes
+2. JWT: Generic detector - "eyJ" + 2 dots validation
+3. Tier 2: Defer full implementation, add skeleton
+
+This achieves:
+- 72 patterns total (Phase 2)
+- Streaming compatible (all search-based)
+- Builds and tests pass
+- Ready for incremental Tier 2 completion

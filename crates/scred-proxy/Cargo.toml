@@ -1,0 +1,23 @@
+[package]
+name = "scred-proxy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Reverse proxy with selective secret redaction"
+
+[dependencies]
+scred-http = { path = "../scred-http" }
+scred-redactor = { path = "../scred-redactor" }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+libc = "0.2"
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+webpki-roots = "0.25"
+
+[[bin]]
+name = "scred-proxy"
+path = "src/main.rs"

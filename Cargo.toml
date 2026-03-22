@@ -1,0 +1,47 @@
+[workspace]
+members = [
+    "crates/scred-cli",
+    "crates/scred-http",
+    "crates/scred-mitm",
+    "crates/scred-proxy",
+    "crates/scred-redactor",
+    "crates/scred-pattern-detector",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["SCRED Contributors"]
+license = "MIT"
+
+[workspace.dependencies]
+regex = "1"
+tokio = { version = "1", features = ["full"] }
+rayon = "1"
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+anyhow = "1.0"
+thiserror = "1.0"
+rustls = "0.21"
+rustls-pki-types = "1"
+rustls-pemfile = "2"
+tokio-rustls = "0.24"
+rcgen = "0.12"
+dirs = "5.0"
+http2 = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[profile.docker-release]
+inherits = "release"
+lto = false
+codegen-units = 4
+strip = true

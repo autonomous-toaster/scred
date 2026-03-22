@@ -1,0 +1,41 @@
+# SCRED MITM Proxy - Multi-stage build optimized for Docker Desktop
+
+# Stage 1: Build
+FROM rust:latest AS builder
+
+# Install minimal build tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev mold \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy workspace
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# Build with aggressive optimizations to reduce memory usage
+# mold linker is much faster and lighter than lld/bfd
+RUN RUSTFLAGS="-C link-arg=-fuse-ld=mold -C strip=symbols" \
+    cargo build --release --package scred-mitm -j 2 && \
+    chmod +x /build/target/release/scred-mitm
+
+# Stage 2: Runtime - use same rust image to match GLIBC versions
+FROM rust:latest
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /build/target/release/scred-mitm /app/scred-mitm
+
+RUN mkdir -p /app/certs && chmod 755 /app/certs
+
+ENV SCRED_LISTEN="0.0.0.0:8888" \
+    SCRED_LOG_LEVEL="info" \
+    SCRED_LOG_FORMAT="json" \
+    SCRED_CERT_CACHE_DIR="/app/certs"
+
+ENTRYPOINT ["/app/scred-mitm"]

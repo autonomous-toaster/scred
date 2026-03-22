@@ -1,0 +1,15 @@
+[package]
+name = "scred"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Secret redaction CLI tool"
+
+[dependencies]
+scred-redactor = { path = "../scred-redactor" }
+scred-pattern-detector = { path = "../scred-pattern-detector" }
+
+[[bin]]
+name = "scred"
+path = "src/main.rs"

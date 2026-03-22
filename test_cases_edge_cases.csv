@@ -1,0 +1,62 @@
+input,expected_output,pattern_type,description,category
+MY_SECRET_AKIA1234567890ABCDEF_END,MY_SECRET_AKIAxxxxxxxxxxxxxxxx_END,aws_akia,AWS AKIA with underscore boundaries,WORD_BOUNDARY
+secret:AKIA1234567890ABCDEF,other,secret:AKIAxxxxxxxxxxxxxxxx,AWS AKIA with colon boundary,WORD_BOUNDARY
+token'sk-proj-1234567890ABCDEFGHIJ'next,token'sk-xxxxxxxxxxxxxxxxxxxxxxxxx'next,openai_project,OpenAI key with quote boundaries,WORD_BOUNDARY
+AKIA1234567890ABCDEFAKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,aws_akia,Concatenated AWS AKIA keys (no separator),CONCATENATED
+sk-proj-1234567890ABCDEFGHIJ:ghp_abc123def456ghi789jkl,sk-xxxxxxxxxxxxxxxxxxxxxxxxx:xxxxxxxxxxxxxxxxxxxxx,mixed_keys,Concatenated different secret types,CONCATENATED
+ghp_abcdefghijklmnopqrstuvwxyz0123456789abghp_1111111111111111111111111111111,ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,github_pat,Two GitHub tokens back-to-back,CONCATENATED
+"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.sig"
+,Bearer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,jwt_token,JWT token in quotes,QUOTES
+Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+.payload.sig,Bearer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,jwt_token,JWT token with newline in middle,MULTILINE
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload
+.signature,Authorization: Bearerxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,auth_bearer,Authorization header with newline in token,MULTILINE
+sk-proj-1234567890ABCDEFGHIJ
+,sk-xxxxxxxxxxxxxxxxxxxxxxxxx,openai_project,OpenAI key with trailing newline,MULTILINE
+sk-proj-
+1234567890ABCDEFGHIJ,sk-xxxxxxxxxxxxxxxxxxxxxxxxx,openai_project,OpenAI key with newline in middle,MULTILINE
+password=my™special™password123456789,password=my™xxxxxxxxxxxxxxxxxxxxxxx,generic_password,Password with multi-byte UTF-8 character,UTF8
+token: 中文token_1234567890abcdef,token: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,generic_token,Token with Chinese characters (multi-byte),UTF8
+key=sk-proj-1234567890ABCDEFGHIJ™end,key=sk-xxxxxxxxxxxxxxxxxxxxxxxxx™end,openai_project,OpenAI key with UTF-8 after secret,UTF8
+AKIA1234567890ABCDEF-AKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxx-AKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys separated by dash,CONCATENATED_DASH
+AKIA1234567890ABCDEF/AKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxx/AKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys separated by slash,CONCATENATED_SLASH
+AKIA1234567890ABCDEF.AKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxx.AKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys separated by dot,CONCATENATED_DOT
+AKIA1234567890ABCDEF@AKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxx@AKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys separated by @,CONCATENATED_AT
+[AKIA1234567890ABCDEF],AKIAxxxxxxxxxxxxxxxx,aws_akia,AWS key in square brackets,BOUNDARY_BRACKET
+{AKIA1234567890ABCDEF},AKIAxxxxxxxxxxxxxxxx,aws_akia,AWS key in curly braces,BOUNDARY_BRACE
+(AKIA1234567890ABCDEF),AKIAxxxxxxxxxxxxxxxx,aws_akia,AWS key in parentheses,BOUNDARY_PAREN
+`AKIA1234567890ABCDEF`,AKIAxxxxxxxxxxxxxxxx,aws_akia,AWS key in backticks,BOUNDARY_BACKTICK
+AKIA1234567890ABCDEF|AKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxx|AKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys separated by pipe,CONCATENATED_PIPE
+AKIA1234567890ABCDEFxAKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys with single char between,CONCATENATED_SINGLE_CHAR
+glpat-abc123def456ghi789jkl012345glpat-zzz111222333444555666,glpat-xxxxxxxxxxxxxxxxxxxxxxxxxxxglpat-xxxxxxxxxxxxxxxxxxxxxxxxxx,gitlab_pat,Two GitLab PATs concatenated,CONCATENATED
+github_token=ghp_abcdefghijklmnopqrstuvwxyz0123456789ab,github_token=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,github_pat,GitHub token after variable assignment,WORD_BOUNDARY_EQUALS
+Authorization: Basic dXNlcjpwYXNzd29yZDEyMzQ1Njc4OTA=,Authorization: Basicxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,auth_basic,Basic auth with base64 (preserve base64 length),BASE64
+X-API-KEY: sk_live_1234567890abcdefghij1234567890ab,X-API-KEY: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,header_api_key,API key in header with colon and space,WORD_BOUNDARY_HEADER
+password: "superSecretPassword123456789",password: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",generic_password,Password in quotes after colon,QUOTED_VALUE
+token:
+"sk-proj-1234567890ABCDEFGHIJ",token:
+"sk-xxxxxxxxxxxxxxxxxxxxxxxxx",openai_project,Token in quotes on next line,MULTILINE_QUOTED
+AKIA1234567890ABCDEF\nAKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxx\nAKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys with escaped newline,ESCAPED_NEWLINE
+secret_AKIA1234567890ABCDEFsecret_AKIA9876543210FEDCBAsecret,secret_AKIAxxxxxxxxxxxxxxxx secret_AKIAxxxxxxxxxxxxxxxx secret,aws_akia,Pattern repeats 3 times with underscores,MULTIPLE_REPEATS
+akia1234567890abcdefakia9876543210fedcba,akiaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,aws_akia_lowercase,Mixed case AKIA (if case-insensitive),CASE_INSENSITIVE
+glpat-abc123def456ghi789jkl012345/other/path,glpat-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx/other/path,gitlab_pat,GitLab PAT in path with slashes,BOUNDARY_PATH
+test@AKIA1234567890ABCDEF.example.com,test@AKIAxxxxxxxxxxxxxxxx.example.com,aws_akia,AWS key in email-like string,BOUNDARY_EMAIL
+AKIA1234567890ABCDEF::AKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxx::AKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys with double colon,CONCATENATED_DOUBLE_COLON
+[AKIA1234567890ABCDEF][AKIA9876543210FEDCBA],AKIAxxxxxxxxxxxxxxxx][AKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys in consecutive brackets,CONCATENATED_BRACKETS
+AKIA1234567890ABCDEF--AKIA9876543210FEDCBA,AKIAxxxxxxxxxxxxxxxx--AKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys with double dash,CONCATENATED_DOUBLE_DASH
+sk-proj-1234567890ABCDEFGHIJ%20sk-proj-9876543210zyxwvutsrqp,sk-xxxxxxxxxxxxxxxxxxxxxxxxx%20sk-xxxxxxxxxxxxxxxxxxxxxxxxx,openai_project,Two OpenAI keys with URL encoding between,URL_ENCODED
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.sig,Authorization: Bearerxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,jwt_token,JWT in Authorization header (full line),HEADER_JWT
+mongodb://user:password123456@mongodb.example.com
+:27017/dbname,mongodb://user:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,db_mongodb,MongoDB connection string with newline,MULTILINE_CONNECTION
+postgres://user:secret1234567890@localhost:5432/db,postgres://user:xxxxxxxxxxxxxxxxxxxxxxxxxxxxx,db_postgres,PostgreSQL full connection string,BOUNDARY_PROTOCOL
+token123sk-proj-1234567890ABCDEFGHIJtoken456,token123sk-xxxxxxxxxxxxxxxxxxxxxxxxxtoken456,openai_project,OpenAI key with text before and after (no space),BOUNDARY_NO_SPACE
+---AKIA1234567890ABCDEF---,---AKIAxxxxxxxxxxxxxxxx---,aws_akia,AWS key surrounded by dashes,BOUNDARY_DASHES
+***AKIA1234567890ABCDEF***,***AKIAxxxxxxxxxxxxxxxx***,aws_akia,AWS key surrounded by asterisks,BOUNDARY_ASTERISKS
+AKIA1234567890ABCDEF AKIA9876543210FEDCBA AKIA1111111111111111,AKIAxxxxxxxxxxxxxxxx AKIAxxxxxxxxxxxxxxxx AKIAxxxxxxxxxxxxxxxx,aws_akia,Three AWS keys with spaces between,MULTIPLE_WITH_SPACES
+key1=AKIA1234567890ABCDEF&key2=AKIA9876543210FEDCBA,key1=AKIAxxxxxxxxxxxxxxxx&key2=AKIAxxxxxxxxxxxxxxxx,aws_akia,Two AWS keys in URL query params,QUERY_PARAMS
+ghp_abcdefghijklmnopqrstuvwxyz0123456789ab™™™,ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx™™™,github_pat,GitHub token followed by UTF-8 chars,UTF8_AFTER
+™™™ghp_abcdefghijklmnopqrstuvwxyz0123456789ab,™™™xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,github_pat,GitHub token preceded by UTF-8 chars,UTF8_BEFORE
+sk-proj-1234567890ABCDEFGHIJ™ghp_abc123def456ghi789jkl,sk-xxxxxxxxxxxxxxxxxxxxxxxxx™xxxxxxxxxxxxxxxxxxxxx,mixed_keys,Two different tokens separated by UTF-8,UTF8_SEPARATOR
+test AKIA1234567890ABCDEF
+test AKIA9876543210FEDCBA test,test AKIAxxxxxxxxxxxxxxxx
+test AKIAxxxxxxxxxxxxxxxx test,aws_akia,Two AWS keys on separate lines (actual newline),MULTILINE_TWO_KEYS

@@ -1,0 +1,48 @@
+category,test_name,input,expected_behavior,risk_level,notes
+CATASTROPHIC_BACKTRACKING,redos_jwt_pattern,"eyJ" + "a"*1000 + "b"*1000,Should NOT timeout or hang,CRITICAL,JWT pattern with nested quantifiers
+CATASTROPHIC_BACKTRACKING,redos_aws_pattern,"AKIA" + "["*500 + "]"*500,Should NOT timeout or hang,CRITICAL,AWS pattern with alternation
+CATASTROPHIC_BACKTRACKING,redos_openai_pattern,"sk-" + "("*1000 + "-"*1000 + ")"*1000,Should NOT timeout or hang,CRITICAL,OpenAI pattern with groups
+CATASTROPHIC_BACKTRACKING,redos_email_pattern,"a@" + "b"*2000 + ".c"*1000,Should NOT timeout or hang,CRITICAL,Email with nested repetition
+EDGE_CASE_PARSING,secret_in_comment,"# secret: ghp_abcdefghijklmnopqrstuvwxyz0123456789ab",Detect secret in comment line,HIGH,Secrets in commented code
+EDGE_CASE_PARSING,secret_in_url,"https://user:ghp_abcdefghijklmnopqrstuvwxyz0123456789ab@github.com/repo",Detect secret in URL password field,HIGH,GitHub PAT as URL password
+EDGE_CASE_PARSING,secret_in_json_key,"{ 'AKIA1234567890ABCDEF': 'value' }",Detect secret as JSON key (not just value),HIGH,Secret as dict key
+EDGE_CASE_PARSING,secret_in_error_message,"Error: Invalid token sk-proj-1234567890ABCDEFGHIJ in error message",Detect secret in error output,HIGH,Secrets in error logs
+EDGE_CASE_PARSING,secret_with_escaped_quote,"password=\"sk-proj-1234567890ABCDEFGHIJ\\\"\"",Detect secret with escaped quotes,HIGH,Escape sequence handling
+EDGE_CASE_PARSING,secret_in_html_entity,"API Key: ghp&#95;abcdefghijklmnopqrstuvwxyz0123456789ab",Detect even with HTML entities,HIGH,HTML entity encoding
+EDGE_CASE_PARSING,secret_base64_encoded,"echo 'AKIA1234567890ABCDEF' | base64",Detect secrets that will be encoded,HIGH,Secrets before encoding
+ENCODING_BYPASS,base64_secret_detection,"Encoded: " + base64(AKIA1234567890ABCDEF),May NOT detect base64-encoded secrets,MEDIUM,Base64 obfuscation
+ENCODING_BYPASS,url_encoded_secret,"url=https%3A%2F%2Fsk-proj-1234567890ABCDEFGHIJ",May NOT detect URL-encoded secrets,MEDIUM,URL percent-encoding
+ENCODING_BYPASS,hex_encoded_secret,"0x" + "4149" + "4b" + "49",Should NOT false-match hex patterns,MEDIUM,Hex encoding lookalike
+ENCODING_BYPASS,unicode_lookalike,"sk\u002dproj\u002d1234567890ABCDEFGHIJ",May NOT detect unicode escapes,MEDIUM,Unicode escape sequences
+BOUNDARY_CONDITION,secret_at_buffer_start,"AKIA1234567890ABCDEFrest_of_text",Detect secret at position 0,HIGH,Boundary condition: start of input
+BOUNDARY_CONDITION,secret_at_buffer_end,"some_text_AKIA1234567890ABCDEF",Detect secret at EOF,HIGH,Boundary condition: end of input
+BOUNDARY_CONDITION,multiple_secrets_no_gap,"AKIA1234567890ABCDEFAKIA9876543210FEDCBA",Detect both without separation,HIGH,Adjacent secrets (already fixed)
+BOUNDARY_CONDITION,secret_exactly_at_chunk_boundary,"AKIA123456" + "7890ABCDEF",For streaming: detect at chunk boundary,HIGH,Streaming mode edge case
+BOUNDARY_CONDITION,maximum_length_secret,"A" * 10000,Should handle very long input,MEDIUM,Buffer size limits
+PERFORMANCE_ATTACK,slow_regex_input,"(" * 1000 + "x" * 1000 + ")" * 1000,Should process in < 5 seconds,CRITICAL,ReDoS attack vector
+PERFORMANCE_ATTACK,many_pattern_matches,"AKIA1234567890ABCDEF " * 1000,Redact 1000 matches without slowdown,HIGH,Performance with many matches
+PERFORMANCE_ATTACK,input_size_100kb,Generate 100KB random + 1 secret,Process in < 100ms,MEDIUM,Large input performance
+PERFORMANCE_ATTACK,input_size_1mb,Generate 1MB random + 1 secret,Process in < 1 second,MEDIUM,Very large input handling
+PARSING_CONTEXT,secret_in_string_literal,"password = 'sk-proj-1234567890ABCDEFGHIJ'",Detect secret in quoted string,HIGH,Quoted string context
+PARSING_CONTEXT,secret_in_log_prefix,"[INFO] API_KEY=AKIA1234567890ABCDEF",Detect secret with log prefix,HIGH,Log line prefix parsing
+PARSING_CONTEXT,secret_after_variable_assignment,"export TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789ab",Detect after = sign,HIGH,Variable assignment
+PARSING_CONTEXT,secret_split_across_lines,"token = \\n    'sk-proj-1234567890ABCDEFGHIJ'",May NOT detect split secrets,HIGH,Multi-line token (needs (?s))
+PARSING_CONTEXT,secret_with_leading_garbage,"!!!AKIA1234567890ABCDEF",Detect with garbage prefix,HIGH,Noise before secret
+PARSING_CONTEXT,secret_with_trailing_garbage,"AKIA1234567890ABCDEF!!!",Detect with garbage suffix,HIGH,Noise after secret
+INJECTION_ATTACK,regex_injection,".*|AKIA1234567890ABCDEF",Should NOT interpret as regex pattern,CRITICAL,Regex injection in input
+INJECTION_ATTACK,null_byte_injection,"AKIA1234567890ABCDEF\x00extra_data",Handle null bytes safely,HIGH,Null byte termination
+INJECTION_ATTACK,newline_injection,"AKIA1234567890ABCDEF\nFake-Secret",Should process both lines correctly,HIGH,Newline injection
+WHITESPACE_HANDLING,secret_with_tabs,"AKIA\t1234567890ABCDEF",Tab character within secret,MEDIUM,Whitespace in token
+WHITESPACE_HANDLING,secret_with_spaces,"AKIA 1234567890ABCDEF",Space character within secret,MEDIUM,Space in token (unlikely but test)
+WHITESPACE_HANDLING,secret_with_newline_inside,"AKIA1234567890\nABCDEF",Newline inside secret (edge case),MEDIUM,Multi-line secret
+UNICODE_HANDLING,secret_with_bom,"\xef\xbb\xbfAKIA1234567890ABCDEF",Detect with UTF-8 BOM prefix,MEDIUM,BOM handling
+UNICODE_HANDLING,secret_with_rtl_mark,"AKIA1234567890ABCDEF\u202e",Detect with right-to-left mark,MEDIUM,RTL mark injection
+UNICODE_HANDLING,secret_with_zero_width_chars,"AKIA\u200b1234567890ABCDEF",Detect with zero-width space,MEDIUM,Zero-width character obfuscation
+CASE_SENSITIVITY,lowercase_aws_key,"akia1234567890abcdef",Should NOT match (case-sensitive),MEDIUM,Case sensitivity check
+CASE_SENSITIVITY,mixed_case_openai,"SK-proj-1234567890ABCDEFGHIJ",May NOT match due to case (sk- prefix required),MEDIUM,Case-sensitive prefix
+CACHE_POLLUTION,repeated_pattern_attack,"AKIA1234567890ABCDEF" repeated 10000 times,Don't cache-bomb or crash,HIGH,Regex cache pollution
+CACHE_POLLUTION,unique_patterns_per_byte,"Each byte permutation as potential secret",System should stay responsive,HIGH,Cache exhaustion attack
+MEMORY_SAFETY,zero_length_match,"Regex that matches empty string",Should handle gracefully,CRITICAL,Zero-length match edge case
+MEMORY_SAFETY,overlapping_patterns,"Text matching multiple patterns simultaneously",Handle overlap correctly (first match wins),HIGH,Overlap handling (already fixed)
+MEMORY_SAFETY,recursive_redaction,"Already-redacted text: 'xxxxxxxxxxxx' matches a pattern",Should NOT re-redact,HIGH,Prevent double-redaction
+MEMORY_SAFETY,stack_overflow_pattern,"(a+)+b" with "aaaa...aaaa" (no match)",Should NOT cause stack overflow,CRITICAL,Catastrophic backtracking

@@ -1,0 +1,38 @@
+# SCRED Reverse Proxy - Multi-stage build optimized for Docker Desktop
+
+# Stage 1: Build
+FROM rust:latest AS builder
+
+# Install minimal build tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev mold \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy workspace
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# Build with aggressive optimizations to reduce memory usage
+# mold linker is much faster and lighter than lld/bfd
+RUN RUSTFLAGS="-C link-arg=-fuse-ld=mold -C strip=symbols" \
+    cargo build --release --package scred-proxy -j 2 && \
+    chmod +x /build/target/release/scred-proxy
+
+# Stage 2: Runtime - use same rust image to match GLIBC versions
+FROM rust:latest
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /build/target/release/scred-proxy /app/scred-proxy
+
+ENV SCRED_LISTEN="0.0.0.0:9999" \
+    SCRED_LOG_LEVEL="info" \
+    SCRED_LOG_FORMAT="json"
+
+ENTRYPOINT ["/app/scred-proxy"]

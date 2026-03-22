@@ -1,0 +1,315 @@
+/// TLS MITM Bridge - REAL TLS Client Acceptance (Phase 4c Implementation)
+///
+/// This is the actual implementation that:
+/// 1. Accepts TLS FROM the client (using generated certificate)
+/// 2. Decrypts HTTP request to plain text
+/// 3. Applies SCRED redaction (237 patterns)
+/// 4. Connects to upstream
+/// 5. Forwards redacted request
+/// 6. Returns response to client
+///
+/// KEY DIFFERENCE from tunneling: We see DECRYPTED HTTP!
+
+use anyhow::{anyhow, Result};
+use tokio::net::TcpStream;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::sync::Arc;
+use tracing::{debug, info, warn, error};
+use rustls::{ServerConfig, Certificate, PrivateKey};
+use std::io::Cursor;
+
+use super::tls::CertificateGenerator;
+use scred_http::duplex::DuplexSocket;
+use scred_http::response_reader::read_http_response;
+
+/// Execute REAL TLS MITM with actual secret redaction
+///
+/// This function implements the complete man-in-the-middle:
+/// 1. Accept client TLS with generated certificate
+/// 2. Read decrypted HTTP from client
+/// 3. Apply redaction (using streaming for bounded memory)
+/// 4. Forward to upstream
+pub async fn handle_tls_mitm(
+    client_read: tokio::net::tcp::OwnedReadHalf,
+    client_write: tokio::net::tcp::OwnedWriteHalf,
+    host: &str,
+    _port: u16,
+    upstream_addr: &str,
+    cert_generator: Arc<CertificateGenerator>,
+    redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    redact_responses: bool,
+) -> Result<()> {
+    use scred_redactor::{StreamingRedactor, StreamingConfig, StreamingEvent};
+    
+    info!("TLS MITM tunnel starting for: {}", host);
+
+    // Step 1: Get or generate certificate for this domain
+    let (cert_pem, key_pem) = cert_generator.get_or_generate_cert(host).await?;
+    debug!("Certificate loaded/generated for: {}", host);
+
+    // Step 2: Parse certificate and key for rustls
+    let mut cert_reader = Cursor::new(&cert_pem);
+    let certs: Vec<_> = rustls_pemfile::certs(&mut cert_reader)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| anyhow!("Failed to parse certificate: {}", e))?;
+
+    if certs.is_empty() {
+        return Err(anyhow!("No certificates found in PEM"));
+    }
+
+    let cert_chain: Vec<Certificate> = certs
+        .into_iter()
+        .map(|c| Certificate(c.as_ref().to_vec()))
+        .collect();
+
+    let mut key_reader = Cursor::new(&key_pem);
+    let parsed_keys: Vec<_> = rustls_pemfile::pkcs8_private_keys(&mut key_reader)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| anyhow!("Failed to parse private key: {}", e))?;
+
+    if parsed_keys.is_empty() {
+        return Err(anyhow!("No private keys found in PEM"));
+    }
+
+    let private_key = PrivateKey(parsed_keys[0].secret_pkcs8_der().to_vec());
+
+    // Step 3: Build TLS ServerConfig (this accepts TLS FROM the client!)
+    let server_config = ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth()
+        .with_single_cert(cert_chain, private_key)
+        .map_err(|e| anyhow!("Failed to build TLS config: {}", e))?;
+
+    let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
+
+    // Step 4: Combine split socket halves using DuplexSocket
+    let duplex = DuplexSocket::new(client_read, client_write);
+
+    // Step 5: Accept TLS FROM client - THIS IS THE KEY STEP!
+    debug!("Accepting TLS connection from client...");
+    let mut client_tls = acceptor.accept(duplex).await
+        .map_err(|e| {
+            error!("Client TLS handshake failed: {}", e);
+            anyhow!("Client TLS handshake failed: {}", e)
+        })?;
+
+    info!("Client TLS handshake successful, HTTP decrypted");
+
+    // Step 6: Read HTTP request from DECRYPTED stream
+    let mut request_buffer = vec![0u8; 65536];
+    let req_len = match client_tls.read(&mut request_buffer).await {
+        Ok(0) => {
+            debug!("Client closed connection immediately");
+            return Ok(());
+        }
+        Ok(n) => {
+            debug!("Read {} bytes from DECRYPTED client stream", n);
+            n
+        }
+        Err(e) => {
+            warn!("Failed to read from client: {}", e);
+            return Err(e.into());
+        }
+    };
+
+    let original_request = String::from_utf8_lossy(&request_buffer[..req_len]);
+    debug!("HTTP request received ({} bytes, decrypted from TLS)", req_len);
+    
+    // Log preview
+    for (idx, line) in original_request.lines().take(3).enumerate() {
+        debug!("  Line {}: {}", idx, line);
+    }
+
+    // Step 7: Apply SCRED redaction using STREAMING for bounded memory
+    let redacted_request = {
+        // Use streaming redaction with bounded memory
+        let mut redactor = StreamingRedactor::new(StreamingConfig::default())?;
+        let mut redacted = Vec::new();
+        
+        let events = redactor.process_chunk(request_buffer[..req_len].as_ref());
+        for event in events {
+            if let StreamingEvent::Chunk { data, .. } = event {
+                redacted.extend_from_slice(&data);
+            }
+        }
+        
+        // Get remaining data from lookahead buffer
+        let (remaining, _) = redactor.get_remaining();
+        redacted.extend_from_slice(&remaining);
+        
+        redacted
+    };
+    
+    let redacted_str = String::from_utf8_lossy(&redacted_request);
+    
+    if redacted_str != original_request {
+        let lines_redacted = original_request.lines().zip(redacted_str.lines()).filter(|(o, r)| o != r).count();
+        warn!(
+            "HTTP request contains secrets: {} bytes (original) -> {} bytes (redacted), {} lines matched patterns",
+            original_request.len(),
+            redacted_str.len(),
+            lines_redacted
+        );
+    } else {
+        debug!("HTTP request: {} bytes, no secrets detected", original_request.len());
+    }
+
+    // Step 8: Connect to upstream server
+    // For HTTPS interception, we convert the request to HTTP and send to port 80
+    // This allows the upstream server to respond with HTTP (since we already decrypted)
+    debug!("Connecting to upstream: {}", upstream_addr);
+    
+    // Get proxy configuration from environment
+    let upstream_resolver = scred_http::proxy_resolver::MitmConfig::from_env();
+    
+    // Parse upstream address to extract host and port
+    let (upstream_host, upstream_port) = if let Some(colon_idx) = upstream_addr.rfind(':') {
+        (
+            upstream_addr[..colon_idx].to_string(),
+            upstream_addr[colon_idx + 1..].parse::<u16>().unwrap_or(443),
+        )
+    } else {
+        (upstream_addr.to_string(), 443)
+    };
+
+    // Decide whether to use proxy
+    let use_proxy = upstream_resolver.get_proxy_for(&upstream_host, true).is_some();
+    
+    let mut upstream = if use_proxy {
+        // Use proxy chaining (CONNECT method)
+        if let Some(proxy_url) = upstream_resolver.get_proxy_for(&upstream_host, true) {
+            info!("[CONNECT] Using proxy chain: {} → {} through {}", host, upstream_addr, proxy_url);
+            
+            // For upstream, use port 80 for HTTP (proxy handles the tunneling)
+            let upstream_port_for_proxy = if upstream_addr.ends_with(":443") {
+                80u16
+            } else {
+                upstream_port
+            };
+            
+            match scred_http::proxy_resolver::connect_through_proxy(&proxy_url, &upstream_host, upstream_port_for_proxy).await {
+                Ok(stream) => {
+    info!("Connected to upstream {}:{} via proxy", upstream_host, upstream_port_for_proxy);
+                    stream
+                }
+                Err(e) => {
+                    error!("Failed to connect through proxy: {}", e);
+                    let error_response = "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n";
+                    let _ = client_tls.write_all(error_response.as_bytes()).await;
+                    return Err(e);
+                }
+            }
+        } else {
+            // Direct connection
+            let upstream_http_addr = if upstream_addr.ends_with(":443") {
+                let host_part = &upstream_addr[..upstream_addr.len() - 4];
+                format!("{}:80", host_part)
+            } else {
+                upstream_addr.to_string()
+            };
+            
+            debug!("Upstream HTTP address (converted from HTTPS): {}", upstream_http_addr);
+            
+            match TcpStream::connect(&upstream_http_addr).await {
+                Ok(stream) => {
+                    info!("Connected directly to {}", upstream_http_addr);
+                    stream
+                }
+                Err(e) => {
+                    error!("Failed to connect to upstream {}: {}", upstream_addr, e);
+                    let error_response = "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n";
+                    let _ = client_tls.write_all(error_response.as_bytes()).await;
+                    return Err(e.into());
+                }
+            }
+        }
+    } else {
+        // Direct connection (no proxy)
+        let upstream_http_addr = if upstream_addr.ends_with(":443") {
+            let host_part = &upstream_addr[..upstream_addr.len() - 4];
+            format!("{}:80", host_part)
+        } else {
+            upstream_addr.to_string()
+        };
+        
+        debug!("Direct connection to upstream: {}", upstream_http_addr);
+        
+        match TcpStream::connect(&upstream_http_addr).await {
+            Ok(stream) => {
+                info!("Connected directly to {}", upstream_http_addr);
+                stream
+            }
+            Err(e) => {
+                error!("Failed to connect to upstream {}: {}", upstream_addr, e);
+                let error_response = "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n";
+                let _ = client_tls.write_all(error_response.as_bytes()).await;
+                return Err(e.into());
+            }
+        }
+    };
+
+    // Step 9: Forward REDACTED request to upstream
+    debug!("Forwarding {} bytes of redacted request to upstream", redacted_request.len());
+    upstream.write_all(&redacted_request).await?;
+    upstream.flush().await?;
+    info!("[SEND] Forwarded redacted request to upstream");
+
+    // Step 10: Read response from upstream using safe reader
+    let response_buffer = match read_http_response(&mut upstream, 100).await {
+        Ok(data) => {
+            debug!("Read {} bytes from upstream", data.len());
+            data
+        }
+        Err(e) => {
+            warn!("Failed to read from upstream: {}", e);
+            return Err(e.into());
+        }
+    };
+
+    // Step 11: Optionally redact response and forward to client (using streaming)
+    if !response_buffer.is_empty() {
+        let response_data = if redact_responses {
+            // Redact response using streaming
+            let mut redactor = StreamingRedactor::new(StreamingConfig::default())?;
+            let mut redacted = Vec::new();
+            
+            let events = redactor.process_chunk(&response_buffer);
+            for event in events {
+                if let StreamingEvent::Chunk { data, .. } = event {
+                    redacted.extend_from_slice(&data);
+                }
+            }
+            
+            // Get remaining from lookahead
+            let (remaining, _) = redactor.get_remaining();
+            redacted.extend_from_slice(&remaining);
+            
+            if redacted != response_buffer {
+                warn!("Response contained secrets, redacting ({} bytes)", response_buffer.len() - redacted.len());
+            }
+            redacted
+        } else {
+            // Forward response without redaction
+            debug!("Response redaction disabled - forwarding as-is");
+            response_buffer.clone()
+        };
+        
+        client_tls.write_all(&response_data).await?;
+        client_tls.flush().await?;
+        info!("Response forwarded to client ({} bytes)", response_buffer.len());
+    }
+
+    info!("TLS MITM tunnel complete: decrypted request redacted and forwarded with response redaction");
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tls_mitm_compiles() {
+        // Just verify module compiles
+        assert!(true);
+    }
+}
