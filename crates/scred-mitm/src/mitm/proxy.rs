@@ -154,12 +154,14 @@ async fn handle_client(
             } else {
                 format!("{}:{}", host, port)
             };
+            
+            info!("[PROXY] CONNECT tunnel: {} -> {} (upstream_addr will be: '{}')", peer_addr, host, upstream_addr);
 
-            // Send 200 Connection Established
+            // Send 200 Connection Established BEFORE doing TLS!
+            // Client is waiting for this before upgrading to TLS
             socket_write.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
             socket_write.flush().await?;
-            info!("CONNECT tunnel established: {} -> {}", peer_addr, upstream_addr);
-
+            
             // Now do TLS MITM interception (decrypt, redact, re-encrypt)
             // This consumes the socket and doesn't return for keep-alive
             if let Err(e) = crate::mitm::tls_mitm::handle_tls_mitm(

@@ -29,31 +29,11 @@ pub struct RedactionEngine {
 impl RedactionEngine {
     pub fn new(config: RedactionConfig) -> Self {
         // NOTE: All patterns are now managed in Zig (scred-pattern-detector).
-        // We load common regex patterns for redaction from pattern metadata.
-        
-        let mut compiled_patterns: Vec<(String, regex::Regex)> = Vec::new();
-        
-        // Get all patterns from Zig detector
-        let all_patterns = scred_pattern_detector::get_all_patterns();
-        
-        // Try to compile regex patterns (high-confidence patterns)
-        let common_patterns = vec![
-            r"AKIA[0-9A-Z]{16}",  // AWS
-            r"gh[pousr]{1,3}_[0-9a-zA-Z_]{36,255}",  // GitHub
-            r"sk_(live|test)_[0-9a-zA-Z]{10,}",  // Stripe
-            r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",  // JWT
-            r"Bearer\s+[a-zA-Z0-9_\-\.]{10,}",  // Bearer token
-        ];
-        
-        for pattern in &common_patterns {
-            if let Ok(re) = regex::Regex::new(pattern) {
-                compiled_patterns.push((pattern.to_string(), re));
-            }
-        }
+        // We ONLY use scred-pattern-detector for DETECTION, not redaction.
         
         Self {
             config,
-            compiled_patterns,
+            compiled_patterns: Vec::new(),  // Detection handled by scred-pattern-detector
         }
     }
 

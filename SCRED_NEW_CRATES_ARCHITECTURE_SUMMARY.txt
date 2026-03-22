@@ -1,0 +1,396 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║     PROPOSED ARCHITECTURE: scred-http-detector & scred-http-redactor      ║
+║                      Thoughtful Crate Design                              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+YOUR CONSTRAINT
+✋ "I'm OK with everything, EXCEPT having h2 specific in redactor"
+
+SOLUTION: Create two complementary HTTP-specific crates
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NEW ARCHITECTURE (5 layers, clean dependencies)
+
+                    Applications
+                (scred-mitm, scred-proxy)
+                         │
+            ┌────────────┴────────────┐
+            ▼                         ▼
+       scred-http          scred-http-detector
+    (Protocol handlers)    (Content analysis)
+            │                         │
+            └────────────┬────────────┘
+                         ▼
+              scred-http-redactor
+           (HTTP redaction strategies)
+           ├─ H2Redactor (moved from h2_adapter)
+           ├─ Http11Redactor
+           ├─ HeaderRedactor
+           ├─ BodyRedactor (JSON/XML/form/binary)
+           └─ StreamingBodyRedactor (64KB chunks)
+                         │
+                         ▼
+                 scred-redactor
+              (Core redaction engine)
+              ├─ RedactionEngine
+              ├─ StreamingRedactor
+              └─ Pattern detection (FFI)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CRATE: scred-http-detector (~500 LOC)
+
+PURPOSE: Analysis-only, no mutations
+
+MODULES:
+├─ analyzer/
+│  └─ ContentAnalyzer trait (headers + body analysis)
+├─ classification/
+│  └─ Sensitivity enum (Public, Internal, Confidential, Secret)
+├─ header_analysis/
+│  └─ Detect sensitive headers (Authorization, Cookie, X-API-Key, etc.)
+├─ body_analysis/
+│  ├─ Content type detection
+│  ├─ JSON/XML/form-specific analysis
+│  └─ Extract paths & sensitivity levels
+└─ models/
+   ├─ AnalysisResult (what was found, sensitivity, suggested strategy)
+   └─ Finding (path, value, pattern match, sensitivity)
+
+KEY INSIGHT: Detector says "HERE'S WHAT YOU NEED TO REDACT"
+Redactor says "HERE'S HOW TO REDACT IT"
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CRATE: scred-http-redactor (~700 LOC)
+
+PURPOSE: Protocol-specific redaction strategies
+
+MODULES:
+├─ core/
+│  └─ HttpRedactor trait (unified interface)
+├─ header_redaction/
+│  ├─ redact_authorization()
+│  ├─ redact_cookie()
+│  ├─ redact_custom_header()
+│  └─ per-header strategies
+├─ body_redaction/
+│  ├─ redact_json()
+│  ├─ redact_xml()
+│  ├─ redact_form()
+│  ├─ redact_plain()
+│  └─ redact_binary()
+├─ streaming_redaction/
+│  └─ StreamingBodyRedactor (for large responses)
+├─ protocol/
+│  ├─ Http11Redactor
+│  │  ├─ redact_request_line()
+│  │  ├─ redact_request()
+│  │  └─ redact_response()
+│  └─ H2Redactor (MOVED from h2_adapter)
+│     ├─ redact_pseudo_headers()
+│     ├─ redact_stream()
+│     └─ H2-specific per-stream state management
+└─ models/
+   └─ RedactionStats (metrics)
+
+KEY INSIGHT: 
+- HttpRedactor: Generic interface
+- Http11Redactor: HTTP/1.1-specific implementation
+- H2Redactor: HTTP/2-specific implementation (was h2_adapter)
+- No H2 pollution in scred-redactor ✅
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CRATE: scred-http (REFACTORED, ~3.5K LOC)
+
+CHANGES:
+✗ Remove h2_adapter (moved to scred-http-redactor)
+✓ Keep protocol handlers (parser, encoder, reader)
+✓ Keep proxy orchestration
+✓ Add detector/redactor dependencies
+
+NEW STRUCTURE:
+├─ core/
+│  └─ HTTP models (Request, Response, Header)
+├─ protocol/
+│  ├─ http1/
+│  │  ├─ parser.rs
+│  │  ├─ encoder.rs
+│  │  └─ reader.rs
+│  └─ h2/
+│     └─ alpn.rs (MINIMAL, just protocol detection)
+├─ proxy/
+│  └─ handler orchestration (uses detector + redactor)
+└─ utils/
+   ├─ duplex.rs
+   ├─ dns_resolver.rs
+   └─ logging.rs
+
+BENEFIT: scred-http becomes simpler (redaction logic extracted)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+INTEGRATION FLOW
+
+HTTP Request arrives
+    ↓
+Parse (scred-http::protocol::http1)
+    ↓
+Analyze (scred-http-detector::HttpContentAnalyzer)
+    └─ What needs redaction?
+    └─ How sensitive?
+    └─ Suggest strategy
+    ↓
+Redact (scred-http-redactor::Http11Redactor)
+    ├─ Apply header redaction
+    ├─ Apply body redaction
+    └─ Return redacted request
+    ↓
+Forward to upstream
+    ↓
+Response comes back
+    ↓
+Analyze response (same detector)
+    ↓
+Redact response (same redactor)
+    ↓
+Send to client
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DEPENDENCY GRAPH (Clean, no cycles)
+
+scred-http-detector
+  ├─ scred-pattern-detector (for pattern matching)
+  └─ http crate
+
+scred-http-redactor
+  ├─ scred-redactor (RedactionEngine, StreamingRedactor)
+  ├─ http crate
+  ├─ h2 crate (for H2Stream types ONLY in H2Redactor)
+  └─ tokio (async)
+
+scred-http
+  ├─ scred-http-detector (for analysis)
+  ├─ scred-http-redactor (for redaction)
+  └─ http crate
+
+scred-mitm
+  ├─ scred-http (protocol handling)
+  ├─ scred-http-redactor (direct access for H2Redactor if needed)
+  └─ scred-redactor (core engine)
+
+scred-proxy
+  ├─ scred-http (protocol handling)
+  ├─ scred-http-redactor (direct access for Http11Redactor if needed)
+  └─ scred-redactor (core engine)
+
+ALL DEPENDENCIES FLOW DOWNWARD (↓) - NO CYCLES ✅
+
+═══════════════════════════════════════════════════════════════════════════════
+
+KEY DESIGN DECISIONS
+
+1. SEPARATION OF CONCERNS
+   Detection ≠ Redaction ≠ Protocol handling
+   Each crate has ONE clear responsibility
+
+2. NO H2 IN REDACTOR
+   ✓ h2_adapter moves to scred-http-redactor (as H2Redactor)
+   ✓ scred-redactor stays protocol-agnostic
+   ✓ H2 concerns isolated in http-specific layer
+
+3. PROTOCOL FLEXIBILITY
+   ✓ Easy to add HTTP/3 (new Http3Redactor)
+   ✓ Easy to add WebSocket (new WsRedactor)
+   ✓ Each protocol gets own redaction strategy
+
+4. COMPOSABILITY
+   ✓ Redactors compose: HeaderRedactor + BodyRedactor
+   ✓ Analyzers compose: HeaderAnalyzer + BodyAnalyzer
+   ✓ Can mock either layer for testing
+
+5. REUSABILITY
+   ✓ Other projects can import scred-http-detector for analysis
+   ✓ Other projects can import scred-http-redactor for redaction
+   ✓ No need to depend on MITM/proxy logic
+
+═══════════════════════════════════════════════════════════════════════════════
+
+MIGRATION EFFORT & TIMELINE
+
+Phase 1: Create new crates & Cargo.toml files    (2-3 hours)
+Phase 2: Implement detection layer               (3-4 hours)
+Phase 3: Implement redaction layer               (4-5 hours)
+Phase 4: Update existing crates                  (2-3 hours)
+Phase 5: Verify & test                           (1-2 hours)
+
+TOTAL: 12-17 hours
+
+BUILD TIME: Incremental compilation should stay <1s
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CODE METRICS
+
+Current:
+├─ scred-http: ~5K LOC (includes h2_adapter + detection + redaction)
+├─ scred-redactor: ~3K LOC
+└─ Total: ~8K LOC
+
+After:
+├─ scred-http: ~3.5K LOC (protocols only)
+├─ scred-http-detector: ~500 LOC (NEW)
+├─ scred-http-redactor: ~700 LOC (NEW)
+├─ scred-redactor: ~3K LOC (unchanged)
+└─ Total: ~7.7K LOC (slightly fewer but better organized)
+
+ORGANIZATION: +100% (from chaotic to layered)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+WHAT ABOUT h2_adapter?
+
+CURRENT PROBLEM:
+  ✗ h2_adapter in scred-http (wrong domain)
+  ✗ Only used by MITM/proxy (tightly coupled)
+  ✗ Mixing HTTP/2 protocol code with generic HTTP utilities
+
+AFTER SOLUTION:
+  ✓ Renamed to H2Redactor in scred-http-redactor
+  ✓ Composed with HeaderRedactor + BodyRedactor
+  ✓ Lives alongside Http11Redactor (sibling protocols)
+  ✓ scred-redactor stays pure (no h2 imports)
+  ✓ Backward compatibility option: re-export from scred-http if needed
+
+═══════════════════════════════════════════════════════════════════════════════
+
+EXAMPLE USAGE (After Migration)
+
+// In scred-proxy
+use scred_http_detector::{HttpContentAnalyzer, Sensitivity};
+use scred_http_redactor::Http11Redactor;
+use scred_http::protocol::http1;
+
+async fn handle_request(client: &mut TcpStream) -> Result<()> {
+    let detector = HttpContentAnalyzer::new(patterns);
+    let redactor = Http11Redactor::new(engine);
+    
+    // 1. Parse
+    let mut request = http1::parse_request(client)?;
+    
+    // 2. Analyze
+    let analysis = detector.analyze_request(&request)?;
+    println!("Sensitivity: {}", analysis.sensitivity);
+    
+    // 3. Redact if needed
+    if analysis.sensitivity >= Sensitivity::Internal {
+        redactor.redact_request(&mut request)?;
+    }
+    
+    // 4. Forward to upstream
+    let response = forward(&request).await?;
+    
+    // 5. Same for response
+    let response_analysis = detector.analyze_response(&response)?;
+    if response_analysis.sensitivity >= Sensitivity::Internal {
+        redactor.redact_response(&mut response)?;
+    }
+    
+    // 6. Send to client
+    http1::encode_response(&response, client)?;
+    Ok(())
+}
+
+═══════════════════════════════════════════════════════════════════════════════
+
+BENEFITS SUMMARY
+
+✅ Separation of Concerns
+   - Detection layer independent from redaction
+   - Protocol layer independent from redaction
+   - Each layer has single responsibility
+
+✅ No H2 in Redactor
+   - scred-redactor stays generic
+   - H2-specific logic lives in http layer
+   - Respects your constraint
+
+✅ Reusability
+   - Detector can be used elsewhere
+   - Redactor can be used elsewhere
+   - No MITM/proxy specific code
+
+✅ Testability
+   - Mock detector for testing redactor
+   - Mock redactor for testing detector
+   - Unit test each layer
+
+✅ Protocol Flexibility
+   - Easy to add HTTP/3
+   - Easy to add WebSocket
+   - Each protocol gets own strategy
+
+✅ Maintainability
+   - Clear layer boundaries
+   - No code mixing concerns
+   - Easy to find & modify logic
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FINAL ARCHITECTURE (VISUAL)
+
+                    Applications
+             (scred-mitm, scred-proxy)
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+        ▼                ▼                ▼
+    scred-http      scred-http-    scred-redactor
+   (Protocols)      detector       (Core engine)
+                   (Analysis)
+        │                │                │
+        └────────────────┼────────────────┘
+                         ▼
+              scred-http-redactor
+            (HTTP redaction strategies)
+                    ↑
+                    │
+        ┌───────────┴───────────┐
+        │                       │
+   H2Redactor           Http11Redactor
+  (From h2_adapter)     (HTTP/1.1 specific)
+        │                       │
+        └───────────┬───────────┘
+                    ▼
+           HeaderRedactor +
+           BodyRedactor
+                    │
+                    ▼
+            scred-redactor
+          (RedactionEngine)
+
+LAYERS: 5 (Applications → Protocols → Detection → Redaction → Core)
+CYCLES: 0 (all flows downward)
+CONCERNS: Isolated (each crate has one job)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NEXT STEPS (If you approve this design)
+
+1. Review the architecture
+2. Approve crate structure & module organization
+3. I can start implementation:
+   - Phase 1: Create crate scaffolding
+   - Phase 2-5: Implementation & migration
+   - Full build & test verification
+
+Questions?
+- Is the 5-layer approach clear?
+- Do you want different module names?
+- Any concerns about the dependency graph?
+- Should scred-http re-export H2Redactor for compatibility?
+
+═══════════════════════════════════════════════════════════════════════════════

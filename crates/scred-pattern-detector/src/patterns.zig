@@ -1,5 +1,5 @@
 //! Pattern Definitions
-//! 
+//!
 //! Single source of truth for ALL secret patterns:
 //! - SIMPLE_PREFIX_PATTERNS (26): Pure prefix, no validation
 //! - JWT_PATTERNS (1): eyJ prefix + 2 dots structure
@@ -25,25 +25,25 @@ pub const JwtPattern = struct {
 };
 
 pub const Charset = enum {
-    alphanumeric,   // a-z, A-Z, 0-9, -, _
-    base64,         // a-z, A-Z, 0-9, +, /, =
-    base64url,      // a-z, A-Z, 0-9, -, _, =
-    hex,            // 0-9, a-f, A-F
-    hex_lowercase,  // 0-9, a-f
-    any,            // Non-delimiter characters
+    alphanumeric, // a-z, A-Z, 0-9, -, _
+    base64, // a-z, A-Z, 0-9, +, /, =
+    base64url, // a-z, A-Z, 0-9, -, _, =
+    hex, // 0-9, a-f, A-F
+    hex_lowercase, // 0-9, a-f
+    any, // Non-delimiter characters
 };
 
 pub const PrefixValidation = struct {
     name: []const u8,
     prefix: []const u8,
-    min_len: usize,  // Minimum token length (0 = no limit)
-    max_len: usize,  // Maximum token length (0 = no limit)
+    min_len: usize, // Minimum token length (0 = no limit)
+    max_len: usize, // Maximum token length (0 = no limit)
     charset: Charset, // Character set validation
 };
 
 pub const RegexPattern = struct {
     name: []const u8,
-    pattern: []const u8,  // Raw regex pattern string
+    pattern: []const u8, // Raw regex pattern string
 };
 
 // ============================================================================
@@ -53,13 +53,14 @@ pub const RegexPattern = struct {
 // Examples: "sk_live_", "eyJ", "organizations/", etc.
 
 pub const SIMPLE_PREFIX_PATTERNS = [_]SimplePrefixPattern{
-
     .{ .name = "age-secret-key", .prefix = "AGE-SECRET-KEY-1" },
     .{ .name = "apideck", .prefix = "sk_live_" },
     .{ .name = "artifactoryreferencetoken", .prefix = "cmVmdGtu" },
     .{ .name = "azure-storage", .prefix = "AccountName" },
     .{ .name = "azure-app-config", .prefix = "Endpoint=https://" },
     .{ .name = "coinbase", .prefix = "organizations/" },
+    .{ .name = "context7-api-key", .prefix = "ctx7sk_" },
+    .{ .name = "context7-secret", .prefix = "ctx7sk-" },
     .{ .name = "fleetbase", .prefix = "flb_live_" },
     .{ .name = "flutterwave-public-key", .prefix = "FLWPUBK_TEST-" },
     .{ .name = "linear-api-key", .prefix = "lin_api_" },
@@ -80,7 +81,6 @@ pub const SIMPLE_PREFIX_PATTERNS = [_]SimplePrefixPattern{
     .{ .name = "tumblr-api-key", .prefix = "tumblr_" },
     .{ .name = "upstash-redis", .prefix = "redis_" },
     .{ .name = "vercel-token", .prefix = "vercel_" },
-
 };
 
 // ============================================================================
@@ -90,7 +90,7 @@ pub const SIMPLE_PREFIX_PATTERNS = [_]SimplePrefixPattern{
 // Covers ALL JWT algorithms (HS256, RS256, EdDSA, etc.)
 
 pub const JWT_PATTERNS = [_]JwtPattern{
-    .{ .name = "jwt-generic" },  // eyJ + 2 dots = universal JWT
+    .{ .name = "jwt-generic" }, // eyJ + 2 dots = universal JWT
 };
 
 // ============================================================================
@@ -100,7 +100,6 @@ pub const JWT_PATTERNS = [_]JwtPattern{
 // Examples: "sk-ant-" + 90-100 chars, "AKCp" + exactly 69 alphanumeric, etc.
 
 pub const PREFIX_VALIDATION_PATTERNS = [_]PrefixValidation{
-
     .{ .name = "1password-svc-token", .prefix = "ops_eyJ", .min_len = 250, .max_len = 0, .charset = .base64 },
     .{ .name = "anthropic", .prefix = "sk-ant-", .min_len = 90, .max_len = 100, .charset = .any },
     .{ .name = "artifactory-api-key", .prefix = "AKCp", .min_len = 69, .max_len = 69, .charset = .alphanumeric },
@@ -148,7 +147,6 @@ pub const PREFIX_VALIDATION_PATTERNS = [_]PrefixValidation{
     .{ .name = "telegram-bot-token", .prefix = "Bot ", .min_len = 30, .max_len = 0, .charset = .alphanumeric },
     .{ .name = "twilio-api-key", .prefix = "AC", .min_len = 34, .max_len = 0, .charset = .alphanumeric },
     .{ .name = "twitch-oauth-token", .prefix = "oauth:", .min_len = 30, .max_len = 0, .charset = .alphanumeric },
-
 };
 
 // ============================================================================
@@ -160,17 +158,17 @@ pub const PREFIX_VALIDATION_PATTERNS = [_]PrefixValidation{
 
 pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "1password-service-account-token", .pattern = "ops_eyJ[a-zA-Z0-9+/]{250,}={0,3}" },
-    .{ .name = "adafruitio", .pattern = "\\b(aio\\_[a-zA-Z0-9]{28})\\b" },
-    .{ .name = "age-secret-key", .pattern = "AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}" },
+    .{ .name = "adafruitio", .pattern = "\\b(aio\\_[a-zA-Z0-9]{28})\\b" }, // could be prefix with validation or just prefix + 28
+    .{ .name = "age-secret-key", .pattern = "AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}" }, // could be prefix with validation or just prefix + 58
     .{ .name = "aha", .pattern = "\\b([A-Za-z0-9](?:[A-Za-z0-9\\-]{0,61}[A-Za-z0-9])\\.aha\\.io)" },
     .{ .name = "airtable-api-key", .pattern = "\\\\b(pat[[:alnum:]]{14}\\\\.[a-f0-9]{64})\\\\b" },
     .{ .name = "airtableoauth", .pattern = "\\b([[:alnum:]]+\\.v1\\.[a-zA-Z0-9_-]+\\.[a-f0-9]+)\\b" },
     .{ .name = "alibaba", .pattern = "\\b([a-zA-Z0-9]{30})\\b" },
-    .{ .name = "anthropic", .pattern = "\\b(sk-ant-(?:admin01|api03)-[\\w\\-]{93}AA)\\b" },
+    .{ .name = "anthropic", .pattern = "\\b(sk-ant-(?:admin01|api03)-[\\w\\-]{93}AA)\\b" }, // could be multiple prefixes (sk-ant, sk-ant-admin, etc) with validation or just prefix + 95
     .{ .name = "anypoint", .pattern = "\\b([0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12})\\b" },
     .{ .name = "api_key_header", .pattern = "(?i)(?:X-API-KEY|X-API-KEY-HEADER):\\s*([A-Za-z0-9\\-._~+\\/]+=*)" },
-    .{ .name = "apideck", .pattern = "\\b(sk_live_[a-z0-9A-Z-]{93})\\b" },
-    .{ .name = "apify", .pattern = "\\b(apify\\_api\\_[a-zA-Z-0-9]{36})\\b" },
+    .{ .name = "apideck", .pattern = "\\b(sk_live_[a-z0-9A-Z-]{93})\\b" }, // could be prefix with validation or just prefix + 93
+    .{ .name = "apify", .pattern = "\\b(apify\\_api\\_[a-zA-Z-0-9]{36})\\b" }, // could be multiple prefixes with validation or just prefix + 36
     .{ .name = "artifactory-api-key", .pattern = "\\\\bAKCp[A-Za-z0-9]{69}\\\\b" },
     .{ .name = "artifactoryreferencetoken", .pattern = "\\b(cmVmdGtu[A-Za-z0-9]{56})\\b" },
     .{ .name = "artifactoryreferencetoken-1", .pattern = "\\b([A-Za-z0-9][A-Za-z0-9\\-]{0,61}[A-Za-z0-9]\\.jfrog\\.io)" },
@@ -196,21 +194,21 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "caflou", .pattern = "\\b(eyJhbGciOiJIUzI1NiJ9[a-zA-Z0-9._-]{135})\\b" },
     .{ .name = "clickhelp", .pattern = "\\b([0-9A-Za-z-]{3,20}\\.(?:try\\.)?clickhelp\\.co)\\b" },
     .{ .name = "clickhouse-cloud-api-secret-key", .pattern = "\\\\b(4b1d[A-Za-z0-9]{38})\\\\b" },
-    .{ .name = "clojars-api-token", .pattern = "(?i)CLOJARS_[a-z0-9]{60}" },
+    .{ .name = "clojars-api-token", .pattern = "(?i)CLOJARS_[a-z0-9]{60}" }, // could be prefix with validation or just prefix + 60
     .{ .name = "closecrm", .pattern = "\\b(api_[a-z0-9A-Z.]{45})\\b" },
     .{ .name = "cloudflarecakey", .pattern = "\\b(v1\\.0-[A-Za-z0-9-]{171})\\b" },
     .{ .name = "coinbase", .pattern = "\\b(organizations\\\\*/\\w{8}-\\w{4}-\\w{4}-\\w{4}-\\w{12}\\\\*/apiKeys\\\\*/\\w{8}-\\w{4}-\\w{4}-\\w{4}-\\w{12})\\b" },
-    .{ .name = "contentfulpersonalaccesstoken", .pattern = "\\b(CFPAT-[a-zA-Z0-9_\\-]{43})\\b" },
+    .{ .name = "contentfulpersonalaccesstoken", .pattern = "\\b(CFPAT-[a-zA-Z0-9_\\-]{43})\\b" }, // could be prefix with validation or just prefix + 43
     .{ .name = "couchbase", .pattern = "\\b(cb\\.[a-z0-9]+\\.cloud\\.couchbase\\.com)\\b" },
     .{ .name = "databrickstoken", .pattern = "\\b([a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.(cloud\\.databricks\\.com|gcp\\.databricks\\.com|azuredatabricks\\.net))\\b" },
-    .{ .name = "databrickstoken-1", .pattern = "\\b(dapi[0-9a-f]{32}(-\\d)?)\\b" },
+    .{ .name = "databrickstoken-1", .pattern = "\\b(dapi[0-9a-f]{32}(-\\d)?)\\b" }, // could be prefix with validation or just prefix + 32 + optional -digit
     .{ .name = "datadogapikey", .pattern = "\\b(api(?:\\.[a-z0-9-]+)?\\.(?:datadoghq|ddog-gov)\\.(com|eu))\\b" },
     .{ .name = "datadogtoken", .pattern = "\\b(api(?:\\.[a-z0-9-]+)?\\.(?:datadoghq|ddog-gov)\\.(com|eu))\\b" },
-    .{ .name = "deno", .pattern = "\\b(dd[pw]_[a-zA-Z0-9]{36})\\b" },
+    .{ .name = "deno", .pattern = "\\b(dd[pw]_[a-zA-Z0-9]{36})\\b" }, // could be multiple prefixes with validation or just prefix + 36
     .{ .name = "deputy", .pattern = "\\b([0-9a-z]{1,}\\.as\\.deputy\\.com)\\b" },
-    .{ .name = "dfuse", .pattern = "\\b(web\\_[0-9a-z]{32})\\b" },
+    .{ .name = "dfuse", .pattern = "\\b(web\\_[0-9a-z]{32})\\b" }, // could be prefix with validation or just prefix + 32
     // ... (50/198 patterns)
-    .{ .name = "digitaloceanv2", .pattern = "\\b((?:dop|doo|dor)_v1_[a-f0-9]{64})\\b" },
+    .{ .name = "digitaloceanv2", .pattern = "\\b((?:dop|doo|dor)_v1_[a-f0-9]{64})\\b" }, // could be multiple prefixes with validation or just prefix + 64
     .{ .name = "documo", .pattern = "\\b(ey[a-zA-Z0-9]{34}.ey[a-zA-Z0-9]{154}.[a-zA-Z0-9_-]{43})\\b" },
     .{ .name = "doppler-api-token", .pattern = "dp\\\\.pt\\\\.(?i)[a-z0-9]{43}" },
     .{ .name = "duffel-api-token", .pattern = "duffel_(?:test|live)_(?i)[a-z0-9_\\\\-=]{43}" },
@@ -227,12 +225,12 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "ftp", .pattern = "\\bftp://[\\S]{3,50}:([\\S]{3,50})@[-.%\\w\\/:]+\\b" },
     .{ .name = "gcpapplicationdefaultcredentials", .pattern = "\\{[^{]+client_secret[^}]+\\}" },
     .{ .name = "gemini", .pattern = "\\b((?:master-|account-)[0-9A-Za-z]{20})\\b" },
-    .{ .name = "github-pat", .pattern = "ghp_[0-9a-zA-Z]{36,}" },
-    .{ .name = "github-oauth", .pattern = "gho_[0-9a-zA-Z]{36,}" },
-    .{ .name = "github-user", .pattern = "ghu_[0-9a-zA-Z]{36,}" },
+    .{ .name = "github-pat", .pattern = "ghp_[0-9a-zA-Z]{36,}" }, // could be prefix with validation or just prefix + 36
+    .{ .name = "github-oauth", .pattern = "gho_[0-9a-zA-Z]{36,}" }, // could be prefix with validation or just prefix + 36
+    .{ .name = "github-user", .pattern = "ghu_[0-9a-zA-Z]{36,}" }, // could be prefix with validation or just prefix + 36
     .{ .name = "github-server", .pattern = "ghs_[0-9a-zA-Z]{36,}" },
-    .{ .name = "github-refresh", .pattern = "ghr_[0-9a-zA-Z]{36,}" },
-    .{ .name = "gitlab-cicd-job-token", .pattern = "glcbt-[0-9a-zA-Z]{1,5}_[0-9a-zA-Z_-]{20}" },
+    .{ .name = "github-refresh", .pattern = "ghr_[0-9a-zA-Z]{36,}" }, // could be prefix with validation or just prefix + 36
+    .{ .name = "gitlab-cicd-job-token", .pattern = "glcbt-[0-9a-zA-Z]{1,5}_[0-9a-zA-Z_-]{20}" }, // could be prefix with validation
     .{ .name = "googlegemini", .pattern = "\\b(AIzaSy[A-Za-z0-9_-]{33})" },
     .{ .name = "googleoauth2", .pattern = "\\b(ya29\\.(?i:[a-z0-9_-]{10,}))(?:[^a-z0-9_-]|\\z)" },
     .{ .name = "grafana", .pattern = "\\b(glc_eyJ[A-Za-z0-9+\\/=]{60,160})" },
@@ -350,11 +348,11 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "twilio-api-key", .pattern = "SK[0-9a-fA-F]{32}" },
     .{ .name = "twilioapikey", .pattern = "\\bSK[a-zA-Z0-9]{32}\\b" },
     .{ .name = "twilioapikey-1", .pattern = "\\b[0-9a-zA-Z]{32}\\b" },
-    .{ .name = "ubidots", .pattern = "\\b(BBFF-[0-9a-zA-Z]{30})\\b" },
+    .{ .name = "ubidots", .pattern = "\\b(BBFF-[0-9a-zA-Z]{30})\\b" }, // could be prefix with validation or just prefix + 30
     .{ .name = "uri", .pattern = "\\bhttps?:\\/\\/[\\w!#$%&()*+,\\-./;<=>?@[\\\\\\]^_{|}~]{0,50}:([\\w!#$%&()*+,\\-./:;<=>?[\\\\\\]^_{|}~]{3,50})@[a-zA-Z0-9.-]+(?:\\.[a-zA-Z]{2,})?(?::\\d{1,5})?[\\w/]+\\b" },
     .{ .name = "voiceflow", .pattern = "\\b(VF\\.(?:(?:DM|WS)\\.)?[a-fA-F0-9]{24}\\.[a-zA-Z0-9]{16})\\b" },
     .{ .name = "webexbot", .pattern = "([a-zA-Z0-9]{64}_[a-zA-Z0-9]{4}_[a-zA-Z0-9]{8}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{12})" },
-    .{ .name = "xai", .pattern = "\\b(xai-[0-9a-zA-Z_]{80})\\b" },
+    .{ .name = "xai", .pattern = "\\b(xai-[0-9a-zA-Z_]{80})\\b" }, // could be prefix with validation or just prefix + 80
     .{ .name = "zendeskapi-1", .pattern = "\\b([a-zA-Z-0-9]{3,25}\\.zendesk\\.com)\\b" },
     .{ .name = "zohocrm", .pattern = "\\b(1000\\.[a-f0-9]{32}\\.[a-f0-9]{32})\\b" },
     .{ .name = "zulipchat-1", .pattern = "(?i)\\b([a-z0-9-]+\\.zulip(?:chat)?\\.com|chat\\.zulip\\.org)\\b" },
@@ -366,9 +364,8 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
 // Pattern Counts
 // ============================================================================
 
-pub const SIMPLE_PREFIX_COUNT = SIMPLE_PREFIX_PATTERNS.len;  // 26
-pub const JWT_COUNT = JWT_PATTERNS.len;                      // 1
-pub const PREFIX_VALIDATION_COUNT = PREFIX_VALIDATION_PATTERNS.len;  // 45
-pub const REGEX_COUNT = REGEX_PATTERNS.len;                  // 198
-pub const TOTAL_PATTERNS = SIMPLE_PREFIX_COUNT + JWT_COUNT + PREFIX_VALIDATION_COUNT + REGEX_COUNT;  // 270
-
+pub const SIMPLE_PREFIX_COUNT = SIMPLE_PREFIX_PATTERNS.len; // 26
+pub const JWT_COUNT = JWT_PATTERNS.len; // 1
+pub const PREFIX_VALIDATION_COUNT = PREFIX_VALIDATION_PATTERNS.len; // 45
+pub const REGEX_COUNT = REGEX_PATTERNS.len; // 198
+pub const TOTAL_PATTERNS = SIMPLE_PREFIX_COUNT + JWT_COUNT + PREFIX_VALIDATION_COUNT + REGEX_COUNT; // 270

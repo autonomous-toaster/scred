@@ -1,0 +1,17 @@
+[package]
+name = "scred_http_detector"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+scred-pattern-detector = { path = "../scred-pattern-detector" }
+http = "1.1"
+anyhow = "1.0"
+tracing = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+urlencoding = "2.1"
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full"] }

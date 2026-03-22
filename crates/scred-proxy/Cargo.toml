@@ -8,6 +8,7 @@ description = "Reverse proxy with selective secret redaction"
 
 [dependencies]
 scred-http = { path = "../scred-http" }
+scred_http_redactor = { path = "../scred-http-redactor" }
 scred-redactor = { path = "../scred-redactor" }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -17,6 +18,9 @@ libc = "0.2"
 rustls = { workspace = true }
 tokio-rustls = { workspace = true }
 webpki-roots = "0.25"
+h2 = "0.4"
+http = "1.0"
+bytes = "1"
 
 [[bin]]
 name = "scred-proxy"

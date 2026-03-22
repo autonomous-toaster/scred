@@ -8,6 +8,8 @@ description = "Shared HTTP library for SCRED proxies"
 
 [dependencies]
 scred-redactor = { path = "../scred-redactor" }
+scred_http_detector = { path = "../scred-http-detector" }
+scred_http_redactor = { path = "../scred-http-redactor" }
 regex = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
@@ -22,6 +24,8 @@ tokio-rustls = { workspace = true }
 webpki-roots = "0.25"
 http2 = { workspace = true }
 http = "0.2"
+bytes = "1.0"
+h2 = "0.4"
 
 [lib]
 name = "scred_http"

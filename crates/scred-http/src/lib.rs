@@ -7,6 +7,10 @@
 //! - `models`: HttpRequest, HttpResponse data structures
 //! - `connect`: HTTP CONNECT tunneling for HTTPS proxies
 //!
+//! ## Content Analysis & Redaction
+//! - `scred_http_detector`: Analyze HTTP content for sensitive data
+//! - `scred_http_redactor`: Redact sensitive HTTP headers and bodies
+//!
 //! ## Proxy Utilities
 //! - `duplex`: Combined AsyncRead + AsyncWrite socket wrapper
 //! - `host_identification`: Extract hostnames from HTTP/TLS
@@ -43,5 +47,9 @@ pub mod streaming_request;
 pub mod streaming_response;
 pub mod chunked_parser;
 pub mod upstream_h2_client;
+
+// Re-export detector and redactor
+pub use scred_http_detector::{self, ContentAnalyzer};
+pub use scred_http_redactor::{self, HttpRedactor};
 
 pub const VERSION: &str = "0.1.0";

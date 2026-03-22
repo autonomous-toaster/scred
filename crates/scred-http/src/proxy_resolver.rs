@@ -33,11 +33,13 @@ impl MitmConfig {
         // Try both lowercase and uppercase variants
         let http_proxy = std::env::var("http_proxy")
             .or_else(|_| std::env::var("HTTP_PROXY"))
-            .ok();
+            .ok()
+            .filter(|s| !s.is_empty());
 
         let https_proxy = std::env::var("https_proxy")
             .or_else(|_| std::env::var("HTTPS_PROXY"))
-            .ok();
+            .ok()
+            .filter(|s| !s.is_empty());
 
         let no_proxy_str = std::env::var("no_proxy")
             .or_else(|_| std::env::var("NO_PROXY"))
@@ -112,10 +114,19 @@ impl MitmConfig {
         }
 
         // Select appropriate proxy based on protocol
-        if is_https {
+        let proxy_value = if is_https {
             self.https_proxy.clone().or_else(|| self.http_proxy.clone())
         } else {
             self.http_proxy.clone()
+        };
+        
+        // Filter out empty strings (happens when env var is set to "")
+        match proxy_value {
+            Some(val) if val.is_empty() => {
+                debug!("Proxy env var is empty string, treating as None");
+                None
+            }
+            other => other,
         }
     }
 

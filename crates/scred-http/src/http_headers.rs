@@ -63,16 +63,23 @@ impl HttpHeaders {
 pub async fn parse_http_headers<R: AsyncReadExt + Unpin>(
     reader: &mut BufReader<R>,
 ) -> Result<HttpHeaders> {
+    use tracing::debug;
+    
+    debug!("[parse_http_headers] ENTRY");
     let mut headers = Vec::new();
     let mut raw_headers = String::new();
     let mut line = String::new();
+    let mut line_count = 0;
 
     // Read headers until blank line
     loop {
         line.clear();
+        debug!("[parse_http_headers] Reading line {}...", line_count + 1);
         let n = reader.read_line(&mut line).await?;
+        debug!("[parse_http_headers] Read {} bytes", n);
 
         if n == 0 {
+            debug!("[parse_http_headers] ERROR: EOF before end of headers");
             return Err(anyhow!("EOF before end of headers"));
         }
 
@@ -80,14 +87,21 @@ pub async fn parse_http_headers<R: AsyncReadExt + Unpin>(
 
         // Check for end of headers (blank line)
         if line.trim().is_empty() {
+            debug!("[parse_http_headers] Found blank line, end of headers");
             break;
         }
 
+        line_count += 1;
+        debug!("[parse_http_headers] Line {}: '{}'", line_count, line.trim());
+
         // Parse header line (key: value)
         if let Some((key, value)) = parse_header_line(&line) {
+            debug!("[parse_http_headers] Parsed header: {}={}", key, value);
             headers.push((key, value));
         }
     }
+
+    debug!("[parse_http_headers] Total headers: {}", headers.len());
 
     // Extract special headers
     let _headers_str = headers
