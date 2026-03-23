@@ -37,13 +37,16 @@ fn parse_pattern_selectors(
     let redact_env = env::var("SCRED_REDACT_PATTERNS").ok();
 
     // CLI flags take precedence over env vars
-    // CLI defaults to ALL patterns for detection
+    // Detect ALL patterns by default (for logging visibility)
     let detect_str = detect_flag
         .or_else(|| detect_env.as_deref())
         .unwrap_or("ALL");
+    // Redact conservatively: only CRITICAL and API_KEYS by default
+    // PATTERNS tier (JWT, Bearer, BasicAuth) excluded to reduce log noise
+    // Users can explicitly enable: --redact CRITICAL,API_KEYS,PATTERNS
     let redact_str = redact_flag
         .or_else(|| redact_env.as_deref())
-        .unwrap_or("CRITICAL,API_KEYS,PATTERNS");  // Include PATTERNS tier by default
+        .unwrap_or("CRITICAL,API_KEYS");
 
     // Parse selectors - EXIT on error instead of fallback
     let detect_selector = match PatternSelector::from_str(detect_str) {
