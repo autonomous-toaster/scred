@@ -46,6 +46,8 @@ impl Default for HttpProxyConfig {
 /// * `client_write` - Write half of client connection
 /// * `first_line` - Initial HTTP request line
 /// * `redaction_engine` - Engine for redacting secrets
+/// * `detect_selector` - Optional selector for secret detection
+/// * `redact_selector` - Optional selector for secret redaction
 /// * `upstream_addr` - Upstream server address (host:port)
 /// * `upstream_host` - Optional upstream hostname (for header rewriting)
 /// * `config` - Proxy configuration (headers, options)
@@ -54,6 +56,8 @@ pub async fn handle_http_proxy(
     mut client_write: tokio::net::tcp::OwnedWriteHalf,
     first_line: &str,
     redaction_engine: Arc<RedactionEngine>,
+    detect_selector: Option<scred_redactor::PatternSelector>,
+    redact_selector: Option<scred_redactor::PatternSelector>,
     upstream_addr: &str,
     upstream_host: Option<&str>,
     config: HttpProxyConfig,
@@ -129,6 +133,10 @@ pub async fn handle_http_proxy(
     }
 
     // REDACT request
+    // Store selector for potential use in actual filtering (future: implement in redaction engine)
+    let _detect_selector_ref = detect_selector.as_ref();
+    let _redact_selector_ref = redact_selector.as_ref();
+    
     let redacted_request_result = redaction_engine.redact(&full_request);
     let redacted_request = redacted_request_result.redacted;
 
@@ -180,6 +188,9 @@ pub async fn handle_http_proxy(
     let response_str = String::from_utf8_lossy(&response_buf).to_string();
 
     // REDACT response
+    // Store selector for potential use in actual filtering (future: implement in redaction engine)
+    let _redact_selector_ref_response = redact_selector.as_ref();
+    
     let redacted_response_result = redaction_engine.redact(&response_str);
     let redacted_response = redacted_response_result.redacted.clone();
 
