@@ -5,9 +5,9 @@ use scred_http::fixed_upstream::FixedUpstream;
 use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequestConfig};
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
 use scred_http::{dns_resolver::DnsResolver, http_line_reader::read_response_line};
-use scred_http::{ConfigurableEngine, PatternSelector};
+use scred_http::{PatternSelector};
 use scred_http_redactor::H2Redactor;
-use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor};
+use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::env;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -419,30 +419,16 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
 
     let redaction_engine = Arc::new(RedactionEngine::new(redaction_config));
     
-    // Create ConfigurableEngine with selectors for proper filtering
-    // This is the key fix - selectors are now passed through
-    let _config_engine = Arc::new(ConfigurableEngine::new(
-        redaction_engine.clone(),
-        config.detect_selector.clone(),
-        config.redact_selector.clone(),
-    ));
-    
     info!("[{}] Detect selector: {}", peer_addr, config.detect_selector.description());
     info!("[{}] Redact selector: {}", peer_addr, config.redact_selector.description());
     
-    // TODO: CRITICAL FIX NEEDED
-    // The streaming functions currently expect Arc<StreamingRedactor> which doesn't support selectors.
-    // We have created the ConfigurableEngine above (_config_engine), but we're not using it yet.
-    // 
-    // To complete this fix, we need to:
-    // 1. Either modify stream_request_to_upstream/stream_response_to_client to accept a trait object
-    // 2. Or create new versions of these functions that work with ConfigurableEngine
-    // 3. Or adapt ConfigurableEngine to match the StreamingRedactor API
-    //
-    // For now, we're still using StreamingRedactor which silently ignores selectors.
-    // This is the issue we identified in P0#1.
-    
-    let redactor = Arc::new(StreamingRedactor::with_defaults(redaction_engine.clone()));
+    // Phase 4: Create StreamingRedactor with selector support
+    // The selector is now passed through to filter patterns during streaming redaction
+    let redactor = Arc::new(StreamingRedactor::with_selector(
+        redaction_engine.clone(),
+        StreamingConfig::default(),
+        config.redact_selector.clone(),
+    ));
 
     let upstream_addr = config.upstream.authority();
     let rewritten_request_line = config.upstream.rewrite_request_line(&first_line)?;

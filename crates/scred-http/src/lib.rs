@@ -55,7 +55,8 @@ pub mod env_detection;
 // Re-export detector and redactor
 pub use scred_http_detector::{self, ContentAnalyzer};
 pub use scred_http_redactor::{self, HttpRedactor};
-pub use pattern_selector::{PatternSelector, PatternTier};
+// Re-export pattern selector from scred_redactor (single source of truth)
+pub use scred_redactor::pattern_selector::{PatternSelector, PatternTier};
 pub use pattern_metadata::get_pattern_tier;
 pub use configurable_engine::{ConfigurableEngine, FilteredRedactionResult};
 
