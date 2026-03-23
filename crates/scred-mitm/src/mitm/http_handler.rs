@@ -15,6 +15,7 @@ pub async fn handle_http_proxy(
     first_line: &str,
     redaction_engine: Arc<RedactionEngine>,
     upstream_resolver: Arc<scred_http::proxy_resolver::MitmConfig>,
+    redact_selector: Option<scred_http::PatternSelector>,
 ) -> Result<()> {
     debug!("MITM HTTP proxy request: {}", first_line);
 
@@ -41,6 +42,7 @@ pub async fn handle_http_proxy(
         redaction_engine,
         &upstream_addr,
         Some(&host),
+        redact_selector,
         proxy_config,
     ).await
 }

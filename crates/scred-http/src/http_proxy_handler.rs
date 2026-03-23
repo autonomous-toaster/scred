@@ -48,6 +48,7 @@ impl Default for HttpProxyConfig {
 /// * `redaction_engine` - Engine for redacting secrets (applies all patterns)
 /// * `upstream_addr` - Upstream server address (host:port)
 /// * `upstream_host` - Optional upstream hostname (for header rewriting)
+/// * `redact_selector` - Optional selector to filter which patterns are redacted
 /// * `config` - Proxy configuration (headers, options)
 pub async fn handle_http_proxy(
     mut client_read: tokio::net::tcp::OwnedReadHalf,
@@ -56,6 +57,7 @@ pub async fn handle_http_proxy(
     redaction_engine: Arc<RedactionEngine>,
     upstream_addr: &str,
     upstream_host: Option<&str>,
+    redact_selector: Option<crate::PatternSelector>,
     config: HttpProxyConfig,
 ) -> Result<()> {
     debug!("HTTP proxy request: {}", first_line);
@@ -128,14 +130,36 @@ pub async fn handle_http_proxy(
         full_request.push_str(&String::from_utf8_lossy(&body));
     }
 
-    // REDACT request using StreamingRedactor (standardized approach)
-    // StreamingRedactor handles all patterns consistently
-    let streaming_config = StreamingConfig::default();
-    let streaming_redactor = StreamingRedactor::new(
-        redaction_engine.clone(),
-        streaming_config,
-    );
-    let (redacted_request, redaction_stats) = streaming_redactor.redact_buffer(full_request.as_bytes());
+    // REDACT request using ConfigurableEngine if selector provided, otherwise StreamingRedactor
+    let (redacted_request, redaction_stats_patterns) = if let Some(ref selector) = redact_selector {
+        // Use ConfigurableEngine with selector for filtered redaction
+        let config_engine = crate::ConfigurableEngine::new(
+            redaction_engine.clone(),
+            crate::PatternSelector::All,  // Detect all patterns for statistics
+            selector.clone(),              // But only redact selected patterns
+        );
+        let result = config_engine.redact_only(&full_request);
+        let all_result = redaction_engine.redact(&full_request);
+        (result, all_result.warnings.len() as u64)
+    } else {
+        // No selector: use StreamingRedactor to redact all patterns
+        let streaming_config = StreamingConfig::default();
+        let streaming_redactor = StreamingRedactor::new(
+            redaction_engine.clone(),
+            streaming_config,
+        );
+        let (redacted, stats) = streaming_redactor.redact_buffer(full_request.as_bytes());
+        (redacted, stats.patterns_found)
+    };
+    
+    let redaction_stats = scred_redactor::streaming::StreamingStats {
+        bytes_read: full_request.len() as u64,
+        bytes_written: redacted_request.len() as u64,
+        chunks_processed: 1,
+        patterns_found: redaction_stats_patterns,
+        errors: 0,
+    };
+
     
     if redaction_stats.patterns_found > 0 {
         warn!(
@@ -184,8 +208,36 @@ pub async fn handle_http_proxy(
 
     let response_str = String::from_utf8_lossy(&response_buf).to_string();
 
-    // REDACT response using StreamingRedactor (standardized approach)
-    let (redacted_response, redaction_stats_response) = streaming_redactor.redact_buffer(response_str.as_bytes());
+    // REDACT response using ConfigurableEngine if selector provided, otherwise StreamingRedactor
+    let (redacted_response, redaction_stats_response_patterns) = if let Some(ref selector) = redact_selector {
+        // Use ConfigurableEngine with selector for filtered redaction
+        let config_engine = crate::ConfigurableEngine::new(
+            redaction_engine.clone(),
+            crate::PatternSelector::All,  // Detect all patterns for statistics
+            selector.clone(),              // But only redact selected patterns
+        );
+        let result = config_engine.redact_only(&response_str);
+        let all_result = redaction_engine.redact(&response_str);
+        (result, all_result.warnings.len() as u64)
+    } else {
+        // No selector: use StreamingRedactor to redact all patterns
+        let streaming_config = StreamingConfig::default();
+        let streaming_redactor = StreamingRedactor::new(
+            redaction_engine.clone(),
+            streaming_config,
+        );
+        let (redacted, stats) = streaming_redactor.redact_buffer(response_str.as_bytes());
+        (redacted, stats.patterns_found)
+    };
+    
+    let redaction_stats_response = scred_redactor::streaming::StreamingStats {
+        bytes_read: response_str.len() as u64,
+        bytes_written: redacted_response.len() as u64,
+        chunks_processed: 1,
+        patterns_found: redaction_stats_response_patterns,
+        errors: 0,
+    };
+
 
     if redaction_stats_response.patterns_found > 0 {
         warn!(
