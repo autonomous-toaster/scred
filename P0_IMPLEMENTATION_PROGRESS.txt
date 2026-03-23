@@ -1,0 +1,128 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      P0 IMPLEMENTATION PROGRESS                           ║
+║                   Time Invested: ~1 hour 15 minutes                        ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+COMPLETED ✅
+═════════════════════════════════════════════════════════════════════════════
+
+P0#2: Invalid Selector Silent Fallback - DONE
+─────────────────────────────────────────────
+✅ Fixed from_env() to exit on invalid selectors  
+✅ Matches from_config_file() error handling
+✅ Consistency across config loading sources
+Commit: b3b51e9
+
+P0#3: Environment Variable Precedence - DONE  
+────────────────────────────────────────────
+✅ Implemented from_defaults() method
+✅ Implemented merge_from() method
+✅ Updated main() for proper precedence (Defaults → File → ENV → CLI)
+✅ Added comprehensive logging
+Commit: 2598ce9
+
+═════════════════════════════════════════════════════════════════════════════
+
+IN PROGRESS ⏳
+═════════════════════════════════════════════════════════════════════════════
+
+P0#1: Pattern Selectors Not Used - PARTIAL
+───────────────────────────────────────────
+✅ ConfigurableEngine created in handle_connection
+✅ Selectors logged with description
+⏳ Streaming functions still don't use selectors (architecture issue)
+
+**Blocker**: Stream functions expect Arc<StreamingRedactor> by type.
+Can't substitute ConfigurableEngine without refactoring.
+
+**Options**:
+A) Create inline selector-aware redaction logic (fastest)
+B) Create proxy-specific streaming functions (cleaner)  
+C) Refactor stream functions to use trait objects (risky)
+
+**Recommendation**: Option A - inline implementation in handle_connection
+
+═════════════════════════════════════════════════════════════════════════════
+
+NOT STARTED ◻️
+═════════════════════════════════════════════════════════════════════════════
+
+P0#4: Detect Mode Logging - 1 hour
+────────────────────────────────────
+Depends on P0#1 resolution
+Uses ConfigurableEngine.detect_only() for logging
+
+P0#5: MITM Selector Usage - 1-2 hours
+──────────────────────────────────────
+Review scred-mitm/src/mitm/proxy.rs
+Determine if same bug exists
+Apply same fixes if needed
+
+═════════════════════════════════════════════════════════════════════════════
+
+SUMMARY
+═════════════════════════════════════════════════════════════════════════════
+
+COMPLETED (2/5):
+  ✅ P0#2 - Error handling (0.5h)
+  ✅ P0#3 - Precedence (1h)
+
+TOTAL PROGRESS: 40% (2 complete, 1 partial, 2 pending)
+
+ESTIMATED REMAINING:
+  - P0#1: 2-3h (architectural decision needed)
+  - P0#4: 1h (after P0#1)
+  - P0#5: 1-2h (review + fixes)
+  
+Total remaining: 4-6 hours
+
+═════════════════════════════════════════════════════════════════════════════
+
+CRITICAL PATH FORWARD
+═════════════════════════════════════════════════════════════════════════════
+
+1. ⚡ QUICK WIN: Fix P0#1 with inline implementation
+   - Create non-streaming versions of request/response redaction
+   - Use ConfigurableEngine directly
+   - Estimated: 2-3 hours
+
+2. Then P0#4 (detect mode) - 1 hour
+   - Reuses P0#1 infrastructure
+   - Add logging for detected patterns
+
+3. Then P0#5 (MITM) - 1-2 hours
+   - Review proxy.rs
+   - Apply fixes if same bug
+
+═════════════════════════════════════════════════════════════════════════════
+
+TEST SUITE STATUS
+═════════════════════════════════════════════════════════════════════════════
+
+✅ Created: crates/scred-proxy/tests/selector_enforcement_tests.rs (300+ lines)
+✅ All test skeletons in place with #[ignore] markers
+⏳ Test implementations ready to run as fixes are completed
+
+Run: cargo test --test selector_enforcement_tests --no-fail-fast
+
+═════════════════════════════════════════════════════════════════════════════
+
+NEXT ACTIONS
+═════════════════════════════════════════════════════════════════════════════
+
+Option A: Continue with P0#1 (2-3 hours)
+  → Implement inline selector-aware redaction
+  → Create wrapper functions
+  → Test selector filtering
+
+Option B: Review P0#5 first (1-2 hours)
+  → Check MITM proxy.rs
+  → Understand if same bug exists
+  → Prioritize fixes accordingly
+
+Recommendation: Continue with P0#1
+  - Most critical fix
+  - Will be clearer to implement after current momentum
+  - Unblocks P0#4
+  
+═════════════════════════════════════════════════════════════════════════════
