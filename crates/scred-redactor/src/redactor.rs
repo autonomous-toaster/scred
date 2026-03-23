@@ -24,6 +24,9 @@ impl Default for RedactionConfig {
 pub struct RedactionEngine {
     config: RedactionConfig,
     pub compiled_patterns: Vec<(String, regex::Regex)>,
+    /// Optional selector for filtering which patterns to apply
+    /// If None, all patterns are applied (backward compatible)
+    selector: Option<crate::pattern_selector::PatternSelector>,
 }
 
 impl RedactionEngine {
@@ -31,7 +34,36 @@ impl RedactionEngine {
         Self {
             config,
             compiled_patterns: Vec::new(),
+            selector: None,
         }
+    }
+
+    /// Create a new RedactionEngine with selector support
+    /// 
+    /// # Example
+    /// ```ignore
+    /// let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+    /// let engine = RedactionEngine::with_selector(config, selector);
+    /// ```
+    pub fn with_selector(
+        config: RedactionConfig,
+        selector: crate::pattern_selector::PatternSelector,
+    ) -> Self {
+        Self {
+            config,
+            compiled_patterns: Vec::new(),
+            selector: Some(selector),
+        }
+    }
+
+    /// Check if this engine has a selector configured
+    pub fn has_selector(&self) -> bool {
+        self.selector.is_some()
+    }
+
+    /// Get reference to the selector if configured
+    pub fn get_selector(&self) -> Option<&crate::pattern_selector::PatternSelector> {
+        self.selector.as_ref()
     }
 
     pub fn redact(&self, text: &str) -> RedactionResult {

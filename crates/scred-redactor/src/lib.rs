@@ -11,6 +11,7 @@ pub mod analyzer;
 pub mod detector;
 pub mod redactor;
 pub mod streaming;
+pub mod pattern_selector;
 
 // ============================================================================
 // PUBLIC API - PRIMARY EXPORTS
@@ -28,6 +29,9 @@ pub use redactor::{
     RedactionEngine, RedactionConfig, RedactionResult, RedactionWarning,
     redact_text,
 };
+
+// Pattern selector for filtering patterns
+pub use pattern_selector::{PatternSelector, PatternTier};
 
 // Pattern info function (used by CLI and other tools)
 pub fn get_all_patterns() -> Vec<scred_pattern_detector::PatternInfo> {
