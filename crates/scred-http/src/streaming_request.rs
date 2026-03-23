@@ -18,6 +18,9 @@ pub struct StreamingRequestConfig {
     pub debug: bool,
     /// Maximum headers size (default: 64KB)
     pub max_headers_size: usize,
+    /// Pattern selector for filtering which patterns to redact
+    /// If None, all patterns are redacted (backward compatible)
+    pub redact_selector: Option<crate::PatternSelector>,
 }
 
 impl Default for StreamingRequestConfig {
@@ -25,9 +28,34 @@ impl Default for StreamingRequestConfig {
         Self {
             debug: false,
             max_headers_size: 64 * 1024,
+            redact_selector: None,
         }
     }
 }
+
+/// Helper: Apply selector filtering to redacted text
+/// If selector is None, returns redacted text as-is (backward compatible)
+/// If selector is Some, uses ConfigurableEngine to filter which patterns stay redacted
+fn apply_selector_filtering(
+    text: &str,
+    redacted: &str,
+    selector: Option<&crate::PatternSelector>,
+    engine: &Arc<scred_redactor::RedactionEngine>,
+) -> String {
+    if let Some(sel) = selector {
+        // Use ConfigurableEngine to apply selective redaction
+        let config_engine = crate::ConfigurableEngine::new(
+            engine.clone(),
+            crate::PatternSelector::All,  // Detect all for filtering
+            sel.clone(),                   // But only redact selected
+        );
+        config_engine.redact_only(text)
+    } else {
+        // No selector: return fully redacted as-is
+        redacted.to_string()
+    }
+}
+
 
 /// Handle HTTP request with streaming
 ///
@@ -81,9 +109,15 @@ where
     // Actually, headers might contain Authorization, so we should redact them too
     info!("[stream_request_to_upstream] STEP 3: Redacting and writing headers to upstream...");
     let redacted_headers = redactor.redact_buffer(headers.raw_headers.as_bytes()).0;
+    let filtered_headers = apply_selector_filtering(
+        &headers.raw_headers,
+        &redacted_headers,
+        config.redact_selector.as_ref(),
+        redactor.engine(),
+    );
     // NOTE: raw_headers already includes the final \r\n blank line, don't add another!
-    let headers_len = redacted_headers.len();
-    upstream_writer.write_all(redacted_headers.as_bytes()).await?;
+    let headers_len = filtered_headers.len();
+    upstream_writer.write_all(filtered_headers.as_bytes()).await?;
     info!("[stream_request_to_upstream] STEP 3 DONE: Headers sent ({} bytes)", headers_len);
 
     // 4. Stream body through redactor
@@ -98,6 +132,7 @@ where
             &mut upstream_writer,
             content_length,
             redactor,
+            &config,
         )
         .await?;
         info!("[stream_request_to_upstream] STEP 4a DONE: Body streamed (bytes_read={}, bytes_written={})", stats.bytes_read, stats.bytes_written);
@@ -137,6 +172,7 @@ async fn stream_request_body_content_length<R, W>(
     upstream_writer: &mut W,
     content_length: usize,
     redactor: Arc<StreamingRedactor>,
+    config: &StreamingRequestConfig,
 ) -> Result<StreamingStats>
 where
     R: AsyncReadExt + Unpin,
@@ -158,11 +194,25 @@ where
         let is_eof = remaining == chunk_size;
         let (output, bytes_written, patterns) = redactor.process_chunk(&chunk, &mut lookahead, is_eof);
 
+        // Apply selector filtering to redacted output
+        // For streaming chunks, we can't compare with original, so we filter the entire output
+        let filtered_output = if let Some(sel) = &config.redact_selector {
+            // Re-redact with selector to get filtered result
+            let config_engine = crate::ConfigurableEngine::new(
+                redactor.engine().clone(),
+                crate::PatternSelector::All,
+                sel.clone(),
+            );
+            config_engine.redact_only(&String::from_utf8_lossy(&chunk))
+        } else {
+            output.clone()
+        };
+
         // Write redacted chunk
-        upstream_writer.write_all(output.as_bytes()).await?;
+        upstream_writer.write_all(filtered_output.as_bytes()).await?;
 
         stats.bytes_read += chunk.len() as u64;
-        stats.bytes_written += bytes_written;
+        stats.bytes_written += filtered_output.len() as u64;
         stats.patterns_found += patterns;
         remaining -= chunk_size;
     }

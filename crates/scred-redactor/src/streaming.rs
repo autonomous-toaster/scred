@@ -75,6 +75,11 @@ impl StreamingRedactor {
         self.selector.as_ref()
     }
 
+    /// Get reference to the underlying redaction engine
+    pub fn engine(&self) -> &Arc<RedactionEngine> {
+        &self.engine
+    }
+
     pub fn with_defaults(engine: Arc<RedactionEngine>) -> Self {
         Self::new(engine, StreamingConfig::default())
     }

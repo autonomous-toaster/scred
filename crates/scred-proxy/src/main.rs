@@ -455,7 +455,11 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
             &mut upstream,
             &rewritten_request_line,
             redactor.clone(),
-            StreamingRequestConfig::default(),
+            StreamingRequestConfig {
+                debug: false,
+                max_headers_size: 64 * 1024,
+                redact_selector: Some(config.redact_selector.clone()),
+            },
         )
         .await?;
 
@@ -470,7 +474,11 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
             &mut client_write,
             &response_line,
             redactor,
-            StreamingResponseConfig::default(),
+            StreamingResponseConfig {
+                debug: false,
+                add_scred_header: true,
+                redact_selector: Some(config.redact_selector.clone()),
+            },
             Some(&config.upstream.host),
             Some(&proxy_host),
             Some("http"),  // Clients connect to proxy via HTTP
@@ -484,7 +492,11 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
             &mut upstream,
             &rewritten_request_line,
             redactor.clone(),
-            StreamingRequestConfig::default(),
+            StreamingRequestConfig {
+                debug: false,
+                max_headers_size: 64 * 1024,
+                redact_selector: Some(config.redact_selector.clone()),
+            },
         )
         .await?;
 
@@ -499,7 +511,11 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
             &mut client_write,
             &response_line,
             redactor,
-            StreamingResponseConfig::default(),
+            StreamingResponseConfig {
+                debug: false,
+                add_scred_header: true,
+                redact_selector: Some(config.redact_selector.clone()),
+            },
             Some(&config.upstream.host),
             Some(&proxy_host),
             Some("http"),  // Clients connect to proxy via HTTP
