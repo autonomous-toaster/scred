@@ -32,11 +32,47 @@ impl Default for StreamingConfig {
 pub struct StreamingRedactor {
     engine: Arc<RedactionEngine>,
     config: StreamingConfig,
+    /// Optional selector for filtering which patterns to apply
+    /// If None, all patterns are applied (backward compatible)
+    selector: Option<crate::pattern_selector::PatternSelector>,
 }
 
 impl StreamingRedactor {
     pub fn new(engine: Arc<RedactionEngine>, config: StreamingConfig) -> Self {
-        Self { engine, config }
+        Self { 
+            engine, 
+            config,
+            selector: None,
+        }
+    }
+
+    /// Create a new StreamingRedactor with selector support
+    /// 
+    /// # Example
+    /// ```ignore
+    /// let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+    /// let redactor = StreamingRedactor::with_selector(engine, config, selector);
+    /// ```
+    pub fn with_selector(
+        engine: Arc<RedactionEngine>,
+        config: StreamingConfig,
+        selector: crate::pattern_selector::PatternSelector,
+    ) -> Self {
+        Self {
+            engine,
+            config,
+            selector: Some(selector),
+        }
+    }
+
+    /// Check if this redactor has a selector configured
+    pub fn has_selector(&self) -> bool {
+        self.selector.is_some()
+    }
+
+    /// Get reference to the selector if configured
+    pub fn get_selector(&self) -> Option<&crate::pattern_selector::PatternSelector> {
+        self.selector.as_ref()
     }
 
     pub fn with_defaults(engine: Arc<RedactionEngine>) -> Self {

@@ -1,0 +1,223 @@
+//! TDD Tests for Phase 2: StreamingRedactor Selector Support
+//!
+//! Tests for adding selector-aware streaming redaction.
+//! Written BEFORE implementation (TDD approach).
+
+#[cfg(test)]
+mod phase2_streaming_redactor_selector_tests {
+    use scred_redactor::{StreamingRedactor, StreamingConfig, RedactionConfig};
+    use scred_redactor::pattern_selector::{PatternSelector, PatternTier};
+    use std::sync::Arc;
+
+    // =========================================================================
+    // STREAMING REDACTOR WITH SELECTOR SUPPORT
+    // =========================================================================
+
+    #[test]
+    fn test_streaming_redactor_created_without_selector() {
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        let redactor = StreamingRedactor::new(engine, config);
+        
+        // Default streaming redactor should not have selector
+        assert!(!redactor.has_selector());
+    }
+
+    #[test]
+    fn test_streaming_redactor_created_with_selector() {
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+        
+        // Phase 2 adds with_selector() constructor
+        let redactor = StreamingRedactor::with_selector(engine, config, selector.clone());
+        
+        assert!(redactor.has_selector());
+    }
+
+    #[test]
+    fn test_streaming_selector_tier_critical() {
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+        
+        let redactor = StreamingRedactor::with_selector(engine, config, selector);
+        
+        match redactor.get_selector() {
+            Some(PatternSelector::Tier(tiers)) => {
+                assert_eq!(tiers.len(), 1);
+                assert!(tiers.contains(&PatternTier::Critical));
+            }
+            _ => panic!("Expected Critical tier selector"),
+        }
+    }
+
+    #[test]
+    fn test_streaming_selector_tier_multiple() {
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        let selector = PatternSelector::Tier(vec![
+            PatternTier::Critical,
+            PatternTier::ApiKeys,
+        ]);
+        
+        let redactor = StreamingRedactor::with_selector(engine, config, selector);
+        
+        match redactor.get_selector() {
+            Some(PatternSelector::Tier(tiers)) => {
+                assert_eq!(tiers.len(), 2);
+                assert!(tiers.contains(&PatternTier::Critical));
+                assert!(tiers.contains(&PatternTier::ApiKeys));
+            }
+            _ => panic!("Expected multiple tier selector"),
+        }
+    }
+
+    #[test]
+    fn test_streaming_selector_all() {
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        let selector = PatternSelector::All;
+        
+        let redactor = StreamingRedactor::with_selector(engine, config, selector);
+        
+        match redactor.get_selector() {
+            Some(PatternSelector::All) => {}, // Success
+            _ => panic!("Expected All selector"),
+        }
+    }
+
+    #[test]
+    fn test_streaming_selector_none() {
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        let selector = PatternSelector::None;
+        
+        let redactor = StreamingRedactor::with_selector(engine, config, selector);
+        
+        match redactor.get_selector() {
+            Some(PatternSelector::None) => {}, // Success
+            _ => panic!("Expected None selector"),
+        }
+    }
+
+    // =========================================================================
+    // SELECTOR STORAGE & RETRIEVAL
+    // =========================================================================
+
+    #[test]
+    fn test_streaming_selector_is_stored_and_retrieved() {
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        let selector = PatternSelector::Tier(vec![PatternTier::ApiKeys]);
+        
+        let redactor = StreamingRedactor::with_selector(engine, config, selector.clone());
+        
+        // Verify selector is stored
+        let stored = redactor.get_selector().expect("Selector should be present");
+        match stored {
+            PatternSelector::Tier(tiers) => {
+                assert_eq!(tiers.len(), 1);
+                assert_eq!(tiers[0], PatternTier::ApiKeys);
+            }
+            _ => panic!("Expected Tier selector"),
+        }
+    }
+
+    #[test]
+    fn test_multiple_streaming_redactors_independent_selectors() {
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        
+        let sel1 = PatternSelector::Tier(vec![PatternTier::Critical]);
+        let sel2 = PatternSelector::Tier(vec![PatternTier::Services]);
+        
+        let redactor1 = StreamingRedactor::with_selector(engine.clone(), config.clone(), sel1);
+        let redactor2 = StreamingRedactor::with_selector(engine.clone(), config, sel2);
+        
+        // Verify independent selectors
+        match redactor1.get_selector() {
+            Some(PatternSelector::Tier(tiers)) => {
+                assert!(tiers.contains(&PatternTier::Critical));
+            }
+            _ => panic!("Redactor1 failed"),
+        }
+        
+        match redactor2.get_selector() {
+            Some(PatternSelector::Tier(tiers)) => {
+                assert!(tiers.contains(&PatternTier::Services));
+            }
+            _ => panic!("Redactor2 failed"),
+        }
+    }
+
+    // =========================================================================
+    // BACKWARD COMPATIBILITY
+    // =========================================================================
+
+    #[test]
+    fn test_streaming_redactor_new_unchanged() {
+        // Existing StreamingRedactor::new() should still work
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        
+        let _redactor = StreamingRedactor::new(engine, config);
+        // Should compile and work as before
+    }
+
+    #[test]
+    fn test_streaming_redactor_default_redact_buffer_works() {
+        // Existing redact_buffer() should still work
+        let config = StreamingConfig::default();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(Default::default()));
+        let redactor = StreamingRedactor::new(engine, config);
+        
+        let data = b"test secret AKIAIOSFODNN7EXAMPLE";
+        let (_redacted, _stats) = redactor.redact_buffer(data);
+        // Should complete without error
+    }
+
+    // =========================================================================
+    // METHOD SIGNATURES (documented for Phase 2)
+    // =========================================================================
+
+    #[test]
+    #[ignore = "Implementation note: Phase 2 adds these methods"]
+    fn phase2_todo_method_with_selector() {
+        // After Phase 2, StreamingRedactor will have:
+        // pub fn with_selector(
+        //     engine: Arc<RedactionEngine>,
+        //     config: StreamingConfig,
+        //     selector: PatternSelector,
+        // ) -> Self { ... }
+    }
+
+    #[test]
+    #[ignore = "Implementation note: Phase 2 adds these methods"]
+    fn phase2_todo_method_has_selector() {
+        // After Phase 2, StreamingRedactor will have:
+        // pub fn has_selector(&self) -> bool { ... }
+    }
+
+    #[test]
+    #[ignore = "Implementation note: Phase 2 adds these methods"]
+    fn phase2_todo_method_get_selector() {
+        // After Phase 2, StreamingRedactor will have:
+        // pub fn get_selector(&self) -> Option<&PatternSelector> { ... }
+    }
+
+    #[test]
+    #[ignore = "Implementation note: Phase 2 adds these methods"]
+    fn phase2_todo_method_redact_buffer_with_selector() {
+        // After Phase 2, StreamingRedactor will have:
+        // pub fn redact_buffer_with_selector(&self, data: &[u8]) -> (String, StreamingStats) { ... }
+        // This method respects the selector when filtering patterns
+    }
+
+    #[test]
+    #[ignore = "Implementation note: Phase 2 adds these methods"]
+    fn phase2_todo_process_chunk_respects_selector() {
+        // After Phase 2, process_chunk() should internally use selector filtering
+        // to apply only selected patterns during chunked processing
+    }
+}
