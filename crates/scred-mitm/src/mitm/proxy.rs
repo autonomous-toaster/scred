@@ -172,7 +172,7 @@ async fn handle_client(
                 &upstream_addr,
                 cert_generator.clone(),
                 redaction_engine.clone(),
-                config.proxy.redact_responses,
+                config.proxy.redaction_mode,
                 config.proxy.h2_redact_headers,
             ).await {
                 warn!("TLS MITM error: {}", e);

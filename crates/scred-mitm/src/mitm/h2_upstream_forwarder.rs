@@ -12,38 +12,7 @@ use scred_redactor::{RedactionEngine, StreamingRedactor, StreamingConfig};
 use bytes::Bytes;
 use http::Request;
 use tokio::io::AsyncReadExt;
-
-/// Redaction operating modes
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RedactionMode {
-    /// PASSTHROUGH: No detection, no redaction - just forward
-    Passthrough,
-    /// DETECT: Detect and log secrets, but don't redact (pass-through mode with logging)
-    DetectOnly,
-    /// REDACT: Detect, log, and redact secrets
-    Redact,
-}
-
-impl RedactionMode {
-    /// Create mode from CLI flags
-    pub fn from_flags(detect_only: bool, redact: bool) -> Self {
-        match (detect_only, redact) {
-            (true, _) => RedactionMode::DetectOnly,
-            (false, true) => RedactionMode::Redact,
-            (false, false) => RedactionMode::Passthrough,
-        }
-    }
-
-    /// Should we use streaming redaction pipeline?
-    pub fn should_redact(self) -> bool {
-        self == RedactionMode::Redact
-    }
-
-    /// Should we detect and log secrets?
-    pub fn should_detect(self) -> bool {
-        matches!(self, RedactionMode::DetectOnly | RedactionMode::Redact)
-    }
-}
+use crate::mitm::config::RedactionMode;
 
 use tokio::net::TcpStream;
 use h2::client;

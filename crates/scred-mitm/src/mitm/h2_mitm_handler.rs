@@ -7,7 +7,8 @@ use tokio::net::TcpStream;
 use h2::server;
 use http::Response;
 use bytes::Bytes;
-use crate::mitm::h2_upstream_forwarder::{self, RedactionMode};
+use crate::mitm::h2_upstream_forwarder;
+use crate::mitm::config::RedactionMode;
 
 /// Configuration for H2 MITM handler
 #[derive(Clone, Debug)]
@@ -15,6 +16,7 @@ pub struct H2MitmConfig {
     pub max_concurrent_streams: u32,
     pub initial_connection_window_size: u32,
     pub initial_stream_window_size: u32,
+    pub redaction_mode: RedactionMode,
 }
 
 impl Default for H2MitmConfig {
@@ -23,6 +25,7 @@ impl Default for H2MitmConfig {
             max_concurrent_streams: 100,
             initial_connection_window_size: 65535,
             initial_stream_window_size: 65535,
+            redaction_mode: RedactionMode::DetectOnly,
         }
     }
 }
@@ -74,10 +77,11 @@ impl H2MitmHandler {
             let engine = self.engine.clone();
             let upstream_addr = self.upstream_addr.clone();
             let host = host.to_string();
+            let redaction_mode = self.config.redaction_mode;
 
             // Handle each stream in background
             tokio::spawn(async move {
-                if let Err(e) = Self::handle_stream(request, respond, engine, upstream_addr, &host).await {
+                if let Err(e) = Self::handle_stream(request, respond, engine, upstream_addr, &host, redaction_mode).await {
                     tracing::warn!("[H2] Stream error: {}", e);
                 }
             });
@@ -94,6 +98,7 @@ impl H2MitmHandler {
         engine: Arc<RedactionEngine>,
         upstream_addr: String,
         host: &str,
+        redaction_mode: RedactionMode,
     ) -> Result<()> {
         let method = request.method().clone();
         let uri = request.uri().clone();
@@ -159,13 +164,12 @@ impl H2MitmHandler {
             .map_err(|e| anyhow::anyhow!("Failed to build upstream request: {}", e))?;
 
         // Forward to upstream
-        // TODO: Get actual mode from config (for now use Passthrough as default)
         match h2_upstream_forwarder::handle_upstream_h2_connection(
             upstream_request,
             engine,
             upstream_addr,
             host,
-            RedactionMode::DetectOnly,  // TODO: Get from config (default: detect secrets, don't redact)
+            redaction_mode,
         )
         .await
         {

@@ -29,11 +29,13 @@ async fn main() -> anyhow::Result<()> {
     let mut config = Config::load()?;
     info!("Loaded config: {:?}", config);
     
-    // Override redaction based on CLI flags
+    // Override redaction mode based on CLI flags
     if detect_mode {
-        config.proxy.redact_responses = false;  // Log but don't redact
+        config.proxy.redaction_mode = scred_mitm::mitm::config::RedactionMode::DetectOnly;
+        info!("✅ CLI override: DetectOnly mode");
     } else if redact_mode {
-        config.proxy.redact_responses = true;   // Actively redact
+        config.proxy.redaction_mode = scred_mitm::mitm::config::RedactionMode::Redact;
+        info!("✅ CLI override: Redact mode");
     }
     
     // Debug: Show active SCRED_ environment variables
@@ -67,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
     // Start listening
     info!("Starting MITM proxy...");
     info!("  Listen: {}", config.proxy.listen);
-    info!("  Redact responses: {}", config.proxy.redact_responses);
+    info!("  Redaction mode: {:?}", config.proxy.redaction_mode);
     info!("  H2 redact headers: {}", config.proxy.h2_redact_headers);
     proxy.run().await?;
     

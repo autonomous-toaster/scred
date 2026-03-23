@@ -3,6 +3,27 @@ use std::fs;
 use std::path::PathBuf;
 use scred_http::secrets::SecretsConfig;
 
+/// Redaction mode for handling detected secrets
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RedactionMode {
+    /// PASSTHROUGH: No detection, no redaction - just forward
+    Passthrough,
+    /// DETECT: Detect and log secrets, but don't redact (pass-through mode with logging)
+    DetectOnly,
+    /// REDACT: Detect, log, and redact secrets
+    Redact,
+}
+
+impl RedactionMode {
+    pub fn should_detect(&self) -> bool {
+        matches!(self, RedactionMode::DetectOnly | RedactionMode::Redact)
+    }
+
+    pub fn should_redact(&self) -> bool {
+        matches!(self, RedactionMode::Redact)
+    }
+}
+
 /// MITM-specific configuration (TLS + upstream proxy)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -18,8 +39,8 @@ pub struct UpstreamConfig {
     pub listen: String,
     pub upstream_timeout: String,
     pub max_connections: usize,
-    #[serde(default = "default_redact_responses")]
-    pub redact_responses: bool,
+    #[serde(default = "default_redaction_mode")]
+    pub redaction_mode: RedactionMode,
     #[serde(default = "default_h2_redact_headers")]
     pub h2_redact_headers: bool,
 }
@@ -40,8 +61,8 @@ pub struct LoggingConfig {
     pub output: String,
 }
 
-fn default_redact_responses() -> bool {
-    true
+fn default_redaction_mode() -> RedactionMode {
+    RedactionMode::DetectOnly  // Default: detect secrets, don't redact
 }
 
 fn default_h2_redact_headers() -> bool {
@@ -59,7 +80,7 @@ impl Default for Config {
                 listen: "127.0.0.1:8080".to_string(),
                 upstream_timeout: "30s".to_string(),
                 max_connections: 1000,
-                redact_responses: true,
+                redaction_mode: RedactionMode::DetectOnly,
                 h2_redact_headers: true,
             },
             tls: TlsConfig {
@@ -120,9 +141,13 @@ impl Config {
                 self.proxy.max_connections = num;
             }
         }
-        if let Ok(redact_resp) = std::env::var("SCRED_REDACT_RESPONSES") {
-            self.proxy.redact_responses =
-                redact_resp.to_lowercase() != "false" && redact_resp != "0";
+        if let Ok(mode_str) = std::env::var("SCRED_REDACTION_MODE") {
+            self.proxy.redaction_mode = match mode_str.to_lowercase().as_str() {
+                "passthrough" => RedactionMode::Passthrough,
+                "detect" | "detect-only" => RedactionMode::DetectOnly,
+                "redact" => RedactionMode::Redact,
+                _ => RedactionMode::DetectOnly, // Default
+            };
         }
         if let Ok(h2_redact) = std::env::var("SCRED_H2_REDACT_HEADERS") {
             self.proxy.h2_redact_headers =

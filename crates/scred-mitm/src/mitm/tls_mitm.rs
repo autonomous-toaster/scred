@@ -18,6 +18,7 @@ use rustls::{ServerConfig, Certificate, PrivateKey};
 use std::io::Cursor;
 
 use super::tls::CertificateGenerator;
+use super::config::RedactionMode;
 use scred_http::dns_resolver::DnsResolver;
 use scred_http::duplex::DuplexSocket;
 use scred_http::http_line_reader::{read_request_line, read_response_line};
@@ -45,7 +46,7 @@ pub async fn handle_tls_mitm(
     upstream_addr: &str,
     cert_generator: Arc<CertificateGenerator>,
     redaction_engine: Arc<scred_redactor::RedactionEngine>,
-    redact_responses: bool,
+    redaction_mode: RedactionMode,
     h2_redact_headers: bool,
 ) -> Result<()> {
     
@@ -133,10 +134,13 @@ pub async fn handle_tls_mitm(
         // Client negotiated HTTP/2 - use h2_mitm_handler (Phase 1.2)
         info!("H2 Client detected - using h2_mitm_handler");
         
+        let mut h2_config = crate::mitm::h2_mitm_handler::H2MitmConfig::default();
+        h2_config.redaction_mode = redaction_mode;
+        
         let handler = crate::mitm::h2_mitm_handler::H2MitmHandler::new(
             redaction_engine.clone(),
             upstream_addr.to_string(),
-            Default::default(),
+            h2_config,
         );
         
         info!("[TLS MITM] Created H2 handler with upstream_addr: '{}'", upstream_addr);
@@ -171,7 +175,7 @@ pub async fn handle_tls_mitm(
             host,
             upstream_addr,
             redaction_engine.clone(),
-            redact_responses,
+            redaction_mode,
         ).await {
             Ok(should_close) => {
                 if should_close {
@@ -216,7 +220,7 @@ async fn handle_single_request<RW>(
     target_host: &str,
     upstream_addr: &str,
     redaction_engine: Arc<scred_redactor::RedactionEngine>,
-    redact_responses: bool,
+    redaction_mode: RedactionMode,
 ) -> std::io::Result<bool>
 where
     RW: AsyncReadExt + AsyncWriteExt + Unpin,
@@ -387,7 +391,7 @@ where
     
     let mut upstream_buf_reader = BufReader::new(&mut upstream);
     
-    if redact_responses {
+    if redaction_mode.should_redact() {
         // Stream response with redaction
         let response_config = StreamingResponseConfig::default();
         
