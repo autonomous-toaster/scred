@@ -320,7 +320,7 @@ async fn forward_via_http1_1(
     upstream_addr: &str,
     mode: RedactionMode,
     detect_patterns: &scred_http::PatternSelector,
-    redact_patterns: &scred_http::PatternSelector,
+    _redact_patterns: &scred_http::PatternSelector,
 ) -> Result<Vec<u8>> {
     let method = request.method().clone();
     let uri = request.uri().clone();
@@ -510,7 +510,7 @@ async fn forward_via_http1_1_with_body(
     upstream_addr: &str,
     mode: RedactionMode,
     detect_patterns: &scred_http::PatternSelector,
-    redact_patterns: &scred_http::PatternSelector,
+    _redact_patterns: &scred_http::PatternSelector,
 ) -> Result<Vec<u8>> {
     let method = request_parts.method.clone();
     let uri = request_parts.uri.clone();

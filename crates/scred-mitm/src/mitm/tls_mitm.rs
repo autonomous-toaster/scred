@@ -47,7 +47,7 @@ pub async fn handle_tls_mitm(
     cert_generator: Arc<CertificateGenerator>,
     redaction_engine: Arc<scred_redactor::RedactionEngine>,
     redaction_mode: RedactionMode,
-    h2_redact_headers: bool,
+    _h2_redact_headers: bool,
     detect_patterns: scred_http::PatternSelector,
     redact_patterns: scred_http::PatternSelector,
 ) -> Result<()> {
