@@ -174,6 +174,8 @@ async fn handle_client(
                 redaction_engine.clone(),
                 config.proxy.redaction_mode,
                 config.proxy.h2_redact_headers,
+                config.proxy.detect_patterns.clone(),
+                config.proxy.redact_patterns.clone(),
             ).await {
                 warn!("TLS MITM error: {}", e);
             }

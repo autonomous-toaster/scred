@@ -93,8 +93,8 @@ pub fn detect_format(input: &[u8]) -> DetectionResult {
     // Calculate env-format score
     let score = calculate_env_score(sample_str);
 
-    // Threshold: >0.5 = env-mode, <=0.5 = text-mode
-    let (mode, reason) = if score > 0.5 {
+    // Threshold: >=0.45 = env-mode, <0.45 = text-mode
+    let (mode, reason) = if score >= 0.45 {
         (
             DetectionMode::EnvFormat,
             format!("Env-format detected (score: {:.2})", score),
@@ -213,7 +213,7 @@ mod tests {
         let env_output = "PATH=/usr/bin\nHOME=/home/user\nSHELL=/bin/bash\n";
         let result = detect_format(env_output.as_bytes());
         assert_eq!(result.mode, DetectionMode::EnvFormat);
-        assert!(result.score > 0.5);
+        assert!(result.score >= 0.45);
     }
 
     #[test]

@@ -25,6 +25,7 @@
 //! - `logging`: Structured logging (JSON, compact, pretty)
 
 pub mod config;
+pub mod configurable_engine;
 pub mod connect;
 pub mod dns_resolver;
 pub mod duplex;
@@ -38,6 +39,8 @@ pub mod location_rewriter;
 pub mod logging;
 pub mod models;
 pub mod parser;
+pub mod pattern_metadata;
+pub mod pattern_selector;
 pub mod proxy_resolver;
 pub mod response_reader;
 pub mod secrets;
@@ -47,9 +50,13 @@ pub mod streaming_request;
 pub mod streaming_response;
 pub mod chunked_parser;
 pub mod upstream_h2_client;
+pub mod env_detection;
 
 // Re-export detector and redactor
 pub use scred_http_detector::{self, ContentAnalyzer};
 pub use scred_http_redactor::{self, HttpRedactor};
+pub use pattern_selector::{PatternSelector, PatternTier};
+pub use pattern_metadata::get_pattern_tier;
+pub use configurable_engine::{ConfigurableEngine, FilteredRedactionResult};
 
 pub const VERSION: &str = "0.1.0";

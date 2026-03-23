@@ -1,0 +1,141 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║                         BUG ASSESSMENT SUMMARY                            ║
+║         scred-cli not recognizing SCRED_DETECT_PATTERNS env var          ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌─ VERDICT ─────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│ Status: ❌ NOT A BUG - By Design                                          │
+│ Type:   Feature Request (Phase 6 - Deferred)                             │
+│ Impact: scred-cli tier support not implemented yet                        │
+│ Risk:   NONE (as designed)                                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ WHAT YOU ENCOUNTERED ────────────────────────────────────────────────────┐
+│                                                                             │
+│ Command:                                                                   │
+│   SCRED_DETECT_PATTERNS=all cargo run --bin scred                         │
+│                                                                             │
+│ Expected:                                                                  │
+│   scred CLI respects SCRED_DETECT_PATTERNS and filters pattern detection  │
+│                                                                             │
+│ Actual:                                                                    │
+│   Environment variable ignored (not implemented)                          │
+│   scred CLI redacts ALL patterns regardless of env var                    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ROOT CAUSE ──────────────────────────────────────────────────────────────┐
+│                                                                             │
+│ 1. Architecture Separation:                                                │
+│    scred-cli DOES NOT depend on scred-http (which has PatternSelector)    │
+│                                                                             │
+│ 2. Implementation Scope:                                                   │
+│    Phase 3 (CLI Integration) was only done in scred-mitm                  │
+│    Phase 6 (scred-cli tier support) was explicitly DEFERRED               │
+│                                                                             │
+│ 3. Missing Components:                                                     │
+│    scred-cli lacks:                                                        │
+│    - SCRED_DETECT_PATTERNS env var parsing                                │
+│    - SCRED_REDACT_PATTERNS env var parsing                                │
+│    - --detect CLI flag                                                     │
+│    - --redact CLI flag                                                     │
+│    - --list-tiers CLI flag                                                │
+│    - Pattern filtering logic                                              │
+│                                                                             │
+│ 4. Why Deferred:                                                           │
+│    scred-cli designed to be "simple and dumb"                             │
+│    Always redacts ALL patterns (no filtering)                             │
+│    Pattern tier filtering is more critical for scred-mitm                 │
+│    (production proxy with controlled visibility)                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ WHAT WORKS vs DOESN'T WORK ──────────────────────────────────────────────┐
+│                                                                             │
+│ scred-cli (Current):                                                       │
+│ ✅ echo 'secret' | scred                    (redacts ALL)                 │
+│ ❌ SCRED_DETECT_PATTERNS=all scred          (ignored)                     │
+│ ❌ scred --detect CRITICAL                  (flag doesn't exist)          │
+│                                                                             │
+│ scred-mitm (Implemented):                                                  │
+│ ✅ ./scred-mitm --detect CRITICAL,API_KEYS  (works)                      │
+│ ✅ SCRED_DETECT_PATTERNS=all ./scred-mitm    (works)                      │
+│ ✅ ./scred-mitm --list-tiers                (works)                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ FIX COMPLEXITY ──────────────────────────────────────────────────────────┐
+│                                                                             │
+│ If You Need scred-cli Tier Support (Phase 6):                             │
+│                                                                             │
+│ Step 1: Add scred-http dependency         15 minutes                      │
+│ Step 2: Parse env variables               30 minutes                      │
+│ Step 3: Add CLI flags                     30 minutes                      │
+│ Step 4: Filter patterns in scred          30 minutes                      │
+│ Step 5: Unit testing                      1-2 hours                       │
+│ ────────────────────────────────────────────────────────────────────      │
+│ TOTAL TIME: 2-3 hours                                                      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ RECOMMENDED SOLUTION ────────────────────────────────────────────────────┐
+│                                                                             │
+│ FOR NOW: Use scred-mitm instead of scred-cli                              │
+│                                                                             │
+│ scred-mitm ALREADY HAS:                                                    │
+│ ✅ Full tier support                                                       │
+│ ✅ SCRED_DETECT_PATTERNS env var support                                  │
+│ ✅ SCRED_REDACT_PATTERNS env var support                                  │
+│ ✅ --detect, --redact, --list-tiers flags                                │
+│ ✅ Proxy mode (forward or reverse)                                       │
+│ ✅ HTTPS interception                                                      │
+│                                                                             │
+│ Example:                                                                   │
+│   ./scred-mitm --detect all --redact CRITICAL,API_KEYS &                 │
+│   # Then route traffic through proxy on 127.0.0.1:8080                   │
+│   curl -x http://127.0.0.1:8080 https://httpbin.org/anything             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ DECISION TREE ───────────────────────────────────────────────────────────┐
+│                                                                             │
+│ Do you need pattern tier filtering?                                        │
+│ ├─ YES, for CLI tool                                                       │
+│ │  ├─ Urgently?  → Implement Phase 6 (2-3 hours)                         │
+│ │  └─ Can wait?  → Use scred-mitm as proxy                               │
+│ │                                                                          │
+│ ├─ YES, for MITM proxy                                                     │
+│ │  └─ Already works ✅ (use scred-mitm with --detect/--redact)           │
+│ │                                                                          │
+│ └─ NO, just redact everything                                              │
+│    └─ Use scred-cli as-is ✅ (redacts all, no filtering)                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SUMMARY ─────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│ What broke:   SCRED_DETECT_PATTERNS env var ignored in scred-cli         │
+│                                                                             │
+│ Why it broke: Phase 6 (scred-cli tier support) was deferred, not          │
+│               implemented yet                                              │
+│                                                                             │
+│ Is it a bug?  NO - By design. scred-cli meant to be simple (all/nothing) │
+│                                                                             │
+│ Can you fix? YES - Phase 6 implementation (2-3 hours)                    │
+│                                                                             │
+│ Should you?  MAYBE - Depends on use case:                                 │
+│              Use scred-mitm instead (already has tier support)            │
+│              Or implement Phase 6 if you need CLI tier filtering          │
+│                                                                             │
+│ Recommendation: Use scred-mitm (superior feature set)                     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+═════════════════════════════════════════════════════════════════════════════
+VERDICT: NOT A BUG - DEFERRED FEATURE (Phase 6)
+USE WORKAROUND: scred-mitm has full tier support already implemented
+═════════════════════════════════════════════════════════════════════════════

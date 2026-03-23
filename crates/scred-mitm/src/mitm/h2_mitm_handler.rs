@@ -17,6 +17,8 @@ pub struct H2MitmConfig {
     pub initial_connection_window_size: u32,
     pub initial_stream_window_size: u32,
     pub redaction_mode: RedactionMode,
+    pub detect_patterns: scred_http::PatternSelector,
+    pub redact_patterns: scred_http::PatternSelector,
 }
 
 impl Default for H2MitmConfig {
@@ -26,6 +28,8 @@ impl Default for H2MitmConfig {
             initial_connection_window_size: 65535,
             initial_stream_window_size: 65535,
             redaction_mode: RedactionMode::DetectOnly,
+            detect_patterns: scred_http::PatternSelector::default_detect(),
+            redact_patterns: scred_http::PatternSelector::default_redact(),
         }
     }
 }
@@ -78,10 +82,12 @@ impl H2MitmHandler {
             let upstream_addr = self.upstream_addr.clone();
             let host = host.to_string();
             let redaction_mode = self.config.redaction_mode;
+             let detect_patterns = self.config.detect_patterns.clone();
+             let redact_patterns = self.config.redact_patterns.clone();
 
             // Handle each stream in background
             tokio::spawn(async move {
-                if let Err(e) = Self::handle_stream(request, respond, engine, upstream_addr, &host, redaction_mode).await {
+                if let Err(e) = Self::handle_stream(request, respond, engine, upstream_addr, &host, redaction_mode, detect_patterns, redact_patterns).await {
                     tracing::warn!("[H2] Stream error: {}", e);
                 }
             });
@@ -99,6 +105,8 @@ impl H2MitmHandler {
         upstream_addr: String,
         host: &str,
         redaction_mode: RedactionMode,
+        detect_patterns: scred_http::PatternSelector,
+        redact_patterns: scred_http::PatternSelector,
     ) -> Result<()> {
         let method = request.method().clone();
         let uri = request.uri().clone();
@@ -170,6 +178,8 @@ impl H2MitmHandler {
             upstream_addr,
             host,
             redaction_mode,
+            detect_patterns,
+            redact_patterns,
         )
         .await
         {

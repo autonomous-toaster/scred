@@ -1,0 +1,234 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           SCRED CORE LOGIC & SECURITY FIX - QUICK REFERENCE                ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+CRITICAL BLOCKERS (v1.0.1 - 5 hours)
+════════════════════════════════════════════════════════════════════════════
+
+🔴 #1: PROXY PER-PATH RULES NOT ENFORCED (2h)
+   Location: crates/scred-proxy/src/main.rs
+   Issue: Rules parsed but never checked during redaction
+   Fix: Add path_matches() before redaction call
+   Impact: Configuration now actually enforced
+   
+   Code: if should_redact_for_path(&path, &rules) { redact() }
+
+🔴 #2: REGEX SELECTOR COMPLETELY BROKEN (2h)
+   Location: crates/scred-http/src/pattern_selector.rs
+   Issue: Uses string contains() instead of actual regex
+   Fix: Implement real regex matching with validation
+   Impact: --redact "regex:^sk-" now works correctly
+   
+   Code: regex.is_match(pattern_name) instead of contains()
+
+🔴 #3: SILENT FALLBACK ON INVALID SELECTOR (1h)
+   Location: crates/scred-cli/src/main.rs (+ MITM + proxy)
+   Issue: User typo silently changes behavior
+   Fix: Exit with error instead of warn + fallback
+   Impact: User immediately sees configuration errors
+   
+   Code: .map_err(|e| exit(1)) instead of .unwrap_or_else()
+
+HIGH PRIORITY FIXES (v1.1 - 8 hours)
+════════════════════════════════════════════════════════════════════════════
+
+🟠 #4: UNIFIED SELECTOR PRECEDENCE (2h)
+   All binaries: CLI > ENV > File > Default
+   Currently: Inconsistent across CLI/MITM/Proxy
+   Impact: Same config works same everywhere
+
+🟠 #5: MULTILINE SECRET DETECTION (2.5h)
+   Problem: JWT spanning 3 lines → 2 lines NOT redacted
+   Fix: Implement LineAccumulator for continuations
+   Impact: Multiline JWT now fully redacted
+
+🟠 #6: PATTERN VALIDATION (1h)
+   Problem: Unknown patterns silently default to generic tier
+   Fix: Return error on unknown pattern names
+   Impact: Typos in detector caught at startup
+
+🟠 #7: ERROR HANDLING CONSISTENCY (1.5h)
+   Problem: Error messages differ across binaries
+   Fix: Centralized error handling module
+   Impact: User sees consistent, helpful errors
+
+MAXIMUM SECURITY (v1.2+ - 9 hours)
+════════════════════════════════════════════════════════════════════════════
+
+🔐 #8: URL-ENCODED SECRET DETECTION (1.5h)
+   Problem: sk%2Dproj... not detected (contains literal %2D)
+   Fix: Decode URLs before pattern matching
+   Impact: Encoded secrets now caught
+
+🔐 #9: MUTUAL EXCLUSIVITY CHECK (1h)
+   Problem: --detect NONE --redact ALL (nonsensical)
+   Fix: Validate selector combinations
+   Impact: Invalid configs rejected with suggestions
+
+🔐 #10: ATOMIC SELECTOR UPDATES (2h)
+   Problem: Race condition on config reload
+   Fix: Arc<RwLock<>> for atomic access
+   Impact: No partial/inconsistent updates
+
+🔐 #11: SELECTOR IMMUTABILITY (1h)
+   Problem: Selector changes mid-operation
+   Fix: Lock selectors after startup
+   Impact: Configuration stability guaranteed
+
+🔐 #12: STREAMING VERIFICATION (1.5h)
+   Problem: Streaming mode ignores selector
+   Fix: Verify patterns match selector during streaming
+   Impact: Streaming uses correct selector
+
+🔐 #13: CROSS-COMPONENT CONSISTENCY (1h)
+   Problem: Different components use different patterns
+   Fix: Verify pattern metadata at startup
+   Impact: All binaries enforce same patterns
+
+🔐 #14: AUDIT LOGGING (1.5h)
+   Problem: No record of selector changes
+   Fix: Log all changes with timestamp
+   Impact: Compliance audit trail ready
+
+TIMELINE
+════════════════════════════════════════════════════════════════════════════
+
+v1.0.1 (Week 1 - 5 hours):
+  Mon-Tue: Implement fixes 1,2,3
+  → Release Tuesday with "CRITICAL FIXES"
+
+v1.1 (Week 2 - 8 hours):
+  Mon-Wed: Implement fixes 4,5,6,7
+  → Release Friday with "CONSISTENCY"
+
+v1.2+ (Week 3 - 9 hours):
+  Mon-Fri: Implement fixes 8-14
+  → Release with "MAXIMUM SECURITY"
+
+Total: 22 hours → 3 weeks → Production hardening
+
+RISK LEVEL
+════════════════════════════════════════════════════════════════════════════
+
+v1.0.1: MEDIUM (3 critical changes)
+v1.1: MEDIUM (5 consistency changes)
+v1.2: LOW (7 hardening features, no breaking changes)
+
+Overall: LOW (all backward compatible, extensive testing)
+
+SUCCESS METRICS
+════════════════════════════════════════════════════════════════════════════
+
+v1.0.1: 
+  ✅ All 3 blockers fixed
+  ✅ 0 new regressions
+  ✅ 100% test pass rate
+
+v1.1:
+  ✅ Consistent behavior all binaries
+  ✅ Multiline secrets work
+  ✅ Error messages unified
+
+v1.2:
+  ✅ 14 security fixes implemented
+  ✅ Production hardening complete
+  ✅ Audit logging enabled
+
+IMMEDIATE ACTION (DO THIS NOW)
+════════════════════════════════════════════════════════════════════════════
+
+1. Create GitHub issue: "v1.0.1 Critical Fixes Sprint"
+   Labels: critical, security, 5-hour-fix
+
+2. Assign fixes 1-3 to developers:
+   - Per-path rules (2h)
+   - Regex selector (2h)
+   - Error handling (1h)
+
+3. Create testing checklist:
+   ☐ Per-path rules: curl localhost:9999/admin/* → no redaction
+   ☐ Regex selector: --redact "regex:^sk-" works
+   ☐ Invalid selector: exit code 1 with error message
+
+4. Plan v1.1 kickoff after v1.0.1 release
+
+COMMUNICATION TEMPLATE
+════════════════════════════════════════════════════════════════════════════
+
+For v1.0.1:
+
+  Subject: SCRED v1.0.1 - Critical Security Fixes
+  
+  We identified 3 critical issues in configuration enforcement:
+  
+  1. Proxy per-path rules not enforced (now fixed)
+  2. Regex selector completely broken (now fixed)
+  3. Silent fallback on invalid selector (now fixed)
+  
+  Recommendation: Upgrade to v1.0.1 ASAP
+  
+  v1.1 (planned): Cross-component consistency
+  v1.2 (planned): Maximum security hardening
+
+KEY FILES MODIFIED
+════════════════════════════════════════════════════════════════════════════
+
+v1.0.1:
+  • crates/scred-proxy/src/main.rs (per-path rules)
+  • crates/scred-http/src/pattern_selector.rs (regex)
+  • crates/scred-cli/src/main.rs (error handling)
+  • crates/scred-mitm/src/main.rs (error handling)
+
+v1.1:
+  • All three: main.rs (unified precedence)
+  • crates/scred-cli/src/env_mode.rs (multiline)
+  • crates/scred-http/src/pattern_metadata.rs (validation)
+  • New: crates/scred-http/src/error_handling.rs
+
+v1.2+:
+  • All three: main.rs (selector immutability)
+  • New: audit_logging module
+  • New: atomic_selectors module
+  • crates/scred-redactor/src/redactor.rs (URL decoding)
+
+TESTING COMMAND
+════════════════════════════════════════════════════════════════════════════
+
+# After each phase:
+cargo test --all 2>&1 | grep -E "test result|FAILED"
+
+# Build check:
+cargo build --release --all 2>&1 | grep -E "error"
+
+# Specific tests:
+cargo test per_path_rules
+cargo test regex_selector
+cargo test invalid_selector_error
+cargo test multiline_secrets
+cargo test selector_precedence
+cargo test url_decoded_secrets
+cargo test audit_logging
+
+ROLLBACK PROCEDURE
+════════════════════════════════════════════════════════════════════════════
+
+If Phase N causes issues:
+1. git revert [Phase N commits]
+2. Keep Phase N-1 fixes
+3. Rebuild + verify Phase N-1 tests pass
+4. Investigate blocker
+5. Plan Phase N restart
+
+Example: Phase 2 breaks multiline → revert to v1.0.1 + investigate
+
+NEXT STEPS
+════════════════════════════════════════════════════════════════════════════
+
+1. ✅ Review this assessment
+2. ✅ Approve action plan
+3. → Assign tasks for v1.0.1
+4. → Create sprint board
+5. → Begin implementation Monday
+
+Ready? Let's fix it.
+

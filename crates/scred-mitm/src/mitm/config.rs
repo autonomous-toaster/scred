@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use scred_http::secrets::SecretsConfig;
+use scred_http::PatternSelector;
 
 /// Redaction mode for handling detected secrets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +44,35 @@ pub struct UpstreamConfig {
     pub redaction_mode: RedactionMode,
     #[serde(default = "default_h2_redact_headers")]
     pub h2_redact_headers: bool,
+    /// Pattern detection selector (which patterns to detect)
+    /// NOTE: Not serialized/deserialized - handled via CLI flags and env vars
+    #[serde(skip)]
+    pub detect_patterns: PatternSelector,
+    /// Pattern redaction selector (which patterns to redact)
+    /// NOTE: Not serialized/deserialized - handled via CLI flags and env vars
+    #[serde(skip)]
+    pub redact_patterns: PatternSelector,
+}
+
+impl UpstreamConfig {
+    /// Initialize pattern selectors from defaults
+    /// Can be overridden by CLI flags or env vars
+    pub fn init_patterns(&mut self) {
+        self.detect_patterns = PatternSelector::default_detect();
+        self.redact_patterns = PatternSelector::default_redact();
+    }
+
+    /// Update detect patterns from string (CLI flag or env var)
+    pub fn set_detect_patterns(&mut self, input: &str) -> Result<(), String> {
+        self.detect_patterns = PatternSelector::from_str(input)?;
+        Ok(())
+    }
+
+    /// Update redact patterns from string (CLI flag or env var)
+    pub fn set_redact_patterns(&mut self, input: &str) -> Result<(), String> {
+        self.redact_patterns = PatternSelector::from_str(input)?;
+        Ok(())
+    }
 }
 
 /// TLS certificate configuration (MITM-specific)
@@ -75,13 +105,15 @@ fn home_dir() -> PathBuf {
 
 impl Default for Config {
     fn default() -> Self {
-        Self {
+        let mut config = Self {
             proxy: UpstreamConfig {
                 listen: "127.0.0.1:8080".to_string(),
                 upstream_timeout: "30s".to_string(),
                 max_connections: 1000,
                 redaction_mode: RedactionMode::DetectOnly,
                 h2_redact_headers: true,
+                detect_patterns: PatternSelector::default_detect(),
+                redact_patterns: PatternSelector::default_redact(),
             },
             tls: TlsConfig {
                 ca_key: PathBuf::from(home_dir()).join(".scred/ca.key"),
@@ -94,7 +126,9 @@ impl Default for Config {
                 format: "json".to_string(),
                 output: "stderr".to_string(),
             },
-        }
+        };
+        config.proxy.init_patterns();
+        config
     }
 }
 

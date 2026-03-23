@@ -97,20 +97,38 @@ fn extract_http_response_body(response: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// Log detected secrets in response without redacting
-fn log_detected_secrets(engine: &Arc<RedactionEngine>, response_bytes: &[u8]) {
+/// Filters by detect_patterns selector - only logs secrets that match the selector
+fn log_detected_secrets(
+    engine: &Arc<RedactionEngine>,
+    response_bytes: &[u8],
+    detect_patterns: &scred_http::PatternSelector,
+) {
+    use scred_http::get_pattern_tier;
+    
     let response_str = String::from_utf8_lossy(response_bytes);
     
     // Run detection (redaction engine will find patterns)
     let redaction_result = engine.redact(&response_str);
     
-    // Log warnings (detected secrets)
-    if !redaction_result.warnings.is_empty() {
-        tracing::info!("[DETECT] Found {} secrets in response:", redaction_result.warnings.len());
-        for (idx, warning) in redaction_result.warnings.iter().enumerate() {
+    // Filter and log warnings based on detect_patterns selector
+    let filtered_warnings: Vec<_> = redaction_result
+        .warnings
+        .iter()
+        .filter(|warning| {
+            // Get the tier for this pattern
+            let tier = get_pattern_tier(&warning.pattern_type);
+            // Check if it matches the selector
+            detect_patterns.matches_pattern(&warning.pattern_type, tier)
+        })
+        .collect();
+    
+    if !filtered_warnings.is_empty() {
+        tracing::info!("[DETECT] Found {} secrets in response (filtered by selector):", filtered_warnings.len());
+        for (idx, warning) in filtered_warnings.iter().enumerate() {
             tracing::info!("[DETECT]   [{}] pattern_type: {}, count: {}", idx + 1, warning.pattern_type, warning.count);
         }
     } else {
-        tracing::debug!("[DETECT] No secrets detected in response");
+        tracing::debug!("[DETECT] No secrets detected matching selector");
     }
 }
 /// - Stream redaction: Process in 64KB chunks, no full-body buffering
@@ -120,12 +138,14 @@ pub async fn handle_upstream_h2_connection(
     upstream_addr: String,
     host: &str,
     mode: RedactionMode,
+    detect_patterns: scred_http::PatternSelector,
+    redact_patterns: scred_http::PatternSelector,
 ) -> Result<Vec<u8>> {
-    let method = request.method().clone();
-    let uri = request.uri().clone();
+    let _method = request.method().clone();
+    let _uri = request.uri().clone();
     
     tracing::info!("[H2 Upstream] Forwarding {} {} (host: {}, upstream: {})", 
-        method, uri, host, upstream_addr);
+        _method, _uri, host, upstream_addr);
 
     // Extract body from request
     let (request_parts, request_body) = request.into_parts();
@@ -146,7 +166,7 @@ pub async fn handle_upstream_h2_connection(
 
     if has_proxy {
         tracing::info!("[H2 Upstream] Corporate proxy detected - using HTTP/1.1 fallback");
-        return forward_via_http1_1_with_body(&request_parts, &request_body, &engine, &upstream_addr, mode).await;
+        return forward_via_http1_1_with_body(&request_parts, &request_body, &engine, &upstream_addr, mode, &detect_patterns, &redact_patterns).await;
     }
 
     // No proxy: try H2 first, then fallback to HTTP/1.1
@@ -164,7 +184,7 @@ pub async fn handle_upstream_h2_connection(
             tracing::warn!("[H2 Upstream] H2 forward failed ({}), falling back to HTTP/1.1", e);
             // Rebuild request for HTTP/1.1 fallback
             let http1_request = http::Request::from_parts(request_parts, request_body);
-            forward_via_http1_1(&http1_request, &engine, &upstream_addr, mode).await
+            forward_via_http1_1(&http1_request, &engine, &upstream_addr, mode, &detect_patterns, &redact_patterns).await
         }
     }
 }
@@ -299,6 +319,8 @@ async fn forward_via_http1_1(
     engine: &Arc<RedactionEngine>,
     upstream_addr: &str,
     mode: RedactionMode,
+    detect_patterns: &scred_http::PatternSelector,
+    redact_patterns: &scred_http::PatternSelector,
 ) -> Result<Vec<u8>> {
     let method = request.method().clone();
     let uri = request.uri().clone();
@@ -397,7 +419,7 @@ async fn forward_via_http1_1(
         // If DETECT mode: log detected secrets
         if mode.should_detect() {
             tracing::info!("[H2 Upstream HTTP/1.1] DETECT mode - scanning for secrets");
-            log_detected_secrets(engine, &response_bytes);
+            log_detected_secrets(engine, &response_bytes, &detect_patterns);
         }
         
         return Ok(body);
@@ -487,6 +509,8 @@ async fn forward_via_http1_1_with_body(
     engine: &Arc<RedactionEngine>,
     upstream_addr: &str,
     mode: RedactionMode,
+    detect_patterns: &scred_http::PatternSelector,
+    redact_patterns: &scred_http::PatternSelector,
 ) -> Result<Vec<u8>> {
     let method = request_parts.method.clone();
     let uri = request_parts.uri.clone();
@@ -584,7 +608,7 @@ async fn forward_via_http1_1_with_body(
         // If DETECT mode: log detected secrets
         if mode.should_detect() {
             tracing::info!("[H2 Upstream HTTP/1.1] DETECT mode - scanning for secrets");
-            log_detected_secrets(engine, &response_bytes);
+            log_detected_secrets(engine, &response_bytes, &detect_patterns);
         }
         
         return Ok(body);

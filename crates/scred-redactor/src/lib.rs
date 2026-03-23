@@ -25,7 +25,7 @@ pub use scred_pattern_detector;
 
 // Legacy API (for backward compatibility with http/mitm/proxy crates)
 pub use redactor::{
-    RedactionEngine, RedactionConfig, RedactionResult,
+    RedactionEngine, RedactionConfig, RedactionResult, RedactionWarning,
     redact_text,
 };
 
@@ -150,5 +150,42 @@ mod tests {
         // All case variants should redact to 'x' (not preserve case information)
         assert_eq!(result.redacted, "sk-xxxxxxxxxxxxxxxxxxxx", 
                    "Mixed case chars should all be redacted to 'x'");
+    }
+}
+#[cfg(test)]
+mod jwt_test {
+    use regex::Regex;
+
+    #[test]
+    fn test_jwt_pattern_matches() {
+        let jwt_pattern = r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+";
+        let jwt_token = "eyJhbGciOiJSUzM4NCIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3Mzk1NjQ1MzksImV4cCI6MTc0NzM0MDUzOSwibmJmIjoxNzM5NTY0NTM5LCJqdGkiOiJkMGJhOTFkMy1hZmIyLTQwMzgtODU1NC04MjliNTYwMTA2ZmQiLCJhZG1pbiI6dHJ1ZSwibW9kZWxzIjpbXSwidXNlciI6Impjc2FhZGR1cHV5In0.gzouw6AtS5iQo42s6X67XIOUHc0jR_HrzYCgFfE4ksXSwszx0msf6sJaofU2giqfwIWtlWCDfbsWhr9xdx9EHvQChFk1BWE13ya4Cr7Z5tljYqlb-t9vaEw7ONLX8ysmJl7TnHAQodSvwjwhCuux-65SBlbO68iNyJpgznLVSo7oXsd5bEYS2YeloOYvqphqeUgsaGxpEa4g14NgyYa64Pb_hdp2SvGVGQQa7T5sNk5RuLs5lCgXTVja6B5VSDYi4E8KorgUtZxpgPdIKEUD-xJVkIfBfxglsFL2h5DjlEHZonzYQL1JziLmTBM2NZqJEvtwa-zdgOI6jl5Ah0AK4A";
+
+        if let Ok(re) = Regex::new(jwt_pattern) {
+            if re.is_match(jwt_token) {
+                println!("✅ JWT pattern MATCHES");
+                if let Some(cap) = re.find(jwt_token) {
+                    println!("  Matched {} chars: {}", cap.as_str().len(), &cap.as_str()[..30]);
+                }
+            } else {
+                println!("❌ JWT pattern DOES NOT MATCH");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod jwt_real_test {
+    use crate::redactor::RedactionEngine;
+
+    #[test]
+    fn test_real_jwt_from_testenv() {
+        let jwt = "eyJhbGciOiJSUzM4NCIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3Mzk1NjQ1MzksImV4cCI6MTc0NzM0MDUzOSwibmJmIjoxNzM5NTY0NTM5LCJqdGkiOiJkMGJhOTFkMy1hZmIyLTQwMzgtODU1NC04MjliNTYwMTA2ZmQiLCJhZG1pbiI6dHJ1ZSwibW9kZWxzIjpbXSwidXNlciI6Impjc2FhZGR1cHV5In0.gzouw6AtS5iQo42s6X67XIOUHc0jR_HrzYCgFfE4ksXSwszx0msf6sJaofU2giqfwIWtlWCDfbsWhr9xdx9EHvQChFk1BWE13ya4Cr7Z5tljYqlb-t9vaEw7ONLX8ysmJl7TnHAQodSvwjwhCuux-65SBlbO68iNyJpgznLVSo7oXsd5bEYS2YeloOYvqphqeUgsaGxpEa4g14NgyYa64Pb_hdp2SvGVGQQa7T5sNk5RuLs5lCgXTVja6B5VSDYi4E8KorgUtZxpgPdIKEUD-xJVkIfBfxglsFL2h5DjlEHZonzYQL1JziLmTBM2NZqJEvtwa-zdgOI6jl5Ah0AK4A";
+        
+        let engine = RedactionEngine::new(Default::default());
+        let result = engine.redact(jwt);
+        
+        assert!(result.redacted.contains("x"), "JWT should be redacted");
+        assert!(result.redacted.starts_with("eyJ"), "Should preserve prefix");
     }
 }

@@ -1,15 +1,18 @@
 /// CLI-specific environment variable redaction
 /// 
 /// Intelligently detects KEY=VALUE format and redacts:
-/// - Values for any KEY containing secret keywords (API_KEY, SECRET, TOKEN, etc.)
-/// - Patterns in values (even for non-secret keys)
+/// - Values for any KEY (secret or not)
+/// - Patterns in values are detected by the underlying redactor
+///
+/// This module acts as a thin wrapper over the core RedactionEngine,
+/// ensuring consistent behavior everywhere (env mode = text mode).
 ///
 /// This handles raw environment variable output like:
 ///   env | scred --env-mode
 ///   aws_access_key_id=AKIA...
 ///   SECRET_TOKEN=sk-...
 
-use std::collections::HashMap;
+use scred_http::ConfigurableEngine;
 
 const SECRET_KEYWORDS: &[&str] = &[
     "KEY",
@@ -27,17 +30,18 @@ const SECRET_KEYWORDS: &[&str] = &[
 ];
 
 /// Check if a variable name contains secret keywords
+/// (Now mostly informational - all values are redacted by the engine)
 pub fn is_secret_variable(name: &str) -> bool {
     let name_upper = name.to_uppercase();
     SECRET_KEYWORDS.iter().any(|keyword| name_upper.contains(keyword))
 }
 
-/// Redact a single environment variable line
-/// Handles formats like:
-///   KEY=VALUE
-///   KEY = VALUE (AWS config style)
-///   key: value (YAML style)
-pub fn redact_env_line(line: &str, redact_fn: impl Fn(&str) -> String) -> String {
+/// Generic environment line parser
+/// 
+/// Parses KEY=VALUE format and delegates redaction to provided function.
+/// This shared implementation eliminates code duplication while supporting
+/// both trait-based and concrete redactors.
+fn redact_env_line_generic<F: Fn(&str) -> String>(line: &str, redact_fn: F) -> String {
     if line.is_empty() {
         return String::new();
     }
@@ -66,22 +70,51 @@ pub fn redact_env_line(line: &str, redact_fn: impl Fn(&str) -> String) -> String
             let key = line[..sep].trim();
             let value = line[sep + 1..].trim();
 
+
             // Build result
             let mut result = String::new();
             result.push_str(key);
             result.push(sep_char);
 
-            if is_secret_variable(key) {
-                // Redact entire value
-                result.push_str(&"x".repeat(value.len()));
-            } else {
-                // Scan value for patterns
-                result.push_str(&redact_fn(value));
-            }
+            // Always use the redactor
+            // The redactor handles:
+            // - Prefix preservation (AKIA → AKIAxxx...)
+            // - Pattern detection (finds actual secrets)
+            // - Consistent behavior with --text-mode
+            let redacted_value = redact_fn(value);
+            result.push_str(&redacted_value);
 
             result
         }
     }
+}
+
+/// Redact a single environment variable line with generic redaction function
+/// 
+/// Handles formats like:
+///   KEY=VALUE
+///   KEY = VALUE (AWS config style)
+///   key: value (YAML style)
+///
+/// # Example
+/// ```ignore
+/// let result = redact_env_line("API_KEY=sk-abc123...", |v| redactor.redact(v));
+/// ```
+pub fn redact_env_line(line: &str, redact_fn: impl Fn(&str) -> String) -> String {
+    redact_env_line_generic(line, redact_fn)
+}
+
+/// Redact an environment variable line using ConfigurableEngine
+/// 
+/// This is the main entry point for CLI env-mode processing.
+/// Ensures all redaction goes through the same engine for consistency.
+///
+/// # Example
+/// ```ignore
+/// let result = redact_env_line_configurable("API_KEY=sk-abc123...", &engine);
+/// ```
+pub fn redact_env_line_configurable(line: &str, config_engine: &ConfigurableEngine) -> String {
+    redact_env_line_generic(line, |v| config_engine.redact_only(v))
 }
 
 #[cfg(test)]

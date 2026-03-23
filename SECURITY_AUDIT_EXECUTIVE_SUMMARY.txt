@@ -1,0 +1,169 @@
+═══════════════════════════════════════════════════════════════════════════════
+                   SCRED SECURITY AUDIT - EXECUTIVE SUMMARY
+═══════════════════════════════════════════════════════════════════════════════
+
+SESSION: Negative Bias Code Review (CLI, MITM, Proxy Pattern Selector Paths)
+DURATION: 2-3 hours comprehensive analysis
+SCOPE: 25+ potential security gaps identified across all three binaries
+
+═══════════════════════════════════════════════════════════════════════════════
+                            KEY FINDINGS (CRITICAL)
+═══════════════════════════════════════════════════════════════════════════════
+
+1. 🔴 PROXY PER-PATH RULES ARE DEAD CODE
+   ════════════════════════════════════════
+   Configuration feature defined but never enforced during actual requests.
+   Users configure "don't redact /admin/*" but secrets still get redacted.
+   
+   Risk Level: CRITICAL
+   Fix Effort: 1-2 hours
+   Test Effort: 1 hour
+   
+   Root Cause: Rules parsed and stored but never checked in request handler
+
+2. 🔴 REGEX SELECTOR COMPLETELY BROKEN
+   ═════════════════════════════════════
+   "regex:" selector uses simple string contains() instead of regex matching.
+   --redact "regex:^sk-" looks for pattern containing literal "^sk-" and fails.
+   Feature documented but non-functional.
+   
+   Risk Level: CRITICAL
+   Fix Effort: 1-2 hours (either implement regex or remove feature)
+   Test Effort: 30 minutes
+   
+   Root Cause: Incomplete implementation; regex crate not integrated
+
+3. 🔴 SILENT FALLBACK ON INVALID SELECTOR
+   ═════════════════════════════════════════
+   User typo in tier name (e.g., "CRIITICAL") silently falls back to default.
+   If stderr redirected, user never sees warning.
+   Configuration policy silently violated without user knowledge.
+   
+   Risk Level: CRITICAL (security by configuration failure)
+   Fix Effort: 30 minutes
+   Test Effort: 30 minutes
+   
+   Root Cause: unwrap_or_else() fallback instead of error exit
+
+═══════════════════════════════════════════════════════════════════════════════
+                         SECONDARY FINDINGS (HIGH)
+═══════════════════════════════════════════════════════════════════════════════
+
+4. Inconsistent pattern selector precedence across CLI/MITM/Proxy
+   → Users expect same behavior but get different results
+
+5. Env-mode doesn't validate pattern selector application
+   → User can't verify intended redaction policy is applied
+
+6. Type confusion in selector parsing (ambiguous pattern names)
+   → "aws-akia" treated as wildcard instead of pattern name lookup
+
+Total Impact: Difficult to deploy consistently; configuration surprises in production
+
+═══════════════════════════════════════════════════════════════════════════════
+                         MEDIUM FINDINGS (8 ISSUES)
+═══════════════════════════════════════════════════════════════════════════════
+
+- Multiline secrets only partially redacted (line-by-line processing)
+- Pattern name mismatches silently default to generic tier
+- No atomic updates for pattern selector configuration
+- No audit logging of selector changes
+- Missing URL-decoding for pattern detection (sk%2D not detected)
+- Streaming mode doesn't pass pattern selector through
+- Response body redaction inconsistent
+- No validation of mutual exclusivity (detect < redact)
+
+═══════════════════════════════════════════════════════════════════════════════
+                            QUALITY METRICS
+═══════════════════════════════════════════════════════════════════════════════
+
+Code Quality Score:        6/10
+  - Core redaction logic: 8/10
+  - Pattern selector enforcement: 5/10
+  - Cross-component consistency: 4/10
+
+Security Confidence:       5/10
+  - Configuration enforcement: 4/10
+  - Error handling: 5/10
+  - Feature completeness: 6/10
+
+v1.0 Readiness:           ⚠️ CONDITIONAL
+  - Core functionality: YES
+  - Configuration consistency: NO
+  - Error handling: PARTIAL
+
+═══════════════════════════════════════════════════════════════════════════════
+                        RECOMMENDED ACTIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+IMMEDIATE (Before v1.0.1):
+  ✓ Fix proxy per-path rules (2 hours)
+  ✓ Fix silent fallback errors (1 hour)
+  ✓ Fix or remove regex selector (2 hours)
+  
+  Total: 5 hours → Addresses all CRITICAL issues
+
+MEDIUM TERM (v1.1):
+  ✓ Unify selector precedence (3 hours)
+  ✓ Add pattern validation (2 hours)
+  ✓ Implement multiline support (3 hours)
+  
+  Total: 8 hours → Addresses all HIGH issues
+
+LONG TERM (v1.2):
+  ✓ Audit logging (1 hour)
+  ✓ URL-decoding for patterns (2 hours)
+  ✓ Mutual exclusivity validation (1 hour)
+
+═══════════════════════════════════════════════════════════════════════════════
+                            RISK ASSESSMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+Impact if not fixed: SECRETS COULD LEAK IN PRODUCTION
+  - Users configure redaction policy thinking it's enforced
+  - Features documented but non-functional (regex selector)
+  - Silent policy violations (invalid selector fallbacks)
+  - Intended security controls become paper controls
+
+Likelihood of exploitation:
+  - Per-path rules: MEDIUM (misconfigured deployment)
+  - Regex selector: MEDIUM (user expects feature to work)
+  - Silent fallback: HIGH (typos in configuration common)
+
+Business Risk: HIGH
+  - Credentials exposed despite configuration
+  - Compliance violations (configuration not enforced)
+  - Reputation damage if secrets leak from SCRED proxy
+
+═══════════════════════════════════════════════════════════════════════════════
+                            CONCLUSION
+═══════════════════════════════════════════════════════════════════════════════
+
+SCRED v1.0 has solid core redaction functionality but lacks consistent
+enforcement of pattern selector policies across all deployment modes.
+
+Critical issues are not algorithmic failures - they're architectural gaps
+where configuration is parsed but not actually enforced during redaction.
+
+RECOMMENDATION:
+
+→ Fix all 3 CRITICAL issues before v1.0.1 release (5 hours work)
+→ Delay v1.0 if these cannot be addressed immediately
+→ Otherwise document as "Known Limitations" in release notes
+
+DO NOT ship v1.0 with per-path rules advertised but non-functional.
+DO NOT ship v1.0 with regex selector advertised but broken.
+DO NOT ship v1.0 with silent configuration failures.
+
+These aren't cosmetic bugs - they're security controls that appear to work
+but silently fail. Users trusting these controls could leak secrets.
+
+v1.0 Assessment: READY WITH CAVEATS (fix 3 issues first)
+Recommendation: 5-hour sprint to fix CRITICAL path
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Detailed findings: See CODE_REVIEW_NEGATIVE_BIAS_SECURITY_GAPS.md
+Verification report: See CODE_REVIEW_VERIFICATION_REPORT.md
+Summary: See NEGATIVE_BIAS_REVIEW_FINAL_SUMMARY.txt
+

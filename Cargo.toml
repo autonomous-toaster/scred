@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/scred-cli",
+    "crates/scred-config",
     "crates/scred-http",
     "crates/scred-http-detector",
     "crates/scred-http-redactor",

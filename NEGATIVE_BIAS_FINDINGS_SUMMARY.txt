@@ -1,0 +1,287 @@
+════════════════════════════════════════════════════════════════════════════════
+  NEGATIVE BIAS CODE REVIEW - EXECUTIVE SUMMARY
+  SCRED CLI, MITM, and Proxy Security Analysis
+════════════════════════════════════════════════════════════════════════════════
+
+REVIEW METHODOLOGY
+══════════════════════════════════════════════════════════════════════════════
+- Assume secrets COULD leak through gaps in code
+- Look for inconsistencies across 3 binaries
+- Find code paths that bypass redaction
+- Identify silent failures vs explicit errors
+- Check configuration precedence implementation
+- Verify selector usage in actual redaction engine calls
+
+CRITICAL FINDINGS (MUST FIX BEFORE v1.0.1)
+══════════════════════════════════════════════════════════════════════════════
+
+FINDING #1: Pattern Selectors Not Used in Proxy ⚠️ CRITICAL
+────────────────────────────────────────────────────
+CLI correctly passes selectors to ConfigurableEngine:
+  ✅ detect_selector → used for filtering detection
+  ✅ redact_selector → used for filtering redaction
+
+Proxy parses but NEVER uses selectors:
+  ❌ detect_selector defined but NEVER passed to engine
+  ❌ redact_selector defined but NEVER passed to engine
+  ❌ StreamingRedactor::with_defaults() ignores selectors
+  ❌ User sets --redact CRITICAL, but all patterns processed anyway!
+
+RESULT: User configuration completely ignored in Proxy
+
+Impact: Any pattern not in default tiers gets redacted regardless of config
+Severity: CRITICAL - Silent security bypass
+
+────────────────────────────────────────────────────
+
+FINDING #2: MITM Selector Precedence Unknown ⚠️ CRITICAL
+────────────────────────────────────────────────────
+MITM parses selectors via config.proxy.set_detect_patterns() and
+config.proxy.set_redact_patterns(), but the proxy.rs file is NOT PROVIDED.
+
+Questions unanswered:
+  ❓ Does proxy.rs use config.proxy.detect_patterns?
+  ❓ Does proxy.rs use config.proxy.redact_patterns?
+  ❓ Or does it only use the redaction_mode?
+  ❓ Are selectors actually enforced?
+
+RESULT: Cannot verify if MITM properly uses selectors - MAJOR RED FLAG
+
+RECOMMENDATION: Review scred-mitm/src/mitm/proxy.rs for selector usage
+
+────────────────────────────────────────────────────
+
+FINDING #3: Silent Fallback on Invalid Selectors (Proxy) ⚠️ CRITICAL
+────────────────────────────────────────────────────
+CLI (CORRECT):
+  User: --redact CRIITICAL (typo)
+  CLI: "ERROR: Invalid SCRED_REDACT_PATTERNS value: 'CRIITICAL'"
+  CLI: Exits with code 1
+  User: Sees error, fixes config
+
+Proxy from_env() (BROKEN):
+  User: SCRED_REDACT_PATTERNS=CRIITICAL
+  Proxy: .unwrap_or_else(|_e| PatternSelector::default_redact())
+  Proxy: Silently uses ALL patterns
+  User: Thinks config is active, but default is used instead
+
+Also inconsistent in Proxy itself:
+  from_config_file(): Exits on error ✅
+  from_env(): Silently falls back ❌
+
+RESULT: Invalid configurations silently work with defaults - user unaware
+
+RECOMMENDATION: Make proxy from_env() exit on error like from_config_file()
+
+────────────────────────────────────────────────────
+
+FINDING #4: Environment Variable Precedence is BROKEN ⚠️ CRITICAL
+────────────────────────────────────────────────────
+Design intent: CLI > ENV > File > Default
+
+Proxy actual behavior:
+  - If config file exists: ENV vars are completely ignored
+  - If no config file: Use ENV/Default
+
+Example:
+  $ SCRED_REDACT_PATTERNS=ALL scred-proxy # env says ALL
+  Config file has: detect: [CRITICAL]
+  Result: Uses CRITICAL from file, ENV var ignored!
+
+This can't be overridden with env vars without deleting config file!
+
+RESULT: Configuration locked to file, no way to override with env
+
+RECOMMENDATION: Implement proper CLI > ENV > File > Default precedence
+
+────────────────────────────────────────────────────
+
+FINDING #5: Detect Mode Not Actually Logging Secrets ⚠️ CRITICAL
+────────────────────────────────────────────────────
+Proxy --detect mode does:
+  ✅ Sets enabled: false (no redaction)
+  ❌ Never uses detect_selector
+  ❌ Debug message says "will be logged" but no logging code
+  ❌ --detect flag completely ignored in handle_connection()
+
+MITM --detect mode:
+  ❓ Code says "🔍 DETECT MODE: Logging all detected secrets"
+  ❓ But we can't verify if this is actually enforced in proxy.rs
+
+RESULT: User runs with --detect mode expecting to see detected secrets, but:
+  - Nothing is logged
+  - Or selector is completely ignored
+  - Or both
+
+RECOMMENDATION: Implement actual detection logging with selector filtering
+
+════════════════════════════════════════════════════════════════════════════════
+
+HIGH-SEVERITY FINDINGS (FIX BEFORE v1.1)
+════════════════════════════════════════════════════════════════════════════════
+
+FINDING #6: Per-Path Rules Missing Selector Overrides
+────────────────────────────────────────────────────
+Current rule structure:
+  path_pattern: String
+  should_redact: bool  ← Only binary yes/no!
+
+Missing:
+  detect_selector: Option<PatternSelector>
+  redact_selector: Option<PatternSelector>
+
+Can't specify: "Only redact CRITICAL on /api/payment/"
+Can only do: "Don't redact anything on /api/payment/"
+
+════────────────────────────────────────────────────
+
+FINDING #7: H2C HTTP/2 Cleartext Implementation Incomplete
+────────────────────────────────────────────────────
+The handle_h2c_connection() function:
+  ❓ _upstream: h2::client::SendRequest<Bytes> is marked unused
+  ❌ How is data sent upstream? Function appears incomplete
+  ❌ Comment says "TODO: Full h2c upstream proxy (phase 1.3 extension)"
+  ❌ Per-path rules not applied to H2C streams
+  ❌ Selectors not passed to H2C handler
+
+RESULT: H2C streams may not be redacted correctly
+
+════────────────────────────────────────────────────
+
+FINDING #8: MITM Config Mode Mapping Has Silent Fallback
+────────────────────────────────────────────────────
+Config file has:
+  mode: "detectable"  (typo)
+
+Code does:
+  match mode_str {
+    "passive" => Passthrough,
+    "selective" => DetectOnly,
+    "strict" => Redact,
+    _ => Redact,  ← SILENT FALLBACK!
+  }
+
+Result: Silently uses Redact mode instead of erroring
+
+════════════════════════════════════════════════════════════════════════════════
+
+MEDIUM-SEVERITY FINDINGS (TRACK FOR v1.1)
+════════════════════════════════════════════════════════════════════════════════
+
+FINDING #9: CLI Auto-Detection Buffer Too Small (512 bytes)
+────────────────────────────────────────────────────
+Env variables might be on line 600+, past the 512-byte buffer.
+
+Risk: Might misclassify large files as "text" when they contain env vars
+Mitigation: Increase buffer or improve detection heuristic
+
+════────────────────────────────────────────────────
+
+FINDING #10: Streaming Boundary Detection Not Verified
+────────────────────────────────────────────────────
+64KB chunks - might split secrets across boundaries
+
+Risk: "AWS_SECRET_ACCESSx" + "KEY_ID=..." won't match pattern
+Status: Streaming overlap handling exists but not verified in provided code
+
+════────────────────────────────────────────────────
+
+FINDING #11: TLS Upstream No Selector Distinction
+────────────────────────────────────────────────────
+Same redactor used for both HTTP and HTTPS requests
+No per-protocol selector filtering
+
+════────────────────────────────────────────────────
+
+FINDING #12: Host Header Can't Be Used for Per-Path Rules
+────────────────────────────────────────────────────
+Headers consumed by stream_request_to_upstream()
+Can't be read again for per-path matching
+Falls back to peer IP (wrong for virtual hosts)
+
+════════════════════════════════════════════════════════════════════════════════
+
+INCIDENTS & GAPS MATRIX
+════════════════════════════════════════════════════════════════════════════════
+
+Scenario: User expects --redact CRITICAL to only redact critical patterns
+
+CLI:        ✅ Works correctly
+MITM:       ❓ Unknown (proxy.rs not provided)
+Proxy:      ❌ Selectors parsed but not used - ALL patterns redacted
+
+────────────────────────────────────────────────────
+
+Scenario: User makes typo in SCRED_REDACT_PATTERNS
+
+CLI:        ✅ Exits with error message
+MITM:       ⚠️ Logs as info then continues
+Proxy (file): ✅ Exits with error
+Proxy (env):  ❌ Silently uses default
+
+────────────────────────────────────────────────────
+
+Scenario: User wants detection without redaction (dry-run)
+
+CLI:        ✅ Works (--detect CRITICAL)
+MITM:       ⚠️ Unclear implementation
+Proxy:      ❌ Mode set but selector not used, no actual logging
+
+════════════════════════════════════════════════════════════════════════════════
+
+RECOMMENDATIONS BY PRIORITY
+════════════════════════════════════════════════════════════════════════════════
+
+P0 - MUST FIX BEFORE v1.0.1 (2-3 hours)
+──────────────────────────────────────────
+□ Proxy: Pass detect_selector and redact_selector to StreamingRedactor
+□ Proxy: Make from_env() exit on error (consistency with from_config_file)
+□ MITM: Review proxy.rs to verify selector usage, provide feedback
+□ Proxy: Implement proper CLI > ENV > File > Default precedence
+□ Proxy: Verify detect mode actually logs detected secrets with selector
+
+P1 - HIGH (3-4 hours for v1.1)
+──────────────────────────────────────────
+□ MITM: If selectors not used, fix same as Proxy
+□ Per-path rules: Add optional detect_selector and redact_selector
+□ H2C: Complete implementation or disable it
+□ Configuration: Document which is correct precedence
+
+P2 - MEDIUM (track for v1.1+)
+──────────────────────────────────────────
+□ Auto-detect: Increase buffer or improve algorithm
+□ Streaming: Verify and test boundary handling
+□ Host header: Implement proper extraction for per-path rules
+□ H2C: Fix unused parameters or remove them
+
+════════════════════════════════════════════════════════════════════════════════
+
+VERIFICATION CHECKLIST
+════════════════════════════════════════════════════════════════════════════════
+
+For each binary, verify:
+
+[ ] Pattern selectors are parsed ✅
+[ ] Pattern selectors are passed to redaction engine ❓
+[ ] Pattern selectors are actually used during redaction ❓
+[ ] Invalid selectors cause error, not silent fallback ❓
+[ ] ENV vars have higher precedence than file (where applicable) ❓
+[ ] Detect mode logs detected patterns ❓
+[ ] Redact mode redacts detected patterns ❓
+[ ] Per-path rules work correctly ❓
+[ ] Mode is consistent across all entry points ❓
+
+CRITICAL: These checks MUST all pass before v1.0.1 release
+
+════════════════════════════════════════════════════════════════════════════════
+
+NEXT STEPS
+════════════════════════════════════════════════════════════════════════════════
+
+1. Review NEGATIVE_BIAS_SECURITY_REVIEW.md (895 lines, full details)
+2. Verify if MITM's proxy.rs properly uses selectors
+3. Fix P0 issues immediately
+4. Add tests to verify selector enforcement
+5. Run end-to-end tests with --redact CRITICAL to verify only critical secrets redacted
+
+════════════════════════════════════════════════════════════════════════════════

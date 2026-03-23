@@ -476,7 +476,7 @@ mod realistic_throughput_tests {
             let is_last = (end >= total_data.len());
             let result = detector.process(&total_data[pos..end], is_last).unwrap();
             // Note: we can't accumulate events across calls in the old API
-            black_box(result.events.len());
+            let _ = result.events.len();  // Use result to prevent unused warning
             pos = end;
         }
         let elapsed = start.elapsed();

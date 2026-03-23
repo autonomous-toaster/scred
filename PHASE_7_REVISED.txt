@@ -1,0 +1,260 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║                      PHASE 7: REVISED SCOPE & PRIORITY                    ║
+║                                                                            ║
+║              Phase 7a = MANDATORY  |  Phases 7b-7h = OPTIONAL             ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+
+SCOPE CHANGE (User Decision)
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+MANDATORY FOR v1.0:
+  ✅ Phase 7a: Configuration Management (REQUIRED - 4-6 hours)
+     • YAML/TOML configuration file support
+     • Per-path redaction rules
+     • Configuration validation
+     • Hot-reload capabilities
+     • Environment-specific configs
+
+OPTIONAL FOR v1.0 (defer to v1.1+):
+  ⏳ Phase 7b: Deployment & Operations
+  ⏳ Phase 7c: Monitoring & Observability
+  ⏳ Phase 7d: Performance Tuning
+  ⏳ Phase 7e: CI/CD & Automation
+  ⏳ Phase 7f: User Documentation
+  ⏳ Phase 7g: CA Distribution UI
+  ⏳ Phase 7h: Advanced Features
+
+═══════════════════════════════════════════════════════════════════════════════
+
+PHASE 7a: CONFIGURATION MANAGEMENT (MANDATORY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GOAL: Support YAML/TOML configuration files for all three binaries
+
+REQUIREMENTS:
+────────────
+
+1. Configuration File Format
+   • File locations:
+     - /etc/scred/config.yaml (system-wide)
+     - ~/.scred/config.yaml (user)
+     - ./scred.yaml (current directory)
+     - Precedence: CLI args > env var > ./.scred.yaml > ~/.scred/config.yaml > /etc/scred/config.yaml
+   
+   • Format: YAML primary, TOML alternative
+   
+   • Schema validation on load
+   • Clear error messages for invalid configs
+   • Type checking and defaults
+
+2. Configuration Sections
+
+   For scred-cli:
+   ```yaml
+   scred-cli:
+     mode: auto              # auto | env | text
+     streaming: true
+     patterns:
+       detect: [CRITICAL, API_KEYS, INFRASTRUCTURE, JWT, CUSTOM]
+       redact: [CRITICAL, API_KEYS]
+   ```
+
+   For scred-proxy:
+   ```yaml
+   scred-proxy:
+     listen:
+       port: 9999
+       address: "0.0.0.0"
+     upstream:
+       url: "https://backend.example.com"
+     redaction:
+       mode: selective        # selective | strict | passive
+       patterns:
+         detect: [CRITICAL, API_KEYS, INFRASTRUCTURE]
+         redact: [CRITICAL, API_KEYS]
+       rules:
+         - path: "/api/internal/*"
+           redact: false
+           reason: "Internal API, no redaction needed"
+         - path: "/logs/*"
+           redact: true
+           patterns: [CRITICAL]
+   ```
+
+   For scred-mitm:
+   ```yaml
+   scred-mitm:
+     listen:
+       port: 8080
+       address: "0.0.0.0"
+     upstream_proxy:
+       enabled: false
+       url: "http://corporate-proxy:8080"
+     redaction:
+       patterns:
+         detect: [CRITICAL, API_KEYS, INFRASTRUCTURE]
+         redact: [CRITICAL, API_KEYS]
+     ca_cert:
+       generate: true
+       path: "/tmp/scred-ca.pem"
+   ```
+
+3. Environment Variable Overrides
+   • ${VAR_NAME} substitution in config files
+   • Override config values: SCRED_CONFIG_OPTION=value
+   • Example: SCRED_PROXY_LISTEN_PORT=8888 overrides listen.port
+
+4. Per-Path Redaction Rules (scred-proxy specific)
+   • Path-based routing: /api/v1/*, /internal/*, /logs/*, etc.
+   • Per-path pattern selection
+   • Wildcard and regex support
+   • Rule precedence and conflicts
+   • Logging of which rule matched
+
+5. Configuration Validation
+   • Schema validation on startup
+   • `--validate-config` flag for checking
+   • `--dry-run` mode to test without applying
+   • Exit with clear errors if invalid
+
+6. Hot-Reload (scred-proxy/scred-mitm)
+   • Watch config file for changes
+   • Graceful reload without dropping connections
+   • Signal support (SIGHUP = reload)
+   • Rollback on validation error
+   • Logging of reload events
+
+7. Environment-Specific Configs
+   • Load different configs per SCRED_ENV
+   • SCRED_ENV=production → config-prod.yaml
+   • SCRED_ENV=staging → config-staging.yaml
+   • SCRED_ENV=dev → config-dev.yaml
+
+IMPLEMENTATION PLAN:
+────────────────────
+
+Task 1: Create configuration schema and parser (1-1.5 hours)
+  • Define ConfigFile struct (YAML/TOML deserializable)
+  • Implement config file loader
+  • Add schema validation
+  • Error handling and reporting
+
+Task 2: Integrate with scred-cli (0.5-1 hour)
+  • Load config from file
+  • Merge with CLI flags and env vars
+  • Test all precedence rules
+  • Update help text
+
+Task 3: Integrate with scred-proxy (1-1.5 hours)
+  • Load config from file
+  • Implement per-path rules
+  • Add hot-reload support
+  • Update help text
+
+Task 4: Integrate with scred-mitm (1-1.5 hours)
+  • Load config from file
+  • Implement hot-reload support
+  • Update help text
+
+Task 5: Testing and validation (0.5-1 hour)
+  • Unit tests for config parsing
+  • Integration tests for all binaries
+  • Precedence verification
+  • Error cases
+
+TOTAL EFFORT: 4-6 hours
+
+COMPLETION CHECKLIST:
+──────────────────────
+
+□ Config file loader implemented
+□ YAML parser integrated
+□ Schema validation in place
+□ scred-cli config integration
+□ scred-proxy config integration + per-path rules
+□ scred-mitm config integration
+□ Hot-reload for proxy/mitm
+□ Environment variable overrides working
+□ Help text updated
+□ 100+ config-related tests added
+□ All existing tests still pass
+□ Manual testing of all scenarios
+□ Documentation examples included
+
+═══════════════════════════════════════════════════════════════════════════════
+
+PHASES 7b-7h: OPTIONAL FOR v1.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Status: DEFER TO v1.1 and later releases
+
+These remain as planned future enhancements:
+  • Deployment & Operations (K8s, Docker, systemd)
+  • Monitoring & Observability (Prometheus, Grafana)
+  • Performance Tuning
+  • CI/CD & Automation
+  • User Documentation
+  • CA Distribution UI
+  • Advanced Features (ML, Vault, webhooks)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+REVISED v1.0 RELEASE CRITERIA
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ PHASE 6: All complete
+  ✅ ConfigurableEngine foundation
+  ✅ scred-cli unification
+  ✅ scred-proxy unification
+  ✅ Cleanup & Polish
+
+✅ PHASE 7a: Configuration Management (MANDATORY)
+  □ YAML/TOML config file support
+  □ Per-path redaction rules
+  □ Configuration validation
+  □ Hot-reload support
+  □ 100+ tests passing
+
+⏳ PHASES 7b-7h: Optional (for future releases)
+
+RELEASE READINESS:
+  Phase 6: ✅ 90% DONE
+  Phase 7a: 🟡 IN PROGRESS (0% done)
+  Overall: 🟡 ~85% DONE
+
+═══════════════════════════════════════════════════════════════════════════════
+
+IMPLEMENTATION ROADMAP
+━━━━━━━━━━━━━━━━━━━
+
+Session N: Phase 7a - Configuration Management (4-6 hours)
+  1. Config schema and parser
+  2. scred-cli integration
+  3. scred-proxy integration
+  4. scred-mitm integration
+  5. Testing and validation
+
+Then: RELEASE v1.0 🎉
+
+Future (v1.1+):
+  • Phase 7b: Deployment
+  • Phase 7c: Monitoring
+  • Phase 7d-7h: Other enhancements
+
+═══════════════════════════════════════════════════════════════════════════════
+
+SUMMARY
+━━━━━
+
+DECISION: Phase 7a is MANDATORY, all others are OPTIONAL
+
+NEXT STEP: Implement Phase 7a (Configuration Management)
+  • Estimated effort: 4-6 hours
+  • Expected completion: 1 focused session
+  • Result: Production-ready v1.0 with full config support
+
+═══════════════════════════════════════════════════════════════════════════════

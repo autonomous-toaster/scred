@@ -28,12 +28,9 @@ pub struct RedactionEngine {
 
 impl RedactionEngine {
     pub fn new(config: RedactionConfig) -> Self {
-        // NOTE: All patterns are now managed in Zig (scred-pattern-detector).
-        // We ONLY use scred-pattern-detector for DETECTION, not redaction.
-        
         Self {
             config,
-            compiled_patterns: Vec::new(),  // Detection handled by scred-pattern-detector
+            compiled_patterns: Vec::new(),
         }
     }
 
@@ -45,111 +42,122 @@ impl RedactionEngine {
             };
         }
 
-        // Quick rejection for very short inputs
-        if text.len() < 20 {
-            // Too short to contain most secrets (shortest real secret is ~20 bytes)
+        // Use pure Rust regex-based detection as fallback
+        // (Zig FFI is stubbed and doesn't work)
+        let result = self.redact_with_regex(text);
+        result
+    }
+
+    /// Fallback: Redact using compiled Rust regexes
+    fn redact_with_regex(&self, text: &str) -> RedactionResult {
+        use regex::Regex;
+
+
+        // Define patterns to match
+        let patterns: Vec<(&str, &str, &str)> = vec![
+            // (display_name, regex_pattern, pattern_type_for_warnings)
+            // GitHub tokens
+            ("ghp_", r"ghp_[a-zA-Z0-9_]{36,}", "github-token"),
+            ("gho_", r"gho_[a-zA-Z0-9_]{36,}", "github-oauth"),
+            ("ghu_", r"ghu_[a-zA-Z0-9_]{36,}", "github-user"),
+            // AWS
+            ("AKIA", r"AKIA[0-9A-Z]{16}", "aws-akia"),
+            ("ASIA", r"ASIA[0-9A-Z]{16}", "aws-access-token"),
+            // OpenAI
+            ("sk-", r"sk-[a-zA-Z0-9_-]{20,}", "openai-api-key"),
+            // GitLab
+            ("glpat-", r"glpat-[a-zA-Z0-9_\-]{20,}", "gitlab-token"),
+            // Slack
+            ("xoxb-", r"xoxb-[a-zA-Z0-9_-]{10,}", "slack-token"),
+            ("xoxp-", r"xoxp-[a-zA-Z0-9_-]{10,}", "slack-token"),
+            // JWT
+            ("jwt", r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "jwt"),
+        ];
+
+        let mut all_matches: Vec<(usize, usize, String)> = Vec::new();
+        let mut warning_map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+        // Run all patterns and collect matches
+        for (name, pattern_str, warning_type) in patterns {
+            if let Ok(regex) = Regex::new(pattern_str) {
+                for caps in regex.find_iter(text) {
+                    let start = caps.start();
+                    let end = caps.end();
+                    let match_len = end - start;
+
+
+                    // Check for overlaps (keep LONGEST)
+                    let mut should_add = true;
+                    let mut indices_to_remove = Vec::new();
+
+                    for (idx, (s, e, _)) in all_matches.iter().enumerate() {
+                        if !(end <= *s || start >= *e) {
+                            // Overlap
+                            let existing_len = e - s;
+                            if match_len > existing_len {
+                                indices_to_remove.push(idx);
+                            } else {
+                                should_add = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Remove overlapping shorter matches
+                    for idx in indices_to_remove.iter().rev() {
+                        all_matches.remove(*idx);
+                    }
+
+                    if should_add {
+                        all_matches.push((start, end, warning_type.to_string()));
+                        *warning_map.entry(warning_type.to_string()).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+
+
+        // If no patterns found, return original
+        if all_matches.is_empty() {
             return RedactionResult {
                 redacted: text.to_string(),
                 warnings: Vec::new(),
             };
         }
 
-        // Collect ALL matches from ALL patterns with their positions
-        // Store (byte_start, byte_end, pattern_index) to avoid cloning strings
-        let mut all_matches: Vec<(usize, usize, usize)> = Vec::new(); 
-        
-        for (pattern_idx, (_name, regex)) in self.compiled_patterns.iter().enumerate() {
-            // Quick check: does this pattern match at all?
-            if !regex.is_match(text) {
-                continue;  // Skip this pattern entirely
-            }
-            
-            for caps in regex.captures_iter(text) {
-                if let Some(secret_or_full) = caps.get(1).or_else(|| caps.get(0)) {
-                    let byte_start = secret_or_full.start();
-                    let byte_end = secret_or_full.end();
-                    let match_len = byte_end - byte_start;
-                    
-                    // Check for overlaps with existing matches (keep LONGEST match)
-                    let mut should_add = true;
-                    let mut indices_to_remove = Vec::new();
-                    
-                    // Fast path: if no matches yet, just add
-                    if all_matches.is_empty() {
-                        all_matches.push((byte_start, byte_end, pattern_idx));
-                        continue;
-                    }
-                    
-                    for (idx, (s, e, _)) in all_matches.iter().enumerate() {
-                        if !(byte_end <= *s || byte_start >= *e) {
-                            // Ranges overlap
-                            let existing_len = e - s;
-                            if match_len > existing_len {
-                                // New match is longer, remove existing
-                                indices_to_remove.push(idx);
-                            } else {
-                                // Existing match is longer or equal, skip new
-                                should_add = false;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // Remove overlapping shorter matches (in reverse order to preserve indices)
-                    for idx in indices_to_remove.iter().rev() {
-                        all_matches.remove(*idx);
-                    }
-                    
-                    if should_add {
-                        all_matches.push((byte_start, byte_end, pattern_idx));
-                    }
-                }
-            }
-        }
-        
-        // Build warning map from collected matches
-        let mut warning_map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-        for (_, _, pattern_idx) in &all_matches {
-            let name = &self.compiled_patterns[*pattern_idx].0;
-            *warning_map.entry(name.clone()).or_insert(0) += 1;
-        }
-        
-        // Sort matches by byte position (descending) to redact from end to start
-        // This prevents byte offset issues when replacing strings
+        // Sort by position descending
         all_matches.sort_by(|a, b| b.0.cmp(&a.0));
-        
+
         let mut result = text.to_string();
-        
-        // Apply redactions in reverse order (from end to start)
-        // This ensures we don't invalidate positions of earlier matches
-        for (byte_start, byte_end, _pattern_idx) in all_matches {
-            // Convert byte positions to character positions for UTF-8 safety
-            // CRITICAL: Use char indices, not byte indices, to handle multi-byte UTF-8 chars correctly
+
+        // Apply redactions in reverse order
+        for (byte_start, byte_end, _pattern_name) in all_matches {
+            
+            // Convert to char positions
             let char_start = result[..byte_start].chars().count();
             let char_end = char_start + result[byte_start..byte_end].chars().count();
-            
-            // Extract the matched text using character positions
+
+
+            // Extract matched text
             let matched_chars: Vec<char> = result.chars().collect();
             let matched_text: String = matched_chars[char_start..char_end].iter().collect();
             
             let redacted = redact_preserve_length(&matched_text);
-            
-            // Replace in result string using character positions (character-aware)
+
+            // Replace
             let before: String = matched_chars[..char_start].iter().collect();
             let after: String = matched_chars[char_end..].iter().collect();
             result = format!("{}{}{}", before, redacted, after);
         }
-        
+
         let warnings: Vec<RedactionWarning> = warning_map
             .into_iter()
             .map(|(pattern_type, count)| RedactionWarning { pattern_type, count })
             .collect();
-        
+
+
         RedactionResult { redacted: result, warnings }
     }
-
-    // Fast-path filter: Check if text contains markers of potential secrets
-    // This avoids running 244 regex patterns on text that clearly has no secrets
 }
 
 
