@@ -302,6 +302,45 @@ impl ProxyConfig {
             per_path_rules: vec![],  // No per-path rules from env vars
         })
     }
+
+    /// Create a default proxy configuration
+    fn from_defaults() -> Self {
+        Self {
+            listen_addr: "0.0.0.0".to_string(),
+            listen_port: 9999,
+            upstream: FixedUpstream::parse("http://localhost:8000").unwrap(),
+            redaction_mode: RedactionMode::Redact,
+            detect_selector: PatternSelector::default_detect(),
+            redact_selector: PatternSelector::default_redact(),
+            per_path_rules: vec![],
+        }
+    }
+
+    /// Merge another config into this one (other config takes precedence)
+    /// This allows layering: CLI > ENV > File > Default
+    fn merge_from(&mut self, other: ProxyConfig) {
+        // Only override if other has non-default values
+        if other.listen_addr != "0.0.0.0" {
+            self.listen_addr = other.listen_addr;
+        }
+        if other.listen_port != 9999 {
+            self.listen_port = other.listen_port;
+        }
+        // Always update upstream if it's different
+        self.upstream = other.upstream;
+        
+        // Only update mode if it's not passthrough (the default)
+        if other.redaction_mode != RedactionMode::Passthrough {
+            self.redaction_mode = other.redaction_mode;
+        }
+        
+        // Update selectors
+        self.detect_selector = other.detect_selector;
+        self.redact_selector = other.redact_selector;
+        
+        // Extend per-path rules (don't replace, add to existing)
+        self.per_path_rules.extend(other.per_path_rules);
+    }
 }
 
 async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Result<()> {
@@ -647,14 +686,53 @@ async fn main() -> Result<()> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    // Try to load from config file first, fall back to environment variables
-    let config = Arc::new(
-        ProxyConfig::from_config_file()
-            .or_else(|e| {
-                warn!("Config file not found or invalid: {}. Falling back to environment variables.", e);
-                ProxyConfig::from_env()
-            })?
-    );
+    // Implement proper configuration precedence: CLI > ENV > File > Default
+    // Step 1: Start with defaults
+    let mut config = ProxyConfig::from_defaults();
+    info!("[config] Starting with defaults");
+
+    // Step 2: Load and merge file configuration (if present)
+    match ProxyConfig::from_config_file() {
+        Ok(file_config) => {
+            info!("[config] File configuration loaded, merging...");
+            config.merge_from(file_config);
+        }
+        Err(e) => {
+            info!("[config] No config file found: {}. Continuing with defaults.", e);
+        }
+    }
+
+    // Step 3: Load and merge environment variables
+    match ProxyConfig::from_env() {
+        Ok(env_config) => {
+            info!("[config] Environment configuration loaded, merging (overriding file)...");
+            config.merge_from(env_config);
+        }
+        Err(e) => {
+            // from_env might fail if SCRED_PROXY_UPSTREAM_URL is not set
+            // That's OK if we got it from file or have a default
+            if config.upstream.host.is_empty() {
+                // No upstream set - this is critical
+                eprintln!("ERROR: No upstream URL configured!");
+                eprintln!("Provide via: --upstream URL or config file or SCRED_PROXY_UPSTREAM_URL env var");
+                std::process::exit(1);
+            }
+            info!("[config] Env config not fully available ({}), using file/defaults", e);
+        }
+    }
+
+    let config = Arc::new(config);
+
+    // Log final configuration
+    info!("[config] FINAL CONFIGURATION:");
+    info!("[config]   Listen: {}:{}", config.listen_addr, config.listen_port);
+    info!("[config]   Upstream: {}://{}{}", config.upstream.scheme, config.upstream.authority(), config.upstream.base_path);
+    info!("[config]   Mode: {:?}", config.redaction_mode);
+    info!("[config]   Detect selector: {}", config.detect_selector.description());
+    info!("[config]   Redact selector: {}", config.redact_selector.description());
+    if !config.per_path_rules.is_empty() {
+        info!("[config]   Per-path rules: {}", config.per_path_rules.len());
+    }
 
     // Log redaction mode
     match config.redaction_mode {
