@@ -132,12 +132,17 @@ pub async fn handle_http_proxy(
         full_request.push_str(&String::from_utf8_lossy(&body));
     }
 
-    // REDACT request
-    // Store selector for potential use in actual filtering (future: implement in redaction engine)
-    let _detect_selector_ref = detect_selector.as_ref();
-    let _redact_selector_ref = redact_selector.as_ref();
-    
-    let redacted_request_result = redaction_engine.redact(&full_request);
+    // REDACT request with selector support
+    // If redact_selector is provided, create an engine with that selector
+    let redacted_request_result = if let Some(ref selector) = redact_selector {
+        let selective_engine = Arc::new(RedactionEngine::with_selector(
+            redaction_engine.config().clone(),
+            selector.clone(),
+        ));
+        selective_engine.redact(&full_request)
+    } else {
+        redaction_engine.redact(&full_request)
+    };
     let redacted_request = redacted_request_result.redacted;
 
     if !redacted_request_result.warnings.is_empty() {
@@ -187,11 +192,17 @@ pub async fn handle_http_proxy(
 
     let response_str = String::from_utf8_lossy(&response_buf).to_string();
 
-    // REDACT response
-    // Store selector for potential use in actual filtering (future: implement in redaction engine)
-    let _redact_selector_ref_response = redact_selector.as_ref();
-    
-    let redacted_response_result = redaction_engine.redact(&response_str);
+    // REDACT response with selector support
+    // If redact_selector is provided, create an engine with that selector
+    let redacted_response_result = if let Some(ref selector) = redact_selector {
+        let selective_engine = Arc::new(RedactionEngine::with_selector(
+            redaction_engine.config().clone(),
+            selector.clone(),
+        ));
+        selective_engine.redact(&response_str)
+    } else {
+        redaction_engine.redact(&response_str)
+    };
     let redacted_response = redacted_response_result.redacted.clone();
 
     if !redacted_response_result.warnings.is_empty() {

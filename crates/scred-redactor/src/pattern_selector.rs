@@ -67,7 +67,7 @@ impl PatternTier {
 }
 
 /// Flexible pattern selection modes
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PatternSelector {
     /// Select specific tiers (e.g., CRITICAL, API_KEYS, INFRASTRUCTURE)
     Tier(Vec<PatternTier>),

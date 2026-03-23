@@ -66,6 +66,11 @@ impl RedactionEngine {
         self.selector.as_ref()
     }
 
+    /// Get reference to the configuration
+    pub fn config(&self) -> &RedactionConfig {
+        &self.config
+    }
+
     pub fn redact(&self, text: &str) -> RedactionResult {
         if !self.config.enabled {
             return RedactionResult {
