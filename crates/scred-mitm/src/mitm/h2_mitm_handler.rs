@@ -137,10 +137,18 @@ impl H2MitmHandler {
 
         tracing::info!("[H2] Request body received: {} bytes", request_body.len());
 
-        // Apply redaction to request body if present
+        // Apply redaction to request body if present with selector support
         let redacted_body = if !request_body.is_empty() {
             let body_str = String::from_utf8_lossy(&request_body);
-            let redacted = engine.redact(&body_str);
+            let redacted = if !matches!(redact_patterns, scred_http::PatternSelector::None) {
+                let selective_engine = Arc::new(RedactionEngine::with_selector(
+                    engine.config().clone(),
+                    redact_patterns.clone(),
+                ));
+                selective_engine.redact(&body_str)
+            } else {
+                engine.redact(&body_str)
+            };
             Bytes::from(redacted.redacted.into_bytes())
         } else {
             Bytes::new()
