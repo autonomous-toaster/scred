@@ -40,7 +40,6 @@ pub mod logging;
 pub mod models;
 pub mod parser;
 pub mod pattern_metadata;
-pub mod pattern_selector;
 pub mod proxy_resolver;
 pub mod response_reader;
 pub mod secrets;

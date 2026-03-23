@@ -12,7 +12,7 @@
 /// - scred-proxy: Forward proxy with fixed upstream
 
 use anyhow::{anyhow, Result};
-use scred_redactor::RedactionEngine;
+use scred_redactor::{RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, info, warn, error};
@@ -45,9 +45,7 @@ impl Default for HttpProxyConfig {
 /// * `client_read` - Read half of client connection
 /// * `client_write` - Write half of client connection
 /// * `first_line` - Initial HTTP request line
-/// * `redaction_engine` - Engine for redacting secrets
-/// * `detect_selector` - Optional selector for secret detection
-/// * `redact_selector` - Optional selector for secret redaction
+/// * `redaction_engine` - Engine for redacting secrets (applies all patterns)
 /// * `upstream_addr` - Upstream server address (host:port)
 /// * `upstream_host` - Optional upstream hostname (for header rewriting)
 /// * `config` - Proxy configuration (headers, options)
@@ -56,8 +54,6 @@ pub async fn handle_http_proxy(
     mut client_write: tokio::net::tcp::OwnedWriteHalf,
     first_line: &str,
     redaction_engine: Arc<RedactionEngine>,
-    detect_selector: Option<scred_redactor::PatternSelector>,
-    redact_selector: Option<scred_redactor::PatternSelector>,
     upstream_addr: &str,
     upstream_host: Option<&str>,
     config: HttpProxyConfig,
@@ -132,24 +128,20 @@ pub async fn handle_http_proxy(
         full_request.push_str(&String::from_utf8_lossy(&body));
     }
 
-    // REDACT request with selector support
-    // If redact_selector is provided, create an engine with that selector
-    let redacted_request_result = if let Some(ref selector) = redact_selector {
-        let selective_engine = Arc::new(RedactionEngine::with_selector(
-            redaction_engine.config().clone(),
-            selector.clone(),
-        ));
-        selective_engine.redact(&full_request)
-    } else {
-        redaction_engine.redact(&full_request)
-    };
-    let redacted_request = redacted_request_result.redacted;
-
-    if !redacted_request_result.warnings.is_empty() {
+    // REDACT request using StreamingRedactor (standardized approach)
+    // StreamingRedactor handles all patterns consistently
+    let streaming_config = StreamingConfig::default();
+    let streaming_redactor = StreamingRedactor::new(
+        redaction_engine.clone(),
+        streaming_config,
+    );
+    let (redacted_request, redaction_stats) = streaming_redactor.redact_buffer(full_request.as_bytes());
+    
+    if redaction_stats.patterns_found > 0 {
         warn!(
             "HTTP proxy request: {} bytes, {} patterns detected (redacted to {} bytes)",
             full_request.len(),
-            redacted_request_result.warnings.len(),
+            redaction_stats.patterns_found,
             redacted_request.len()
         );
     } else {
@@ -192,24 +184,14 @@ pub async fn handle_http_proxy(
 
     let response_str = String::from_utf8_lossy(&response_buf).to_string();
 
-    // REDACT response with selector support
-    // If redact_selector is provided, create an engine with that selector
-    let redacted_response_result = if let Some(ref selector) = redact_selector {
-        let selective_engine = Arc::new(RedactionEngine::with_selector(
-            redaction_engine.config().clone(),
-            selector.clone(),
-        ));
-        selective_engine.redact(&response_str)
-    } else {
-        redaction_engine.redact(&response_str)
-    };
-    let redacted_response = redacted_response_result.redacted.clone();
+    // REDACT response using StreamingRedactor (standardized approach)
+    let (redacted_response, redaction_stats_response) = streaming_redactor.redact_buffer(response_str.as_bytes());
 
-    if !redacted_response_result.warnings.is_empty() {
+    if redaction_stats_response.patterns_found > 0 {
         warn!(
             "HTTP proxy response: {} bytes, {} patterns detected (redacted to {} bytes)",
             response_str.len(),
-            redacted_response_result.warnings.len(),
+            redaction_stats_response.patterns_found,
             redacted_response.len()
         );
     } else {
@@ -250,7 +232,7 @@ pub async fn handle_http_proxy(
     let final_response = if config.add_via_header || config.add_scred_header {
         inject_proxy_headers(
             &final_response,
-            &redacted_response_result,
+            &redaction_stats_response,
             &response_str,
             &config,
         )?
@@ -272,7 +254,7 @@ pub async fn handle_http_proxy(
 /// Inject Via and X-SCRED headers into HTTP response
 fn inject_proxy_headers(
     response: &str,
-    redaction_result: &scred_redactor::RedactionResult,
+    redaction_stats: &scred_redactor::StreamingStats,
     original_response: &str,
     config: &HttpProxyConfig,
 ) -> Result<String> {
@@ -291,11 +273,11 @@ fn inject_proxy_headers(
 
         if config.add_scred_header {
             let redacted_count = original_response.len() - response.len();
-            if redacted_count != 0 || !redaction_result.warnings.is_empty() {
+            if redacted_count != 0 || redaction_stats.patterns_found > 0 {
                 final_response.push_str(&format!(
                     "X-SCRED-Redacted: true ({} bytes redacted, {} patterns found)\r\n",
                     redacted_count,
-                    redaction_result.warnings.len()
+                    redaction_stats.patterns_found
                 ));
             } else {
                 final_response

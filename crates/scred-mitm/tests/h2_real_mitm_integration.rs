@@ -54,7 +54,7 @@ async fn test_h2_mitm_with_response_body() {
 
     // Setup: Create redaction engine
     let config = RedactionConfig::default();
-    let engine = Arc::new(RedactionEngine::new(&config));
+    let engine = Arc::new(RedactionEngine::new(config));
 
     // Setup: Create H2 MITM handler
     let handler = H2MitmHandler::new(

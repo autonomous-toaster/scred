@@ -39,8 +39,6 @@ pub async fn handle_http_proxy(
         client_write,
         first_line,
         redaction_engine,
-        None,  // detect_selector (Phase 5+)
-        None,  // redact_selector (Phase 5+)
         &upstream_addr,
         Some(&host),
         proxy_config,
