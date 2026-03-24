@@ -1,0 +1,197 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║              🔴 SCRED SECURITY AUDIT - CRITICAL FINDINGS                  ║
+║                                                                            ║
+║     Negative Bias Review | Code Inconsistency Audit | Vulnerability Test  ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+## AUDIT RESULTS
+
+Status: 🔴 NOT PRODUCTION READY
+Test Pass Rate: 2/17 (12%)
+Critical Issues Found: 3
+Severity: CRITICAL (Information Disclosure)
+
+## THREE CRITICAL VULNERABILITIES
+
+╔─ ISSUE #1: Character-Preserving Exposes Secret Patterns ─────────────────╗
+│                                                                            │
+│ Severity: 🔴 CRITICAL - Information Disclosure                           │
+│                                                                            │
+│ Problem: Redaction preserves character count + shows prefix patterns      │
+│                                                                            │
+│ Evidence:                                                                  │
+│   Input:  AWS_KEY=AKIAIOSFODNN7EXAMPLE                                   │
+│   Output: AWS_KEY=AKIAxxxxxxxxxxxxxxxx  ← AKIA prefix VISIBLE!           │
+│                                                                            │
+│ Attack: Attacker can enumerate AWS keys knowing:                         │
+│   - Format (AKIA prefix)                                                  │
+│   - Length (20 characters)                                                │
+│   - Character classes (alphanumeric)                                      │
+│                                                                            │
+│ Impact: Compliance violation, entropy reduction, brute-force feasible    │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+╔─ ISSUE #2: Selective Un-redaction Blind Restoration Bug ──────────────────╗
+│                                                                            │
+│ Severity: 🔴 CRITICAL - Information Disclosure                           │
+│                                                                            │
+│ Problem: selective_unredate() restores ALL redactions without pattern    │
+│          tracking, exposing secrets when --redact filters applied         │
+│                                                                            │
+│ Code Location: crates/scred-http/src/configurable_engine.rs (line 253)  │
+│                                                                            │
+│ Attack Scenario:                                                           │
+│   $ echo "AWS=AKIAIOSFODNN7EXAMPLE STRIPE=sk_live_1234" | \              │
+│     scred --detect ALL --redact CRITICAL                                 │
+│                                                                            │
+│   Expected (AWS redacted, Stripe visible):                               │
+│   AWS=AKIAxxxxxxxxxxxxxxx STRIPE=sk_live_1234                            │
+│                                                                            │
+│   ACTUAL (BUG - both exposed):                                           │
+│   AWS=AKIAIOSFODNN7EXAMPLE STRIPE=sk_live_1234  ← ALL LEAKED!            │
+│                                                                            │
+│ Why Hidden: Tests only use single pattern types                          │
+│                                                                            │
+│ Impact: Multi-secret scenarios leak ALL secrets                          │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+╔─ ISSUE #3: Pattern Detection Inconsistency ──────────────────────────────────╗
+│                                                                            │
+│ Severity: 🔴 CRITICAL - Missed Secret Detection                          │
+│                                                                            │
+│ Problem: Only subset of patterns actually detect/redact; many critical   │
+│          patterns missing or incomplete                                   │
+│                                                                            │
+│ Evidence from Integration Tests:                                          │
+│   AWS AKIA     ✅ Detected (but prefix visible)                          │
+│   Stripe keys  ❌ NOT DETECTED - visible in output!                      │
+│   GitHub PAT   ❌ NOT DETECTED - visible in output!                      │
+│   MongoDB URL  ❌ NOT DETECTED - visible in output!                      │
+│   JWT tokens   ❌ NOT DETECTED - visible in output!                      │
+│                                                                            │
+│ Test Results: 15/17 Failed                                               │
+│   - AWS key tests: FAIL (prefix visible)                                 │
+│   - Stripe tests: FAIL (not detected)                                    │
+│   - GitHub tests: FAIL (not detected)                                    │
+│   - Env file tests: FAIL (mixed redaction)                               │
+│   - Multi-pattern tests: FAIL (blind restoration)                        │
+│                                                                            │
+│ Impact: API keys, database passwords, tokens leak unredacted             │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+## CROSS-COMPONENT VULNERABILITY CHAIN
+
+CLI Path (BROKEN):
+  Input → ConfigurableEngine.detect_and_redact()
+    ↓
+  RedactionEngine.redact() [partial detection]
+    ↓
+  selective_unredate() ← BUG: Blind restoration
+    ↓
+  Output: Secrets visible + prefixes exposed
+
+Proxy Path (UNKNOWN CONSISTENCY):
+  Client Request → StreamingRedactor.redact_buffer()
+    ↓
+  stream_request_to_upstream() ← Different code path than CLI
+    ↓
+  Behavior unclear vs CLI
+
+MITM Path (UNKNOWN CONSISTENCY):
+  TLS Decryption → h2_mitm_handler.rs → StreamingRedactor
+    ↓
+  h2_upstream_forwarder.rs ← Different code path than proxy/CLI
+    ↓
+  Behavior unclear vs both
+
+
+## SECURITY TEST RESULTS
+
+Shell script: security_audit_integration_tests.sh
+
+Results:
+  ✅ PASS: httpbin.org connectivity (2/17)
+  ❌ FAIL: AWS AKIA partial redaction
+  ❌ FAIL: Stripe keys not redacted
+  ❌ FAIL: GitHub tokens not redacted
+  ❌ FAIL: MongoDB passwords not redacted
+  ❌ FAIL: JWT tokens not redacted
+  ❌ FAIL: Selective filtering (blind restoration)
+  ❌ FAIL: Multi-pattern consistency
+  ❌ FAIL: Large input streaming
+  ❌ FAIL: Format consistency
+
+Pass Rate: 2/17 (12%)
+
+## FILES CREATED
+
+1. SECURITY_AUDIT_CRITICAL_FINDINGS.md (11 KB)
+   - Detailed vulnerability analysis
+   - Attack scenarios
+   - Root causes
+   - Remediation timeline
+
+2. security_audit_integration_tests.sh (9 KB)
+   - 13 integration tests
+   - CLI pattern tests
+   - Proxy redaction tests
+   - httpbin.org integration
+   - Selective filtering check
+
+3. crates/scred-http/tests/security_audit_selective_unredate.rs (10 KB)
+   - Unit tests demonstrating bugs
+   - Multi-pattern tests
+   - Cross-component consistency tests
+
+4. This file: SECURITY_AUDIT_NEGATIVE_BIAS_SUMMARY.txt
+
+## IMMEDIATE ACTION REQUIRED
+
+Priority 1 (TODAY):
+  [ ] Disable selective_unredate() function
+  [ ] Document character-preserving limitation
+  [ ] Mark as NOT PRODUCTION READY
+
+Priority 2 (24 hours):
+  [ ] Identify all non-working patterns
+  [ ] Create test suite for each pattern
+  [ ] Implement missing patterns
+
+Priority 3 (1 week):
+  [ ] Fix selective un-redaction with position tracking
+  [ ] Complete integration testing
+  [ ] Security review with external expert
+
+## RECOMMENDATIONS
+
+🛑 DO NOT DEPLOY TO PRODUCTION until:
+
+1. Selective un-redaction bug is fixed (not just disabled)
+2. All 272 patterns verified working (not just 50-100)
+3. Cross-component consistency tests passing (CLI vs Proxy vs MITM)
+4. Character-preserving limitation documented (for compliance)
+5. Security review clearance from external auditor
+
+## CONCLUSION
+
+The SCRED system has fundamental security issues that prevent production deployment:
+
+- Secrets ARE still identifiable despite "redaction"
+- Selective filtering LEAKS secrets instead of filtering
+- Missing patterns mean undetected secrets
+- No consistency between CLI, proxy, and MITM paths
+
+The previous assessment that "system is production-ready" was based on:
+- Limited positive bias testing (not comprehensive)
+- No negative bias security auditing
+- No multi-pattern test scenarios
+- No cross-component consistency checks
+
+Recommendation: **Comprehensive security fix needed before any deployment**
+
+═════════════════════════════════════════════════════════════════════════════════
