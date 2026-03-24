@@ -1,4 +1,7 @@
 # Build artifacts - Zig
+crates/scred-pattern-detector/.zig-cache/
+crates/scred-pattern-detector/__.SYMDEF
+crates/scred-pattern-detector/*.o
 scred-zig/zig-cache/
 scred-zig/zig-out/
 scred-zig/.zig-cache/
@@ -7,6 +10,7 @@ scred-zig/main_final
 scred-zig/main_optimized
 scred-zig/main.o
 scred-zig/*.a
+
 
 # Build artifacts - Rust
 scred-rust/target/
