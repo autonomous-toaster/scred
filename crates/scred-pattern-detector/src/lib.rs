@@ -704,3 +704,119 @@ pub fn get_all_patterns() -> Vec<PatternInfo> {
     
     patterns
 }
+// ============================================================================
+// PHASE 2: METADATA FFI BINDINGS (Task 3)
+// ============================================================================
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct PatternMetadataFFI {
+    // Identity fields
+    pub name: *const u8,
+    pub name_len: usize,
+    
+    // Classification
+    pub tier: u8,           // 0-4: critical, api_keys, infrastructure, services, patterns
+    pub category: u8,       // 0-5: simple_prefix, fixed, minlen, variable, jwt, regex
+    pub risk_score: u8,     // 0-100
+    pub ffi_path: u8,       // 0-6: match_prefix, charset, length, minlen, variable, jwt, regex
+    
+    // Prefix information
+    pub prefix: *const u8,
+    pub prefix_len: u16,
+    
+    // Charset type
+    pub charset_type: u8,   // 0-5: alphanumeric, hex, base64, base64url, numeric, any
+    
+    // Length constraints
+    pub min_length: u16,
+    pub max_length: u16,
+    pub fixed_length: u16,  // 0 if variable
+    
+    // Regex pattern
+    pub regex_pattern: *const u8,
+    pub regex_len: usize,
+    
+    // Example secret
+    pub example_secret: *const u8,
+    pub example_len: usize,
+    
+    // Tags (comma-separated)
+    pub tags: *const u8,
+    pub tags_len: usize,
+}
+
+extern "C" {
+    /// Get pattern metadata by name
+    pub fn scred_pattern_get_metadata_by_name(
+        name: *const u8,
+        name_len: usize,
+    ) -> PatternMetadataFFI;
+    
+    /// Get pattern metadata by index
+    pub fn scred_pattern_get_metadata_by_index(index: usize) -> PatternMetadataFFI;
+    
+    /// Get pattern tier by name
+    pub fn scred_pattern_get_tier(
+        name: *const u8,
+        name_len: usize,
+    ) -> u8;
+    
+    /// Get total pattern count
+    pub fn scred_pattern_count() -> usize;
+    
+    /// Check if pattern is in tier
+    pub fn scred_pattern_in_tier(
+        name: *const u8,
+        name_len: usize,
+        tier: u8,
+    ) -> bool;
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn test_metadata_pattern_count() {
+        unsafe {
+            let count = scred_pattern_count();
+            println!("Total patterns: {}", count);
+            assert_eq!(count, 274, "Expected 274 patterns");
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_metadata_by_index() {
+        unsafe {
+            let metadata = scred_pattern_get_metadata_by_index(0);
+            println!("First pattern name length: {}", metadata.name_len);
+            assert!(!metadata.name.is_null());
+            assert!(metadata.name_len > 0);
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_get_tier() {
+        unsafe {
+            let name = b"aws-access-key";
+            let tier = scred_pattern_get_tier(name.as_ptr(), name.len());
+            println!("AWS pattern tier: {}", tier);
+            assert_ne!(tier, 255);
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_pattern_in_tier() {
+        unsafe {
+            let name = b"github-token";
+            let in_tier = scred_pattern_in_tier(name.as_ptr(), name.len(), 1);
+            println!("GitHub token in tier 1: {}", in_tier);
+            assert!(in_tier);
+        }
+    }
+}

@@ -199,3 +199,17 @@ mod jwt_real_test {
         assert!(result.redacted.starts_with("eyJ"), "Should preserve prefix");
     }
 }
+
+// ============================================================================
+// PHASE 3-4: METADATA CACHE AND PATTERN SELECTOR MODULES
+// ============================================================================
+
+pub mod metadata_cache;
+pub mod pattern_selector;
+
+pub use metadata_cache::{
+    MetadataCache, PatternMetadata, RiskTier, PatternCategory, FFIPath, Charset,
+    get_cache, initialize_cache, METADATA_CACHE,
+};
+
+pub use pattern_selector::PatternSelector;
