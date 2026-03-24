@@ -5,7 +5,7 @@ use scred_http::fixed_upstream::FixedUpstream;
 use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequestConfig};
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
 use scred_http::{dns_resolver::DnsResolver, http_line_reader::read_response_line};
-use scred_http::{PatternSelector};
+use scred_http::{PatternSelector, ConfigurableEngine};
 use scred_http_redactor::H2Redactor;
 use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::env;
@@ -422,6 +422,25 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
     info!("[{}] Detect selector: {}", peer_addr, config.detect_selector.description());
     info!("[{}] Redact selector: {}", peer_addr, config.redact_selector.description());
     
+    // In Detect mode, create ConfigurableEngine for detection logging
+    let detection_engine = if config.redaction_mode == RedactionMode::Detect {
+        let mut engine = ConfigurableEngine::with_defaults(redaction_engine.clone());
+        engine.set_detect_selector(config.detect_selector.clone());
+        
+        // Log detected secrets in request line
+        let detected_in_line = engine.detect_only(&first_line);
+        if !detected_in_line.is_empty() {
+            info!("[{}] [DETECT] {} secrets found in request line:", peer_addr, detected_in_line.len());
+            for warning in &detected_in_line {
+                info!("[{}]   - {} (count: {})", peer_addr, warning.pattern_type, warning.count);
+            }
+        }
+        
+        Some(engine)
+    } else {
+        None
+    };
+    
     // Phase 4: Create StreamingRedactor with selector support
     // The selector is now passed through to filter patterns during streaming redaction
     let redactor = Arc::new(StreamingRedactor::with_selector(
@@ -808,9 +827,9 @@ mod tests {
             },
         ];
 
-        // Test exact match
-        assert!(!ProxyConfig::path_matches(&rules[0].path_pattern, "/health"));
-        // Test wildcard match
+        // Test exact match - /health pattern SHOULD match /health path
+        assert!(ProxyConfig::path_matches(&rules[0].path_pattern, "/health"));
+        // Test wildcard match - /api/internal/* pattern SHOULD match /api/internal/users
         assert!(ProxyConfig::path_matches(&rules[1].path_pattern, "/api/internal/users"));
     }
 }
