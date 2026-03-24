@@ -131,7 +131,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     
-    if env::var("SCRED_REDACT_PATTERNS").is_ok() && !args.iter().any(|a| a == "--redact") {
+    // Always check SCRED_REDACT_PATTERNS env var (unless CLI --redact-patterns overrides it)
+    if env::var("SCRED_REDACT_PATTERNS").is_ok() && !args.iter().any(|a| a == "--redact-patterns") {
         let env_redact = env::var("SCRED_REDACT_PATTERNS")?;
         match config.proxy.set_redact_patterns(&env_redact) {
             Ok(_) => info!("✅ ENV: Pattern redact selector from SCRED_REDACT_PATTERNS"),

@@ -141,17 +141,13 @@ impl StreamingRedactor {
                 // For now: assume selector checks by pattern_type string
                 // TODO: Map pattern_type to PatternTier for proper filtering
                 // Check if this pattern type name matches the selector
-                // (simplified: assume Whitelist checks pattern names)
+                // (simplified: assume Patterns checks pattern names)
                 let should_redact = match selector {
                     crate::pattern_selector::PatternSelector::All => true,
-                    crate::pattern_selector::PatternSelector::None => false,
-                    crate::pattern_selector::PatternSelector::Whitelist(patterns) => {
+                    crate::pattern_selector::PatternSelector::Patterns(patterns) => {
                         patterns.contains(&m.pattern_type)
                     }
-                    crate::pattern_selector::PatternSelector::Blacklist(patterns) => {
-                        !patterns.contains(&m.pattern_type)
-                    }
-                    _ => true, // Tier/Regex/Wildcard: default to redacting for safety
+                    _ => true, // Other selectors: default to redacting for safety
                 };
 
                 if !should_redact {

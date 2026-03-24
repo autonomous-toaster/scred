@@ -40,14 +40,12 @@ fn main() {
         panic!("No Zig library found (liblib.a or lib.a)");
     }
     
-    // Link to Zig library and PCRE2
+    // Link to Zig library - apply to ALL targets (lib, tests, bins)
     println!("cargo:rustc-link-search=native={}", out_dir.display());
     println!("cargo:rustc-link-lib=static=scred_pattern_detector");
     
-    // Also link for binaries
-    println!("cargo:rustc-link-search=native={}", out_dir.display());
-    println!("cargo:rustc-link-lib=static=scred_pattern_detector");
+    // Force whole archive on macOS (needed for FFI exports)
+    println!("cargo:rustc-link-arg=-Wl,-force_load,{}/libscred_pattern_detector.a", out_dir.display());
     
     println!("cargo:rerun-if-changed=src/lib.zig");
 }
-

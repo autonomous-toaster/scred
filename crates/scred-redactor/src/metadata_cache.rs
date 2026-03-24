@@ -41,7 +41,7 @@ pub struct PatternMetadata {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum RiskTier {
     Critical,
     ApiKeys,
@@ -86,6 +86,16 @@ impl RiskTier {
         match self {
             RiskTier::Critical | RiskTier::ApiKeys => true,
             _ => false,
+        }
+    }
+    
+    pub fn name(&self) -> &'static str {
+        match self {
+            RiskTier::Critical => "CRITICAL",
+            RiskTier::ApiKeys => "API_KEYS",
+            RiskTier::Infrastructure => "INFRASTRUCTURE",
+            RiskTier::Services => "SERVICES",
+            RiskTier::Patterns => "PATTERNS",
         }
     }
 }
@@ -185,7 +195,7 @@ pub struct MetadataCache {
 impl MetadataCache {
     /// Initialize cache from FFI
     pub fn new() -> Self {
-        let mut cache = MetadataCache {
+        let cache = MetadataCache {
             patterns_by_name: HashMap::new(),
             patterns_by_tier: HashMap::new(),
             patterns_by_tag: HashMap::new(),
@@ -225,6 +235,16 @@ impl MetadataCache {
             stats.insert(tier.clone(), patterns.len());
         }
         stats
+    }
+    
+    /// Get all pattern names as iterator (public accessor)
+    pub fn all_pattern_names(&self) -> impl Iterator<Item = &String> {
+        self.patterns_by_name.keys()
+    }
+    
+    /// Get all patterns as iterator (public accessor)
+    pub fn all_patterns(&self) -> impl Iterator<Item = (&String, &PatternMetadata)> {
+        self.patterns_by_name.iter()
     }
 }
 

@@ -13,8 +13,7 @@ pub struct DetectionEvent {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone)]
-#[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct ExportedPattern {
     pub name: [u8; 128],
     pub prefix: [u8; 256],
@@ -681,6 +680,8 @@ pub struct PatternInfo {
 
 /// Get all patterns from the Zig detector (source of truth)
 pub fn get_all_patterns() -> Vec<PatternInfo> {
+    use std::ffi::CStr;
+    
     let mut patterns = Vec::new();
     
     unsafe {
@@ -689,14 +690,23 @@ pub fn get_all_patterns() -> Vec<PatternInfo> {
             let mut exported = std::mem::zeroed::<ExportedPattern>();
             let result = scred_detector_get_pattern(i, &mut exported);
             if result != 0 {
-                let name = String::from_utf8_lossy(&exported.name).trim_end_matches('\0').to_string();
-                let prefix = String::from_utf8_lossy(&exported.prefix).trim_end_matches('\0').to_string();
-                let min_len = exported.min_len;
+                // Use CStr to read null-terminated strings correctly
+                let name = CStr::from_bytes_until_nul(&exported.name)
+                    .ok()
+                    .and_then(|s| s.to_str().ok())
+                    .unwrap_or("INVALID")
+                    .to_string();
+                    
+                let prefix = CStr::from_bytes_until_nul(&exported.prefix)
+                    .ok()
+                    .and_then(|s| s.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
                 
                 patterns.push(PatternInfo {
                     name,
                     prefix,
-                    min_len,
+                    min_len: exported.min_len,
                 });
             }
         }
@@ -819,4 +829,59 @@ mod metadata_tests {
             assert!(in_tier);
         }
     }
+}
+
+// ============================================================================
+// WAVE 3: SIMD-OPTIMIZED VALIDATORS - FFI EXPORTS
+// ============================================================================
+
+extern "C" {
+    /// WAVE 3: Bearer Token OAuth2 Validator (ROI: 90, Target: 15-20x)
+    pub fn validate_bearer_token_simd(
+        data: *const u8,
+        data_len: usize,
+    ) -> bool;
+
+    /// WAVE 3: IPv4 Address Validator (ROI: 85, Target: 15-25x)
+    pub fn validate_ipv4_simd(
+        data: *const u8,
+        data_len: usize,
+    ) -> bool;
+
+    /// WAVE 3: Credit Card Number Validator (ROI: 80, Target: 20-30x)
+    pub fn validate_credit_card_simd(
+        data: *const u8,
+        data_len: usize,
+    ) -> bool;
+
+    /// WAVE 3: AWS Secret Access Key Validator (ROI: 75, Target: 6-10x)
+    pub fn validate_aws_secret_key_simd(
+        data: *const u8,
+        data_len: usize,
+    ) -> bool;
+
+    /// WAVE 3: Email Address Validator (ROI: 60, Target: 12-18x)
+    pub fn validate_email_simd(
+        data: *const u8,
+        data_len: usize,
+    ) -> bool;
+
+    /// WAVE 3: Phone Number Validator (ROI: 65, Target: 10-15x)
+    pub fn validate_phone_number_simd(
+        data: *const u8,
+        data_len: usize,
+    ) -> bool;
+
+    /// WAVE 3: Git Repository URL Validator (ROI: 70, Target: 6-10x)
+    pub fn validate_git_repo_url_simd(
+        data: *const u8,
+        data_len: usize,
+    ) -> bool;
+
+    /// WAVE 3: API Key Generic Validator (ROI: 55, Target: 8-12x)
+    pub fn validate_api_key_generic_simd(
+        prefix_type: u8,
+        data: *const u8,
+        data_len: usize,
+    ) -> bool;
 }

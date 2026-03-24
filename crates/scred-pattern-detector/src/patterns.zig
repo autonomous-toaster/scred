@@ -507,7 +507,6 @@ pub fn startsWith(input: []const u8, prefix: []const u8) bool {
 pub fn matchAdafruitio(input: []const u8) bool {
     const prefix = "aio_";
     const required_length = 32; // 4 + 28
-    const token_length = 28;
     
     if (input.len != required_length) return false;
     if (!startsWith(input, prefix)) return false;

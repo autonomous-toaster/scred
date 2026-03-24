@@ -12,6 +12,7 @@ pub mod detector;
 pub mod redactor;
 pub mod streaming;
 pub mod pattern_selector;
+pub mod metadata_cache;
 
 // ============================================================================
 // PUBLIC API - PRIMARY EXPORTS
@@ -37,7 +38,8 @@ pub fn redact_text(text: &str) -> String {
 }
 
 // Pattern selector for filtering patterns
-pub use pattern_selector::{PatternSelector, PatternTier};
+pub use pattern_selector::PatternSelector;
+pub use metadata_cache::RiskTier as PatternTier;
 
 // Pattern info function (used by CLI and other tools)
 pub fn get_all_patterns() -> Vec<scred_pattern_detector::PatternInfo> {
@@ -201,15 +203,11 @@ mod jwt_real_test {
 }
 
 // ============================================================================
-// PHASE 3-4: METADATA CACHE AND PATTERN SELECTOR MODULES
+// Metadata Cache (removed - was duplicate definition)
 // ============================================================================
-
-pub mod metadata_cache;
-pub mod pattern_selector;
 
 pub use metadata_cache::{
     MetadataCache, PatternMetadata, RiskTier, PatternCategory, FFIPath, Charset,
     get_cache, initialize_cache, METADATA_CACHE,
 };
 
-pub use pattern_selector::PatternSelector;
