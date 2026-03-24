@@ -7,9 +7,11 @@
 //! - `models`: HttpRequest, HttpResponse data structures
 //! - `connect`: HTTP CONNECT tunneling for HTTPS proxies
 //!
-//! ## Content Analysis & Redaction
-//! - `scred_http_detector`: Analyze HTTP content for sensitive data
-//! - `scred_http_redactor`: Redact sensitive HTTP headers and bodies
+//! ## Redaction
+//! - `configurable_engine`: Pattern detection and selective redaction
+//! - `streaming_request`: Stream request bodies through redactor
+//! - `streaming_response`: Stream response bodies through redactor
+//! - `chunked_parser`: Parse HTTP chunked transfer-encoding
 //!
 //! ## Proxy Utilities
 //! - `duplex`: Combined AsyncRead + AsyncWrite socket wrapper
@@ -51,9 +53,6 @@ pub mod chunked_parser;
 pub mod upstream_h2_client;
 pub mod env_detection;
 
-// Re-export detector and redactor
-pub use scred_http_detector::{self, ContentAnalyzer};
-pub use scred_http_redactor::{self, HttpRedactor};
 // Re-export pattern selector from scred_redactor (single source of truth)
 pub use scred_redactor::pattern_selector::{PatternSelector, PatternTier};
 pub use pattern_metadata::get_pattern_tier;
