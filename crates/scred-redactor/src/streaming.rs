@@ -84,7 +84,7 @@ impl StreamingRedactor {
         Self::new(engine, StreamingConfig::default())
     }
 
-    /// Process a chunk of data with lookahead buffer management
+    /// Process a chunk of data with lookahead buffer management and selective filtering
     /// 
     /// # Arguments
     /// * `chunk` - Raw bytes to process
@@ -92,7 +92,16 @@ impl StreamingRedactor {
     /// * `is_eof` - Whether this is the final chunk
     /// 
     /// # Returns
-    /// Tuple of (output_data, updated_lookahead, stats_for_this_chunk)
+    /// Tuple of (output_data, bytes_written, patterns_found)
+    /// 
+    /// # How Selective Filtering Works
+    /// 
+    /// 1. Combine lookahead + new chunk
+    /// 2. Redact ALL patterns (get metadata about each match)
+    /// 3. For matches in the output region:
+    ///    - If selector exists and pattern doesn't match -> un-redact
+    ///    - Otherwise -> keep redacted
+    /// 4. Output result with selective un-redaction applied
     pub fn process_chunk(
         &self,
         chunk: &[u8],
@@ -103,42 +112,76 @@ impl StreamingRedactor {
         let mut combined = lookahead.clone();
         combined.extend_from_slice(chunk);
 
-        // Redact combined data
+        // Redact combined data and get ALL match metadata
         let combined_str = String::from_utf8_lossy(&combined);
         let redacted_result = self.engine.redact(&combined_str);
-        let redacted = &redacted_result.redacted;
+        let mut output = redacted_result.redacted.clone();
 
-        // Count patterns
-        let patterns_found = redacted_result.warnings.len() as u64;
+        // Count ALL patterns found
+        let patterns_found = redacted_result.matches.len() as u64;
 
-        // Calculate how much to output
+        // Calculate output boundaries
         let output_end = if is_eof {
-            // Final chunk: output everything
-            redacted.len()
-        } else if redacted.len() > self.config.lookahead_size {
-            // Normal chunk: keep lookahead for next iteration
-            redacted.len() - self.config.lookahead_size
+            output.len()
+        } else if output.len() > self.config.lookahead_size {
+            output.len() - self.config.lookahead_size
         } else {
-            // Small chunk: buffer everything
             0
         };
 
-        // Prepare output
-        let output = if output_end > 0 {
-            redacted[..output_end].to_string()
+        // **NEW: Apply selective filtering**
+        // For each match in the output region, check if it should stay redacted
+        if let Some(selector) = &self.selector {
+            for m in &redacted_result.matches {
+                // Only filter matches in the output region (not in lookahead)
+                if m.position >= output_end {
+                    continue; // This match will be saved for next iteration
+                }
+
+                // For now: assume selector checks by pattern_type string
+                // TODO: Map pattern_type to PatternTier for proper filtering
+                // Check if this pattern type name matches the selector
+                // (simplified: assume Whitelist checks pattern names)
+                let should_redact = match selector {
+                    crate::pattern_selector::PatternSelector::All => true,
+                    crate::pattern_selector::PatternSelector::None => false,
+                    crate::pattern_selector::PatternSelector::Whitelist(patterns) => {
+                        patterns.contains(&m.pattern_type)
+                    }
+                    crate::pattern_selector::PatternSelector::Blacklist(patterns) => {
+                        !patterns.contains(&m.pattern_type)
+                    }
+                    _ => true, // Tier/Regex/Wildcard: default to redacting for safety
+                };
+
+                if !should_redact {
+                    // UN-REDACT: Replace redacted text back with original
+                    let start = m.position;
+                    let end = start + m.redacted_text.len();
+
+                    if start < output.len() && end <= output.len() {
+                        output.replace_range(start..end, &m.original_text);
+                    }
+                }
+            }
+        }
+
+        // Prepare final output
+        let output_text = if output_end > 0 {
+            output[..output_end].to_string()
         } else {
             String::new()
         };
 
         // Save new lookahead for next iteration
-        if !is_eof && output_end < redacted.len() {
-            *lookahead = redacted[output_end..].as_bytes().to_vec();
+        if !is_eof && output_end < output.len() {
+            *lookahead = output[output_end..].as_bytes().to_vec();
         } else {
             lookahead.clear();
         }
 
-        let bytes_written = output.len() as u64;
-        (output, bytes_written, patterns_found)
+        let bytes_written = output_text.len() as u64;
+        (output_text, bytes_written, patterns_found)
     }
 
     /// Convenience method: process a complete buffer (one-shot)

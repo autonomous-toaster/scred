@@ -26,9 +26,15 @@ pub use scred_pattern_detector;
 
 // Legacy API (for backward compatibility with http/mitm/proxy crates)
 pub use redactor::{
-    RedactionEngine, RedactionConfig, RedactionResult, RedactionWarning,
-    redact_text,
+    RedactionEngine, RedactionConfig, RedactionResult, RedactionWarning, PatternMatch,
 };
+
+// Convenience function for simple redaction
+pub fn redact_text(text: &str) -> String {
+    let engine = RedactionEngine::new(RedactionConfig::default());
+    let result = engine.redact(text);
+    result.redacted
+}
 
 // Pattern selector for filtering patterns
 pub use pattern_selector::{PatternSelector, PatternTier};
