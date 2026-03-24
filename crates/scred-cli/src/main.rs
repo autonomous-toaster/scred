@@ -287,50 +287,16 @@ fn list_patterns() {
     use scred_http::PatternTier;
     use std::collections::BTreeMap;
     
-    // Get all pattern names from metadata (most reliable source)
-    // These are extracted from pattern_metadata.rs
-    let pattern_names = vec![
-        // CRITICAL tier
-        "1password-svc-token", "anthropic", "aws-akia", "aws-access-token", "aws-secret-access-key",
-        "aws-session-token", "aws-mfa-serial", "github-token", "github-pat", "github-oauth",
-        "github-user", "github-server", "github-refresh", "stripe-api-key", "stripe-restricted-key",
-        "stripe-payment-intent", "stripepaymentintent-2", "shopify-app-password", "openaiadmin", 
-        "sk-admin-", "context7-api-key", "context7-secret", "mongodb", "braintree-api-key",
-        
-        // API_KEYS tier
-        "apideck", "artifactory-api-key", "artifactory-reference-token", "assertible", "atlassian",
-        "checkr-personal-access-token", "circleci-personal-access-token", "coinbase", "contentful-personal-access-token",
-        "databricks-token", "datadog-api-key", "digicert-api-key", "duffel-api-token", "dynatrace-api-token",
-        "easypost-api-token", "expo-access-token", "figma-token", "fleetbase", "flutterwave", "flutterwave-public-key",
-        "gandi-api-key", "generic-api-key", "gitee-access-token", "gitlab-token", "google-cloud-api-key",
-        "google-gemini", "grafana", "grafana-api-key", "heroku-api-key", "hubspot-api-key", "huggingface-token",
-        "mailchimp-api-key", "mailgun-api-key", "mapbox-token", "minio-access-key", "new-relic-api-key",
-        "notion-api-key", "npm-token", "npmtokenv2", "okta", "okta-api-token", "openai", "openai-api-key",
-        "pagarme", "pagerduty-api-key", "pagertree-api-token", "planetscale-1", "planetscale-password",
-        "planetscaledb-1", "postman-api-key", "pypi-upload-token", "ramp", "razorpay-api-key", "rubygems",
-        "salad-cloud-api-key", "sendgrid-api-key", "sentry-access-token", "sentryorgtoken", "slack-token",
-        "snyk-api-token", "square-api-key", "supabase-api-key", "telegram-bot-token", "travisoauth",
-        "tumblr-api-key", "twilio-api-key", "twitch-oauth-token", "upstash-redis", "vercel-token",
-        
-        // INFRASTRUCTURE tier
-        "api-key-header", "authorization-header", "azure-ad-client-secret", "azure-api-key", "azure-app-config",
-        "azure-batch", "azure-cosmosdb", "azure-storage", "basic-auth", "bearer-token", "consul-token",
-        "docker-login-token", "docker-registry-token", "ecr-registry-token", "etcd-password", "getdns",
-        "ghcr-token", "k8s-bearer-token", "k8s-service-account-token", "kubelet-token", "postgres",
-        "prometheus-bearer-token", "private-key", "privatekey", "vault-token", "vault-unseal-key",
-        
-        // SERVICES & PATTERNS tiers
-        "linearapi", "linear-api-key", "discord-webhook",
-        "jwt", "jwt-generic",
-    ];
-    
+    // Get all patterns directly from Zig detector (single source of truth)
+    let all_patterns = get_all_patterns();
+    let pattern_names: Vec<String> = all_patterns.iter().map(|p| p.name.clone()).collect();
     let total = pattern_names.len();
     
     // Group patterns by tier
     let mut tiers: BTreeMap<String, Vec<String>> = BTreeMap::new();
     
     for pattern_name in pattern_names {
-        let tier = get_pattern_tier(pattern_name);
+        let tier = get_pattern_tier(&pattern_name);
         let tier_str = match tier {
             PatternTier::Critical => "CRITICAL (95%)".to_string(),
             PatternTier::ApiKeys => "API_KEYS (80%)".to_string(),
