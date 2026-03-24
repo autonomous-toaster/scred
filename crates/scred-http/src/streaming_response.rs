@@ -20,9 +20,6 @@ pub struct StreamingResponseConfig {
     pub debug: bool,
     /// Add X-SCRED-Redacted header to response
     pub add_scred_header: bool,
-    /// Pattern selector for filtering which patterns to redact
-    /// If None, all patterns are redacted (backward compatible)
-    pub redact_selector: Option<crate::PatternSelector>,
 }
 
 impl Default for StreamingResponseConfig {
@@ -30,33 +27,10 @@ impl Default for StreamingResponseConfig {
         Self {
             debug: false,
             add_scred_header: true,
-            redact_selector: None,
         }
     }
 }
 
-/// Helper: Apply selector filtering to redacted text
-/// If selector is None, returns redacted text as-is (backward compatible)
-/// If selector is Some, uses ConfigurableEngine to filter which patterns stay redacted
-fn apply_selector_filtering(
-    text: &str,
-    redacted: &str,
-    selector: Option<&crate::PatternSelector>,
-    engine: &Arc<scred_redactor::RedactionEngine>,
-) -> String {
-    if let Some(sel) = selector {
-        // Use ConfigurableEngine to apply selective redaction
-        let config_engine = crate::ConfigurableEngine::new(
-            engine.clone(),
-            crate::PatternSelector::All,  // Detect all for filtering
-            sel.clone(),                   // But only redact selected
-        );
-        config_engine.redact_only(text)
-    } else {
-        // No selector: return fully redacted as-is
-        redacted.to_string()
-    }
-}
 
 /// Handle HTTP response with streaming
 ///
@@ -191,13 +165,7 @@ where
     }
 
     let (redacted_headers, header_stats) = redactor.redact_buffer(headers_text.as_bytes());
-    let filtered_headers = apply_selector_filtering(
-        &headers_text,
-        &redacted_headers,
-        config.redact_selector.as_ref(),
-        redactor.engine(),
-    );
-    client_writer.write_all(filtered_headers.as_bytes()).await?;
+    client_writer.write_all(redacted_headers.as_bytes()).await?;
     client_writer.write_all(b"\r\n").await?;
     
     // Report header redaction
@@ -284,22 +252,10 @@ where
         let is_eof = remaining == chunk_size;
         let (output, _bytes_written, patterns) = redactor.process_chunk(&chunk, &mut lookahead, is_eof);
 
-        // Apply selector filtering to redacted output
-        let filtered_output = if let Some(sel) = &config.redact_selector {
-            let config_engine = crate::ConfigurableEngine::new(
-                redactor.engine().clone(),
-                crate::PatternSelector::All,
-                sel.clone(),
-            );
-            config_engine.redact_only(&String::from_utf8_lossy(&chunk))
-        } else {
-            output.clone()
-        };
-
-        client_writer.write_all(filtered_output.as_bytes()).await?;
+        client_writer.write_all(output.as_bytes()).await?;
 
         stats.bytes_read += chunk.len() as u64;
-        stats.bytes_written += filtered_output.len() as u64;
+        stats.bytes_written += output.len() as u64;
         stats.patterns_found += patterns;
         remaining -= chunk_size;
     }
@@ -332,23 +288,10 @@ where
             break;
         }
 
-        // Apply selector filtering to redacted output
-        let filtered_data = if let Some(sel) = &config.redact_selector {
-            let config_engine = crate::ConfigurableEngine::new(
-                redactor.engine().clone(),
-                crate::PatternSelector::All,
-                sel.clone(),
-            );
-            let filtered_str = config_engine.redact_only(&String::from_utf8_lossy(&data));
-            filtered_str.into_bytes()
-        } else {
-            data
-        };
-
-        client_writer.write_all(&filtered_data).await?;
+        client_writer.write_all(&data).await?;
 
         total_stats.bytes_read += chunk_stats.total_data_bytes;
-        total_stats.bytes_written += filtered_data.len() as u64;
+        total_stats.bytes_written += data.len() as u64;
         total_stats.patterns_found += chunk_stats.patterns_found;
         total_stats.chunks_processed += chunk_stats.chunks_read;
     }

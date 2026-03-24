@@ -15,7 +15,6 @@
 pub mod core;
 pub mod header_redaction;
 pub mod body_redaction;
-pub mod streaming_redaction;
 pub mod protocol;
 pub mod models;
 
