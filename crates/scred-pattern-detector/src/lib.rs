@@ -812,6 +812,7 @@ pub fn get_all_patterns() -> Vec<PatternInfo> {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
+#[repr(C)]
 pub struct PatternMetadataFFI {
     // Identity fields
     pub name: *const u8,
@@ -993,6 +994,7 @@ pub struct ZigMatchFFI {
 }
 
 /// FFI Result struct - includes matches array with full metadata
+#[repr(C)]
 #[repr(C)]
 pub struct ZigRedactionResult {
     pub output: Option<*mut u8>,

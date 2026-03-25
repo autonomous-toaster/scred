@@ -32,6 +32,8 @@ fn parse_pattern_selectors(
     redact_flag: Option<&str>,
     _verbose: bool,
 ) -> (PatternSelector, PatternSelector) {
+    eprintln!("DEBUG: parse_pattern_selectors called");
+    
     // Get environment variable values
     let detect_env = env::var("SCRED_DETECT_PATTERNS").ok();
     let redact_env = env::var("SCRED_REDACT_PATTERNS").ok();
@@ -41,16 +43,23 @@ fn parse_pattern_selectors(
     let detect_str = detect_flag
         .or(detect_env.as_deref())
         .unwrap_or("ALL");
+    eprintln!("DEBUG: detect_str = {}", detect_str);
+    
     // Redact conservatively: only CRITICAL and API_KEYS by default
     // PATTERNS tier (JWT, Bearer, BasicAuth) excluded to reduce log noise
     // Users can explicitly enable: --redact CRITICAL,API_KEYS,PATTERNS
     let redact_str = redact_flag
         .or(redact_env.as_deref())
         .unwrap_or("CRITICAL,API_KEYS");
+    eprintln!("DEBUG: redact_str = {}", redact_str);
 
     // Parse selectors - EXIT on error instead of fallback
+    eprintln!("DEBUG: Calling PatternSelector::from_str(detect_str)...");
     let detect_selector = match PatternSelector::from_str(detect_str) {
-        Ok(s) => s,
+        Ok(s) => {
+            eprintln!("DEBUG: PatternSelector::from_str returned OK");
+            s
+        },
         Err(e) => {
             eprintln!("ERROR: Invalid SCRED_DETECT_PATTERNS value: '{}'", detect_str);
             eprintln!("Reason: {}", e);
@@ -64,9 +73,14 @@ fn parse_pattern_selectors(
             std::process::exit(1);
         }
     };
+    
+    eprintln!("DEBUG: About to parse redact_str");
 
     let redact_selector = match PatternSelector::from_str(redact_str) {
-        Ok(s) => s,
+        Ok(s) => {
+            eprintln!("DEBUG: redact PatternSelector returned OK");
+            s
+        },
         Err(e) => {
             eprintln!("ERROR: Invalid SCRED_REDACT_PATTERNS value: '{}'", redact_str);
             eprintln!("Reason: {}", e);
@@ -81,8 +95,10 @@ fn parse_pattern_selectors(
         }
     };
 
+    eprintln!("DEBUG: About to call description() and info!");
     info!("[cli-config] Detect: {}", detect_selector.description());
     info!("[cli-config] Redact: {}", redact_selector.description());
+    eprintln!("DEBUG: info! calls complete");
 
     (detect_selector, redact_selector)
 }
@@ -137,26 +153,26 @@ fn list_tiers_command() {
 }
 
 fn main() {
-    // Initialize logging
-    let log_level = if env::var("SCRED_DEBUG").is_ok() {
-        "debug"
-    } else if env::var("SCRED_TRACE").is_ok() {
-        "trace"
-    } else {
-        "warn"
-    };
+    // Initialize logging - DISABLED FOR DEBUGGING
+    // let log_level = if env::var("SCRED_DEBUG").is_ok() {
+    //     "debug"
+    // } else if env::var("SCRED_TRACE").is_ok() {
+    //     "trace"
+    // } else {
+    //     "warn"
+    // };
     
-    tracing_subscriber::fmt()
-        .with_max_level(log_level.parse().unwrap_or(tracing::Level::WARN))
-        .with_target(false)
-        .with_thread_ids(false)
-        .with_file(false)
-        .with_line_number(false)
-        .init();
+    // tracing_subscriber::fmt()
+    //     .with_max_level(log_level.parse().unwrap_or(tracing::Level::WARN))
+    //     .with_target(false)
+    //     .with_thread_ids(false)
+    //     .with_file(false)
+    //     .with_line_number(false)
+    //     .init();
 
     let args: Vec<String> = env::args().collect();
     
-    debug!("SCRED CLI started with {} arguments", args.len());
+    eprintln!("DEBUG: CLI started, args: {:?}", args);  // TEMPORARY DEBUG
     
     // Parse flags
     let verbose = args.iter().any(|arg| arg == "-v" || arg == "--verbose");
@@ -210,13 +226,17 @@ fn main() {
     );
 
     // Determine which mode to use
+    eprintln!("DEBUG: text_mode_forced={}, env_mode_forced={}, auto_detect={}", text_mode_forced, env_mode_forced, auto_detect_enabled);
     let use_env_mode = if text_mode_forced {
+        eprintln!("DEBUG: Using text mode (text_mode_forced)");
         debug!("[cli-mode] Text mode forced");
         false
     } else if env_mode_forced {
+        eprintln!("DEBUG: Using env mode (env_mode_forced)");
         debug!("[cli-mode] Env mode forced");
         true
     } else if auto_detect_enabled {
+        eprintln!("DEBUG: Running auto-detect");
         // Auto-detect based on first chunk of input
         run_with_auto_detect(
             verbose,
@@ -225,16 +245,19 @@ fn main() {
             &redact_selector,
         )
     } else {
+        eprintln!("DEBUG: Using text mode (auto-detect disabled)");
         false
     };
-
+    
+    eprintln!("DEBUG: use_env_mode decided = {}", use_env_mode);
     if use_env_mode {
-        info!("[cli-start] Running in env mode");
+        eprintln!("DEBUG: Calling run_env_redacting_stream");
         run_env_redacting_stream(verbose, &detect_selector, &redact_selector);
     } else {
-        info!("[cli-start] Running in text mode");
+        eprintln!("DEBUG: Calling run_redacting_stream");
         run_redacting_stream(verbose, &detect_selector, &redact_selector);
     }
+    eprintln!("DEBUG: Finished reading and processing");
 }
 
 fn print_help() {
@@ -385,15 +408,21 @@ fn describe_pattern(name: &str) {
 }
 
 fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact_selector: &PatternSelector) {
+    eprintln!("DEBUG: run_redacting_stream called");
     let start = Instant::now();
 
     // Create ConfigurableEngine with pattern selectors
+    eprintln!("DEBUG: Creating RedactionEngine");
     let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
+    eprintln!("DEBUG: RedactionEngine created");
+    
+    eprintln!("DEBUG: Creating ConfigurableEngine");
     let config_engine = ConfigurableEngine::new(
         engine,
         detect_selector.clone(),
         redact_selector.clone(),
     );
+    eprintln!("DEBUG: ConfigurableEngine created");
 
     // Stream input in 64KB chunks
     const CHUNK_SIZE: usize = 64 * 1024;
@@ -401,6 +430,7 @@ fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact
     let mut total_read = 0;
     let mut total_written = 0;
 
+    eprintln!("DEBUG: Starting read loop");
     loop {
         match io::stdin().read(&mut chunk) {
             Ok(0) => break, // EOF
@@ -505,6 +535,7 @@ fn run_with_auto_detect(
     detect_selector: &PatternSelector,
     redact_selector: &PatternSelector,
 ) -> bool {
+    eprintln!("DEBUG: run_with_auto_detect called");
     let _start = Instant::now();
     
     // Read first 512 bytes for detection (much faster than 4KB)
@@ -512,13 +543,18 @@ fn run_with_auto_detect(
     const DETECTION_BUFFER_SIZE: usize = 512;
     let mut buffer = vec![0u8; DETECTION_BUFFER_SIZE];
     
+    eprintln!("DEBUG: About to call io::stdin().read()");
     let n = match io::stdin().read(&mut buffer) {
-        Ok(bytes) => bytes,
+        Ok(bytes) => {
+            eprintln!("DEBUG: io::stdin().read() returned {} bytes", bytes);
+            bytes
+        },
         Err(e) => {
             eprintln!("Error reading input: {}", e);
             std::process::exit(1);
         }
     };
+    eprintln!("DEBUG: read() call completed, n={}", n);
     
     buffer.truncate(n);
     
