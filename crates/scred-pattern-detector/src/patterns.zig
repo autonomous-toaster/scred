@@ -218,6 +218,12 @@ pub const PREFIX_VALIDATION_PATTERNS = [_]PrefixValidation{
     .{ .name = "telegram-bot-token", .prefix = "Bot ", .tier = .services, .min_len = 30, .max_len = 0, .charset = .alphanumeric },
     .{ .name = "twilio-api-key", .prefix = "AC", .tier = .api_keys, .min_len = 34, .max_len = 0, .charset = .alphanumeric },
     .{ .name = "twitch-oauth-token", .prefix = "oauth:", .tier = .api_keys, .min_len = 30, .max_len = 0, .charset = .alphanumeric },
+    
+    // Phase 1 Decomposition: TRIVIAL patterns (aio_, xoxp-, AGE-SECRET-KEY-1)
+    .{ .name = "adafruitio", .prefix = "aio_", .tier = .api_keys, .min_len = 28, .max_len = 28, .charset = .alphanumeric },
+    .{ .name = "slack-app-token", .prefix = "xoxp-", .tier = .api_keys, .min_len = 40, .max_len = 0, .charset = .alphanumeric },
+    .{ .name = "github-oauth-token", .prefix = "gho_", .tier = .critical, .min_len = 36, .max_len = 36, .charset = .alphanumeric },
+    .{ .name = "stripe-api-key-test", .prefix = "sk_test_", .tier = .critical, .min_len = 32, .max_len = 92, .charset = .alphanumeric },
 };
 
 // ============================================================================

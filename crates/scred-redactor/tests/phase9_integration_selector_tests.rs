@@ -269,3 +269,44 @@ mod phase9_integration_selector_tests {
         // Result: PRODUCTION READY
     }
 }
+
+#[cfg(test)]
+mod phase1_decomposed_patterns {
+    use scred_redactor::RedactionEngine;
+
+    #[test]
+    fn test_adafruitio_aio_prefix() {
+        let engine = RedactionEngine::new(Default::default());
+        let input = "aio_abcd1234efgh5678ijkl90mn";  // Exact token
+        let result = engine.redact(input);
+        assert_ne!(result.redacted, input, "Should detect and redact aio_ token");
+        assert!(!result.matches.is_empty(), "Should find aio_ match");
+    }
+
+    #[test]
+    fn test_slack_app_xoxp_prefix() {
+        let engine = RedactionEngine::new(Default::default());
+        let input = "xoxp-1234567890-987654321012"; // 28 chars after xoxp-
+        let result = engine.redact(input);
+        assert_ne!(result.redacted, input, "Should detect and redact xoxp- token");
+        assert!(!result.matches.is_empty(), "Should find xoxp- match");
+    }
+
+    #[test]
+    fn test_github_oauth_gho_prefix() {
+        let engine = RedactionEngine::new(Default::default());
+        let input = "gho_abcdefghij1234567890abcdefghij"; // 36 chars after gho_
+        let result = engine.redact(input);
+        assert_ne!(result.redacted, input, "Should detect and redact gho_ token");
+        assert!(!result.matches.is_empty(), "Should find gho_ match");
+    }
+
+    #[test]
+    fn test_stripe_sk_test_prefix() {
+        let engine = RedactionEngine::new(Default::default());
+        let input = "sk_test_abcdefghij1234567890abcdefghij"; // 32 chars after sk_test_
+        let result = engine.redact(input);
+        assert_ne!(result.redacted, input, "Should detect and redact sk_test_ token");
+        assert!(!result.matches.is_empty(), "Should find sk_test_ match");
+    }
+}
