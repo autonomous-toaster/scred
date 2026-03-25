@@ -41,6 +41,26 @@ impl Default for RedactionConfig {
     }
 }
 
+// ============================================================================
+// Zig FFI bindings for pattern detection and redaction
+// ============================================================================
+
+#[repr(C)]
+struct ZigRedactionResult {
+    output: *mut u8,
+    output_len: usize,
+    match_count: u32,
+}
+
+extern "C" {
+    fn scred_redact_text_optimized(
+        text: *const u8,
+        text_len: usize,
+    ) -> ZigRedactionResult;
+
+    fn scred_free_redaction_result(result: ZigRedactionResult);
+}
+
 pub struct RedactionEngine {
     config: RedactionConfig,
     selector: Option<crate::pattern_selector::PatternSelector>,
@@ -85,15 +105,52 @@ impl RedactionEngine {
             };
         }
 
-        // Use Zig FFI for all pattern detection (274 patterns from patterns.zig)
-        // Patterns are decomposed: 72 simple prefix, 200 prefix+validation, rest regex-only
-        RedactionResult {
-            redacted: text.to_string(),
-            matches: Vec::new(), // TODO: Implement Zig FFI integration
-            warnings: vec![RedactionWarning {
-                pattern_type: "zig-ffi-pending".to_string(),
-                count: 0,
-            }],
+        // Call Zig FFI for pattern detection and redaction
+        unsafe {
+            let zig_result = redact_text_optimized(text.as_ptr(), text.len());
+            
+            // Convert Zig result to Rust result
+            if zig_result.output.is_null() || zig_result.output_len == 0 {
+                // Zig failed to allocate or redact, return original
+                let result = RedactionResult {
+                    redacted: text.to_string(),
+                    matches: Vec::new(),
+                    warnings: vec![RedactionWarning {
+                        pattern_type: "zig-ffi-error".to_string(),
+                        count: 0,
+                    }],
+                };
+                free_redaction_result(zig_result);
+                return result;
+            }
+
+            // Convert Zig output to Rust string
+            let redacted_slice = std::slice::from_raw_parts(zig_result.output, zig_result.output_len);
+            let redacted_text = String::from_utf8_lossy(redacted_slice).into_owned();
+            
+            // Create basic match info (TODO: Zig should return match details)
+            let matches = if zig_result.match_count > 0 {
+                vec![PatternMatch {
+                    position: 0,
+                    pattern_type: "detected".to_string(),
+                    original_text: text.to_string(),
+                    redacted_text: redacted_text.clone(),
+                    match_len: text.len(),
+                }]
+            } else {
+                Vec::new()
+            };
+
+            let result = RedactionResult {
+                redacted: redacted_text,
+                matches,
+                warnings: Vec::new(),
+            };
+
+            // Free Zig allocated memory
+            free_redaction_result(zig_result);
+            
+            result
         }
     }
 }

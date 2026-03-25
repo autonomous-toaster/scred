@@ -978,3 +978,31 @@ extern "C" {
         data_len: usize,
     ) -> bool;
 }
+
+// ============================================================================
+// C FFI: Redaction Engine
+// ============================================================================
+
+/// Result from Zig redaction engine
+#[repr(C)]
+pub struct ZigRedactionResult {
+    pub output: *mut u8,
+    pub output_len: usize,
+    pub match_count: u32,
+}
+
+extern "C" {
+    /// Redact text using Zig's optimized pattern detection
+    /// 
+    /// Returns a RedactionResult with:
+    /// - output: allocated by Zig (must call free_redaction_result)
+    /// - output_len: length of redacted output
+    /// - match_count: number of patterns found
+    pub fn scred_redact_text_optimized(
+        text: *const u8,
+        text_len: usize,
+    ) -> ZigRedactionResult;
+
+    /// Free the output buffer from ZigRedactionResult
+    pub fn free_redaction_result(result: ZigRedactionResult);
+}

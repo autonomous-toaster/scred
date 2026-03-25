@@ -221,7 +221,7 @@ pub const RedactionResult = extern struct {
 };
 
 /// Redact text using smart pattern selection
-export fn redact_text_optimized(
+pub export fn redact_text_optimized(
     text: [*]const u8,
     text_len: usize,
 ) RedactionResult {
@@ -329,7 +329,7 @@ export fn redact_text_optimized(
 }
 
 /// Free redaction result
-export fn free_redaction_result(result: RedactionResult) void {
+pub export fn free_redaction_result(result: RedactionResult) void {
     if (result.output == null) return;
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

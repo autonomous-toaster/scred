@@ -35,6 +35,10 @@ pub const detect_tier1 = detectors.detect_simple_prefix;
 pub const detect_tier2 = detectors.detect_prefix_validation;
 pub const detect_all_streaming_patterns = detectors.detect_all_patterns;
 
+// Re-export redaction functions
+pub const redact_text_optimized = detector_ffi.redact_text_optimized;
+pub const free_redaction_result = detector_ffi.free_redaction_result;
+
 // ============================================================================
 // Pattern Metadata (for FFI)
 // ============================================================================
@@ -1375,4 +1379,36 @@ export fn validate_api_key_generic_simd(
     }
 
     return true;
+}
+
+
+// ============================================================================
+// Redaction FFI Re-exports
+// ============================================================================
+
+pub const RedactionResultC = extern struct {
+    output: [*]u8,
+    output_len: usize,
+    match_count: u32,
+};
+
+export fn scred_redact_text_optimized(
+    text: [*]const u8,
+    text_len: usize,
+) RedactionResultC {
+    const result = detector_ffi.redact_text_optimized(text, text_len);
+    return .{
+        .output = result.output,
+        .output_len = result.output_len,
+        .match_count = result.match_count,
+    };
+}
+
+export fn scred_free_redaction_result(result: RedactionResultC) void {
+    const zig_result = detector_ffi.RedactionResult{
+        .output = result.output,
+        .output_len = result.output_len,
+        .match_count = result.match_count,
+    };
+    detector_ffi.free_redaction_result(zig_result);
 }
