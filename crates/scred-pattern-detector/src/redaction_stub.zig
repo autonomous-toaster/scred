@@ -21,7 +21,7 @@ pub fn scred_redact_text_optimized_stub(
             .error_code = 0,
         };
     }
-
+    
     const allocator = allocator_safe.get_allocator();
     const text_slice = text[0..text_len];
 

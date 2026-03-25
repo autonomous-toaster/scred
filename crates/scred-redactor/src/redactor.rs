@@ -111,8 +111,9 @@ impl RedactionEngine {
         // Call Zig FFI for pattern detection and redaction
         
         unsafe {
-            
+            eprintln!("[DEBUG] Before FFI call with {} bytes", text.len());
             let zig_result = scred_redact_text_optimized_stub(text.as_ptr(), text.len());
+            eprintln!("[DEBUG] After FFI call, got result");
             
             
             // Convert Zig result to Rust result
