@@ -1,17 +1,7 @@
 const std = @import("std");
 const redaction_impl = @import("redaction_impl.zig");
 const redaction_ffi = @import("redaction_ffi.zig");
-
-var gpa: std.heap.GeneralPurposeAllocator(.{}) = undefined;
-var allocator_initialized = false;
-
-fn get_allocator() std.mem.Allocator {
-    if (!allocator_initialized) {
-        gpa = std.heap.GeneralPurposeAllocator(.{}){};
-        allocator_initialized = true;
-    }
-    return gpa.allocator();
-}
+const allocator_safe = @import("allocator_safe.zig");
 
 pub const RedactionResultFFI = redaction_ffi.RedactionResultFFI;
 
@@ -32,7 +22,7 @@ pub fn scred_redact_text_optimized_stub(
         };
     }
 
-    const allocator = get_allocator();
+    const allocator = allocator_safe.get_allocator();
     const text_slice = text[0..text_len];
 
     // Find all pattern matches in the text
