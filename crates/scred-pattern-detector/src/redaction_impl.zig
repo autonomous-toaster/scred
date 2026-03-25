@@ -3,6 +3,9 @@ const std = @import("std");
 const detectors = @import("detectors.zig");
 const patterns = @import("patterns.zig");
 const redaction_ffi = @import("redaction_ffi.zig");
+const validation = @import("validation.zig");
+const simd_match = @import("simd_match.zig");
+const simd_wrapper = @import("simd_wrapper.zig");
 
 pub const Match = redaction_ffi.MatchFFI;  // Alias for clarity
 
@@ -24,13 +27,14 @@ pub fn find_all_matches(
     var matches_buf: [MAX_MATCHES]Match = undefined;
     var match_count: usize = 0;
 
-    // Check simple prefix patterns first (fast path)
+    // Check simple prefix patterns first (fast path with SIMD)
     for (patterns.SIMPLE_PREFIX_PATTERNS, 0..) |prefix_pattern, idx| {
         if (match_count >= MAX_MATCHES) break;
 
         var search_pos: usize = 0;
         while (search_pos < text.len and match_count < MAX_MATCHES) {
-            if (std.mem.indexOf(u8, text[search_pos..], prefix_pattern.prefix)) |match_pos| {
+            // Use SIMD-accelerated search when beneficial
+            if (simd_wrapper.findPrefixSimd(text[search_pos..], prefix_pattern.prefix)) |match_pos| {
                 const absolute_pos = search_pos + match_pos;
                 const end_pos = @min(absolute_pos + prefix_pattern.prefix.len + 20, text.len);
 
@@ -48,7 +52,7 @@ pub fn find_all_matches(
         }
     }
 
-    // Check prefix validation patterns
+    // Check prefix validation patterns (with proper validation)
     for (patterns.PREFIX_VALIDATION_PATTERNS, 0..) |pattern, idx| {
         if (match_count >= MAX_MATCHES) break;
 
@@ -56,14 +60,27 @@ pub fn find_all_matches(
         while (search_pos < text.len and match_count < MAX_MATCHES) {
             if (std.mem.indexOf(u8, text[search_pos..], pattern.prefix)) |match_pos| {
                 const absolute_pos = search_pos + match_pos;
-                const max_end = @min(absolute_pos + pattern.max_len, text.len);
-
-                matches_buf[match_count] = Match{
-                    .start = absolute_pos,
-                    .end = max_end,
-                    .pattern_type = @intCast(100 + idx),
-                };
-                match_count += 1;
+                const token_start = absolute_pos + pattern.prefix.len;
+                
+                // Scan token end using validation charset
+                const token_len = validation.scanTokenEnd(
+                    text,
+                    token_start,
+                    pattern.charset,
+                    pattern.max_len
+                );
+                
+                // Validate token meets length requirements
+                if (token_len > 0 and validation.validateLength(text[token_start..@min(token_start + token_len, text.len)], pattern.min_len, pattern.max_len)) {
+                    const end_pos = @min(token_start + token_len, text.len);
+                    
+                    matches_buf[match_count] = Match{
+                        .start = absolute_pos,
+                        .end = end_pos,
+                        .pattern_type = @intCast(100 + idx),
+                    };
+                    match_count += 1;
+                }
 
                 search_pos = absolute_pos + pattern.prefix.len;
             } else {
