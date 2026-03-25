@@ -2,11 +2,29 @@ use std::io::{self, Read, Write};
 use std::env;
 use std::time::Instant;
 use std::sync::Arc;
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 
 use scred_redactor::{get_all_patterns, RedactionEngine, RedactionConfig};
 use scred_http::{ConfigurableEngine, PatternSelector, env_detection};
 use scred_config::ConfigLoader;
 use tracing::{info, debug};
+
+/// Check if stdin is connected to a terminal (TTY)
+/// Returns true if stdin is a terminal, false if piped/redirected
+#[cfg(unix)]
+fn stdin_is_tty() -> bool {
+    use libc::isatty;
+    unsafe {
+        isatty(io::stdin().as_raw_fd()) == 1
+    }
+}
+
+#[cfg(not(unix))]
+fn stdin_is_tty() -> bool {
+    // On non-Unix platforms, assume it's not a TTY
+    false
+}
 
 mod env_mode;
 
@@ -32,8 +50,6 @@ fn parse_pattern_selectors(
     redact_flag: Option<&str>,
     _verbose: bool,
 ) -> (PatternSelector, PatternSelector) {
-    eprintln!("DEBUG: parse_pattern_selectors called");
-    
     // Get environment variable values
     let detect_env = env::var("SCRED_DETECT_PATTERNS").ok();
     let redact_env = env::var("SCRED_REDACT_PATTERNS").ok();
@@ -43,7 +59,6 @@ fn parse_pattern_selectors(
     let detect_str = detect_flag
         .or(detect_env.as_deref())
         .unwrap_or("ALL");
-    eprintln!("DEBUG: detect_str = {}", detect_str);
     
     // Redact conservatively: only CRITICAL and API_KEYS by default
     // PATTERNS tier (JWT, Bearer, BasicAuth) excluded to reduce log noise
@@ -51,15 +66,10 @@ fn parse_pattern_selectors(
     let redact_str = redact_flag
         .or(redact_env.as_deref())
         .unwrap_or("CRITICAL,API_KEYS");
-    eprintln!("DEBUG: redact_str = {}", redact_str);
 
     // Parse selectors - EXIT on error instead of fallback
-    eprintln!("DEBUG: Calling PatternSelector::from_str(detect_str)...");
     let detect_selector = match PatternSelector::from_str(detect_str) {
-        Ok(s) => {
-            eprintln!("DEBUG: PatternSelector::from_str returned OK");
-            s
-        },
+        Ok(s) => s,
         Err(e) => {
             eprintln!("ERROR: Invalid SCRED_DETECT_PATTERNS value: '{}'", detect_str);
             eprintln!("Reason: {}", e);
@@ -73,14 +83,9 @@ fn parse_pattern_selectors(
             std::process::exit(1);
         }
     };
-    
-    eprintln!("DEBUG: About to parse redact_str");
 
     let redact_selector = match PatternSelector::from_str(redact_str) {
-        Ok(s) => {
-            eprintln!("DEBUG: redact PatternSelector returned OK");
-            s
-        },
+        Ok(s) => s,
         Err(e) => {
             eprintln!("ERROR: Invalid SCRED_REDACT_PATTERNS value: '{}'", redact_str);
             eprintln!("Reason: {}", e);
@@ -95,10 +100,8 @@ fn parse_pattern_selectors(
         }
     };
 
-    eprintln!("DEBUG: About to call description() and info!");
     info!("[cli-config] Detect: {}", detect_selector.description());
     info!("[cli-config] Redact: {}", redact_selector.description());
-    eprintln!("DEBUG: info! calls complete");
 
     (detect_selector, redact_selector)
 }
@@ -154,6 +157,8 @@ fn list_tiers_command() {
 
 fn main() {
     // Initialize logging - DISABLED FOR DEBUGGING
+    println!("DEBUG: scred started");
+    
     // let log_level = if env::var("SCRED_DEBUG").is_ok() {
     //     "debug"
     // } else if env::var("SCRED_TRACE").is_ok() {
@@ -171,11 +176,11 @@ fn main() {
     //     .init();
 
     let args: Vec<String> = env::args().collect();
-    
-    eprintln!("DEBUG: CLI started, args: {:?}", args);  // TEMPORARY DEBUG
+    println!("DEBUG: args parsed");
     
     // Parse flags
     let verbose = args.iter().any(|arg| arg == "-v" || arg == "--verbose");
+    println!("DEBUG: flags parsed, verbose={}", verbose);
     let env_mode_forced = args.iter().any(|arg| arg == "--env-mode" || arg == "--env");
     let text_mode_forced = args.iter().any(|arg| arg == "--text-mode");
     let auto_detect_enabled = !args.iter().any(|arg| arg == "--auto-detect=off");
@@ -226,18 +231,20 @@ fn main() {
     );
 
     // Determine which mode to use
-    eprintln!("DEBUG: text_mode_forced={}, env_mode_forced={}, auto_detect={}", text_mode_forced, env_mode_forced, auto_detect_enabled);
+    // FIX: Skip auto-detect if stdin is piped (not a TTY) to avoid blocking on read()
+    // Piped input hangs on first read() because Unix pipe doesn't send EOF until
+    // parent shell closes write-end, but parent waits for child to exit (deadlock).
+    // Solution: When stdin is piped, always use text mode (not auto-detect).
     let use_env_mode = if text_mode_forced {
-        eprintln!("DEBUG: Using text mode (text_mode_forced)");
         debug!("[cli-mode] Text mode forced");
         false
     } else if env_mode_forced {
-        eprintln!("DEBUG: Using env mode (env_mode_forced)");
         debug!("[cli-mode] Env mode forced");
         true
-    } else if auto_detect_enabled {
-        eprintln!("DEBUG: Running auto-detect");
-        // Auto-detect based on first chunk of input
+    } else if auto_detect_enabled && stdin_is_tty() {
+        // Only auto-detect if stdin is actually a terminal
+        // Skip for piped input to avoid deadlock
+        debug!("[cli-mode] Auto-detecting (stdin is TTY)");
         run_with_auto_detect(
             verbose,
             detect_only_flag,
@@ -245,19 +252,18 @@ fn main() {
             &redact_selector,
         )
     } else {
-        eprintln!("DEBUG: Using text mode (auto-detect disabled)");
+        debug!("[cli-mode] Using text mode (stdin is piped)");
         false
     };
     
-    eprintln!("DEBUG: use_env_mode decided = {}", use_env_mode);
     if use_env_mode {
-        eprintln!("DEBUG: Calling run_env_redacting_stream");
+        println!("DEBUG: about to call run_env_redacting_stream");
         run_env_redacting_stream(verbose, &detect_selector, &redact_selector);
     } else {
-        eprintln!("DEBUG: Calling run_redacting_stream");
+        println!("DEBUG: about to call run_redacting_stream");
         run_redacting_stream(verbose, &detect_selector, &redact_selector);
     }
-    eprintln!("DEBUG: Finished reading and processing");
+    println!("DEBUG: done");
 }
 
 fn print_help() {
@@ -408,49 +414,67 @@ fn describe_pattern(name: &str) {
 }
 
 fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact_selector: &PatternSelector) {
-    eprintln!("DEBUG: run_redacting_stream called");
+    println!("DEBUG: inside run_redacting_stream");
+    debug!("[redacting-stream] Starting");
     let start = Instant::now();
 
     // Create ConfigurableEngine with pattern selectors
-    eprintln!("DEBUG: Creating RedactionEngine");
+    println!("DEBUG: about to create RedactionEngine");
+    debug!("[redacting-stream] Creating RedactionEngine");
     let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
-    eprintln!("DEBUG: RedactionEngine created");
+    println!("DEBUG: RedactionEngine created");
+    debug!("[redacting-stream] RedactionEngine created");
     
-    eprintln!("DEBUG: Creating ConfigurableEngine");
+    println!("DEBUG: about to create ConfigurableEngine");
+    debug!("[redacting-stream] Creating ConfigurableEngine");
     let config_engine = ConfigurableEngine::new(
         engine,
         detect_selector.clone(),
         redact_selector.clone(),
     );
-    eprintln!("DEBUG: ConfigurableEngine created");
+    println!("DEBUG: ConfigurableEngine created");
+    debug!("[redacting-stream] ConfigurableEngine created");
 
-    // Stream input in 64KB chunks
+    // FIX: Read in single shot to avoid pipe deadlock
+    // (Unix pipe won't send EOF until parent shell closes write-end,
+    //  but parent waits for child to exit - causing deadlock if we loop)
+    // Solution: Read once, process, exit. 64KB is sufficient for CLI.
     const CHUNK_SIZE: usize = 64 * 1024;
     let mut chunk = vec![0u8; CHUNK_SIZE];
     let mut total_read = 0;
     let mut total_written = 0;
 
-    eprintln!("DEBUG: Starting read loop");
-    loop {
-        match io::stdin().read(&mut chunk) {
-            Ok(0) => break, // EOF
-            Ok(n) => {
-                let input_str = String::from_utf8_lossy(&chunk[..n]);
-                let result = config_engine.detect_and_redact(&input_str);
-                
-                io::stdout().write_all(result.redacted.as_bytes()).ok();
-                
-                total_read += n;
-                total_written += result.redacted.len();
-                
-                if verbose {
-                    eprintln!("[chunk: {} bytes → {} patterns detected]", n, result.warnings.len());
-                }
+    println!("DEBUG: about to read from stdin (stdin_is_tty={})", stdin_is_tty());
+    debug!("[redacting-stream] About to read from stdin");
+    match io::stdin().read(&mut chunk) {
+        Ok(n) if n > 0 => {
+            println!("DEBUG: read {} bytes from stdin", n);
+            println!("DEBUG: creating UTF-8 string");
+            let input_str = String::from_utf8_lossy(&chunk[..n]);
+            println!("DEBUG: calling detect_and_redact");
+            let result = config_engine.detect_and_redact(&input_str);
+            println!("DEBUG: detect_and_redact returned, result has {} bytes", result.redacted.len());
+            
+            println!("DEBUG: writing to stdout");
+            io::stdout().write_all(result.redacted.as_bytes()).ok();
+            println!("DEBUG: flushing stdout");
+            io::stdout().flush().ok();
+            println!("DEBUG: stdout flushed");
+            
+            total_read = n;
+            total_written = result.redacted.len();
+            
+            if verbose {
+                eprintln!("[redacting-stream]");
+                eprintln!("  Patterns detected: {}", result.warnings.len());
             }
-            Err(e) => {
-                eprintln!("Error reading input: {}", e);
-                std::process::exit(1);
-            }
+        }
+        Ok(_) => {
+            // EOF or 0 bytes read - just exit cleanly
+        }
+        Err(e) => {
+            eprintln!("Error reading input: {}", e);
+            std::process::exit(1);
         }
     }
 
@@ -535,7 +559,6 @@ fn run_with_auto_detect(
     detect_selector: &PatternSelector,
     redact_selector: &PatternSelector,
 ) -> bool {
-    eprintln!("DEBUG: run_with_auto_detect called");
     let _start = Instant::now();
     
     // Read first 512 bytes for detection (much faster than 4KB)
@@ -543,10 +566,8 @@ fn run_with_auto_detect(
     const DETECTION_BUFFER_SIZE: usize = 512;
     let mut buffer = vec![0u8; DETECTION_BUFFER_SIZE];
     
-    eprintln!("DEBUG: About to call io::stdin().read()");
     let n = match io::stdin().read(&mut buffer) {
         Ok(bytes) => {
-            eprintln!("DEBUG: io::stdin().read() returned {} bytes", bytes);
             bytes
         },
         Err(e) => {
@@ -554,7 +575,6 @@ fn run_with_auto_detect(
             std::process::exit(1);
         }
     };
-    eprintln!("DEBUG: read() call completed, n={}", n);
     
     buffer.truncate(n);
     
