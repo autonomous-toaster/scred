@@ -2,18 +2,17 @@
 const std = @import("std");
 const detectors = @import("detectors.zig");
 const patterns = @import("patterns.zig");
+const redaction_ffi = @import("redaction_ffi.zig");
 
-pub const Match = extern struct {
-    start: usize,
-    end: usize,
-    pattern_type: u32,
-};
+pub const Match = redaction_ffi.MatchFFI;  // Alias for clarity
+
+
 
 pub const MAX_MATCHES = 1000;
 
 pub const RedactionResult = struct {
     output: []u8,
-    matches: []Match,
+    matches: []redaction_ffi.MatchFFI,
     match_count: usize,
 };
 

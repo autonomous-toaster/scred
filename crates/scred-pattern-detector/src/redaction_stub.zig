@@ -1,5 +1,6 @@
 const std = @import("std");
 const redaction_impl = @import("redaction_impl.zig");
+const redaction_ffi = @import("redaction_ffi.zig");
 const detectors = @import("detectors.zig");
 
 var gpa: std.heap.GeneralPurposeAllocator(.{}) = undefined;
@@ -13,14 +14,10 @@ fn get_allocator() std.mem.Allocator {
     return gpa.allocator();
 }
 
-pub const RedactionResultFFI = extern struct {
-    output: ?[*]u8,
-    output_len: usize,
-    match_count: u32,
-};
+pub const RedactionResultFFI = redaction_ffi.RedactionResultFFI;
 
 /// Redact text by finding patterns and replacing them
-/// This is the main FFI entry point for redaction
+/// Returns full metadata including pattern type for each match
 pub fn scred_redact_text_optimized_stub(
     text: [*]const u8,
     text_len: usize,
@@ -29,7 +26,9 @@ pub fn scred_redact_text_optimized_stub(
         return RedactionResultFFI{
             .output = null,
             .output_len = 0,
+            .matches = null,
             .match_count = 0,
+            .error_code = 0,
         };
     }
 
@@ -43,25 +42,31 @@ pub fn scred_redact_text_optimized_stub(
             return RedactionResultFFI{
                 .output = null,
                 .output_len = 0,
+                .matches = null,
                 .match_count = 0,
+                .error_code = 1,  // allocation error
             };
         };
 
         return RedactionResultFFI{
             .output = output.ptr,
             .output_len = output.len,
+            .matches = null,
             .match_count = 0,
+            .error_code = 2,  // detection error
         };
     };
 
-    // If no patterns found, return copy of input
+    // If no patterns found, return copy of input with no matches
     if (matches.match_count == 0) {
         const output = allocator.dupe(u8, text_slice) catch {
             allocator.free(matches.matches);
             return RedactionResultFFI{
                 .output = null,
                 .output_len = 0,
+                .matches = null,
                 .match_count = 0,
+                .error_code = 1,
             };
         };
 
@@ -69,7 +74,9 @@ pub fn scred_redact_text_optimized_stub(
         return RedactionResultFFI{
             .output = output.ptr,
             .output_len = output.len,
-            .match_count = @intCast(matches.match_count),
+            .matches = null,
+            .match_count = 0,
+            .error_code = 0,
         };
     }
 
@@ -81,7 +88,9 @@ pub fn scred_redact_text_optimized_stub(
             return RedactionResultFFI{
                 .output = null,
                 .output_len = 0,
+                .matches = null,
                 .match_count = 0,
+                .error_code = 1,
             };
         };
 
@@ -89,23 +98,48 @@ pub fn scred_redact_text_optimized_stub(
         return RedactionResultFFI{
             .output = output.ptr,
             .output_len = output.len,
+            .matches = null,
             .match_count = 0,
+            .error_code = 3,  // redaction error
         };
     };
 
-    allocator.free(matches.matches);
+    // Allocate matches array for FFI (caller will free)
+    const ffi_matches = redaction_ffi.allocate_matches(matches.matches, allocator) catch {
+        allocator.free(redacted);
+        allocator.free(matches.matches);
+        return RedactionResultFFI{
+            .output = null,
+            .output_len = 0,
+            .matches = null,
+            .match_count = 0,
+            .error_code = 1,
+        };
+    };
+
+    allocator.free(matches.matches);  // Free original, we have a copy in ffi_matches
+
     return RedactionResultFFI{
         .output = redacted.ptr,
         .output_len = redacted.len,
+        .matches = ffi_matches,
         .match_count = @intCast(matches.match_count),
+        .error_code = 0,
     };
 }
 
-/// Free redaction result buffer
+/// Free redaction result buffer and matches array
 pub fn scred_free_redaction_result_stub(result: RedactionResultFFI) void {
-    if (result.output == null or result.output_len == 0) return;
-
     const allocator = get_allocator();
-    const slice = result.output.?[0..result.output_len];
-    allocator.free(slice);
+
+    // Free output
+    if (result.output != null and result.output_len > 0) {
+        const slice = result.output.?[0..result.output_len];
+        allocator.free(slice);
+    }
+
+    // Free matches
+    if (result.matches != null and result.match_count > 0) {
+        redaction_ffi.free_matches(result.matches, result.match_count, allocator);
+    }
 }

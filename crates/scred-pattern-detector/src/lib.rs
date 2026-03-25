@@ -985,10 +985,22 @@ extern "C" {
 
 /// Result from Zig redaction engine
 #[repr(C)]
+/// FFI Match struct - mirrors Zig's MatchFFI
+#[repr(C)]
+pub struct ZigMatchFFI {
+    pub start: usize,
+    pub end: usize,
+    pub pattern_type: u32,
+}
+
+/// FFI Result struct - includes matches array with full metadata
+#[repr(C)]
 pub struct ZigRedactionResult {
     pub output: Option<*mut u8>,
     pub output_len: usize,
+    pub matches: Option<*mut ZigMatchFFI>,
     pub match_count: u32,
+    pub error_code: u32,
 }
 
 extern "C" {
@@ -997,12 +1009,14 @@ extern "C" {
     /// Returns a RedactionResult with:
     /// - output: allocated by Zig (must call free_redaction_result)
     /// - output_len: length of redacted output
+    /// - matches: array of ZigMatchFFI with pattern type for each
     /// - match_count: number of patterns found
+    /// - error_code: 0 = success, >0 = error
     pub fn scred_redact_text_optimized_stub(
         text: *const u8,
         text_len: usize,
     ) -> ZigRedactionResult;
 
-    /// Free the output buffer from ZigRedactionResult
-    pub fn free_redaction_result(result: ZigRedactionResult);
+    /// Free both output buffer and matches array
+    pub fn scred_free_redaction_result_stub(result: ZigRedactionResult);
 }
