@@ -1,4 +1,6 @@
 const std = @import("std");
+const redaction_stub = @import("redaction_stub.zig");
+pub const _redaction_stub_ref = redaction_stub.RedactionResultFFI;
 const Allocator = std.mem.Allocator;
 pub const env_redactor = @import("env_redactor.zig");
 
@@ -8,7 +10,7 @@ pub const env_redactor = @import("env_redactor.zig");
 
 pub const patterns = @import("patterns.zig");
 pub const detectors = @import("detectors.zig");
-pub const detector_ffi = @import("detector_ffi.zig");
+// pub const detector_ffi = @import("detector_ffi.zig"); // TODO: Fix compatibility issues
 
 // Re-export pattern definitions for public API
 pub const SIMPLE_PREFIX_PATTERNS = patterns.SIMPLE_PREFIX_PATTERNS;
@@ -35,9 +37,9 @@ pub const detect_tier1 = detectors.detect_simple_prefix;
 pub const detect_tier2 = detectors.detect_prefix_validation;
 pub const detect_all_streaming_patterns = detectors.detect_all_patterns;
 
-// Re-export redaction functions
-pub const redact_text_optimized = detector_ffi.redact_text_optimized;
-pub const free_redaction_result = detector_ffi.free_redaction_result;
+// Re-export redaction functions (now using local stubs)
+// pub const redact_text_optimized = detector_ffi.redact_text_optimized;
+// pub const free_redaction_result = detector_ffi.free_redaction_result;
 
 // ============================================================================
 // Pattern Metadata (for FFI)
@@ -307,204 +309,6 @@ export fn scred_detector_free(detector: *Detector) void {
 // ============================================================================
 // PHASE 5 WAVE 1: FFI EXPORTS
 // ============================================================================
-
-/// WAVE 1: Alphanumeric Token Validator (Highest ROI: 576)
-export fn validate_alphanumeric_token(
-    data: [*]const u8,
-    data_len: usize,
-    min_len: u16,
-    max_len: u16,
-    prefix_len: u8,
-) bool {
-    if (data_len < min_len or data_len > max_len) {
-        return false;
-    }
-
-    const data_slice = data[0..data_len];
-    const check_start = @min(prefix_len, data_slice.len);
-    const suffix = data_slice[check_start..];
-
-    for (suffix) |c| {
-        const is_digit = c >= '0' and c <= '9';
-        const is_upper = c >= 'A' and c <= 'Z';
-        const is_lower = c >= 'a' and c <= 'z';
-
-        if (!is_digit and !is_upper and !is_lower) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-/// WAVE 1: AWS Credential Validator (ROI: 203)
-export fn validate_aws_credential(
-    key_type: u8,
-    data: [*]const u8,
-    data_len: usize,
-) bool {
-    if (data_len != 20) {
-        return false;
-    }
-
-    const prefixes = [_][]const u8{ "AKIA", "A3T", "ASIA", "ABIA", "ACCA", "ACPA", "AROA", "AIDA" };
-
-    if (key_type >= prefixes.len) {
-        return false;
-    }
-
-    const prefix = prefixes[key_type];
-    const data_slice = data[0..data_len];
-
-    if (!std.mem.startsWith(u8, data_slice, prefix)) {
-        return false;
-    }
-
-    const suffix_start = prefix.len;
-    const suffix = data_slice[suffix_start..];
-
-    for (suffix) |c| {
-        const is_digit = c >= '0' and c <= '9';
-        const is_upper = c >= 'A' and c <= 'Z';
-
-        if (!is_digit and !is_upper) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-/// WAVE 1: GitHub Token Validator (ROI: 130)
-export fn validate_github_token(
-    token_type: u8,
-    data: [*]const u8,
-    data_len: usize,
-) bool {
-    const prefixes = [_][]const u8{ "ghp_", "gho_", "ghu_", "ghr_", "ghs_", "gat_" };
-    const lengths = [_]usize{ 40, 40, 40, 40, 40, 40 };
-
-    if (token_type >= prefixes.len) {
-        return false;
-    }
-
-    const prefix = prefixes[token_type];
-    const expected_len = lengths[token_type];
-
-    if (data_len != expected_len) {
-        return false;
-    }
-
-    const data_slice = data[0..data_len];
-
-    if (!std.mem.startsWith(u8, data_slice, prefix)) {
-        return false;
-    }
-
-    const suffix_start = prefix.len;
-    const suffix = data_slice[suffix_start..];
-
-    for (suffix) |c| {
-        const is_alphanum = (c >= '0' and c <= '9') or
-                           (c >= 'A' and c <= 'Z') or
-                           (c >= 'a' and c <= 'z');
-        const is_special = (c == '_' or c == '-');
-
-        if (!is_alphanum and !is_special) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-/// WAVE 1: Hex Token Validator (ROI: 145, FASTEST: 15-20x)
-export fn validate_hex_token(
-    data: [*]const u8,
-    data_len: usize,
-    min_len: u16,
-    max_len: u16,
-) bool {
-    if (data_len < min_len or data_len > max_len) {
-        return false;
-    }
-
-    if (data_len % 2 != 0) {
-        return false;
-    }
-
-    const data_slice = data[0..data_len];
-
-    for (data_slice) |c| {
-        const is_digit = c >= '0' and c <= '9';
-        const is_lower_hex = c >= 'a' and c <= 'f';
-        const is_upper_hex = c >= 'A' and c <= 'F';
-
-        if (!is_digit and !is_lower_hex and !is_upper_hex) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-/// WAVE 1: Base64 Token Validator (ROI: 98)
-export fn validate_base64_token(
-    data: [*]const u8,
-    data_len: usize,
-    min_len: u16,
-    max_len: u16,
-) bool {
-    if (data_len < min_len or data_len > max_len) {
-        return false;
-    }
-
-    if (data_len % 4 != 0) {
-        return false;
-    }
-
-    const data_slice = data[0..data_len];
-
-    for (data_slice) |c| {
-        const is_alphanum = (c >= '0' and c <= '9') or
-                           (c >= 'A' and c <= 'Z') or
-                           (c >= 'a' and c <= 'z');
-        const is_special = (c == '+' or c == '/' or c == '=');
-
-        if (!is_alphanum and !is_special) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-/// WAVE 1: Base64URL Token Validator (ROI: 82)
-export fn validate_base64url_token(
-    data: [*]const u8,
-    data_len: usize,
-    min_len: u16,
-    max_len: u16,
-) bool {
-    if (data_len < min_len or data_len > max_len) {
-        return false;
-    }
-
-    const data_slice = data[0..data_len];
-
-    for (data_slice) |c| {
-        const is_alphanum = (c >= '0' and c <= '9') or
-                           (c >= 'A' and c <= 'Z') or
-                           (c >= 'a' and c <= 'z');
-        const is_special = (c == '_' or c == '-');
-
-        if (!is_alphanum and !is_special) {
-            return false;
-        }
-    }
-
-    return true;
-}
 
 // ============================================================================
 // PHASE 5 WAVE 2: FFI EXPORTS - PROVIDER & STRUCTURE FUNCTIONS
@@ -1392,23 +1196,20 @@ pub const RedactionResultC = extern struct {
     match_count: u32,
 };
 
-export fn scred_redact_text_optimized(
+
+// ============================================================================
+// Explicit FFI Re-exports (ensuring symbols are in library)
+// ============================================================================
+
+pub const RedactionResultFFI = redaction_stub.RedactionResultFFI;
+
+export fn scred_redact_text_optimized_stub(
     text: [*]const u8,
     text_len: usize,
-) RedactionResultC {
-    const result = detector_ffi.redact_text_optimized(text, text_len);
-    return .{
-        .output = result.output,
-        .output_len = result.output_len,
-        .match_count = result.match_count,
-    };
+) RedactionResultFFI {
+    return redaction_stub.scred_redact_text_optimized_stub(text, text_len);
 }
 
-export fn scred_free_redaction_result(result: RedactionResultC) void {
-    const zig_result = detector_ffi.RedactionResult{
-        .output = result.output,
-        .output_len = result.output_len,
-        .match_count = result.match_count,
-    };
-    detector_ffi.free_redaction_result(zig_result);
+export fn scred_free_redaction_result_stub(result: RedactionResultFFI) void {
+    return redaction_stub.scred_free_redaction_result_stub(result);
 }

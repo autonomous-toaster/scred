@@ -53,12 +53,12 @@ struct ZigRedactionResult {
 }
 
 extern "C" {
-    fn scred_redact_text_optimized(
+    fn scred_redact_text_optimized_stub(
         text: *const u8,
         text_len: usize,
     ) -> ZigRedactionResult;
 
-    fn scred_free_redaction_result(result: ZigRedactionResult);
+    fn scred_free_redaction_result_stub(result: ZigRedactionResult);
 }
 
 pub struct RedactionEngine {
@@ -107,7 +107,7 @@ impl RedactionEngine {
 
         // Call Zig FFI for pattern detection and redaction
         unsafe {
-            let zig_result = redact_text_optimized(text.as_ptr(), text.len());
+            let zig_result = scred_redact_text_optimized_stub(text.as_ptr(), text.len());
             
             // Convert Zig result to Rust result
             if zig_result.output.is_null() || zig_result.output_len == 0 {
@@ -120,7 +120,7 @@ impl RedactionEngine {
                         count: 0,
                     }],
                 };
-                free_redaction_result(zig_result);
+                scred_free_redaction_result_stub(zig_result);
                 return result;
             }
 
@@ -148,7 +148,7 @@ impl RedactionEngine {
             };
 
             // Free Zig allocated memory
-            free_redaction_result(zig_result);
+            scred_free_redaction_result_stub(zig_result);
             
             result
         }
