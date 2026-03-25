@@ -23,15 +23,20 @@ pub fn find_all_matches(
     text: []const u8,
     allocator: std.mem.Allocator,
 ) !RedactionResult {
+    std.debug.print("[FIND] Called with {d} bytes\n", .{text.len});
+    
     var matches_buf: [MAX_MATCHES]Match = undefined;
     var match_count: usize = 0;
 
     // Check simple prefix patterns first (fast path with SIMD)
+    std.debug.print("[FIND] Starting pattern loop\n", .{});
     for (patterns.SIMPLE_PREFIX_PATTERNS, 0..) |prefix_pattern, idx| {
         if (match_count >= MAX_MATCHES) break;
 
         var search_pos: usize = 0;
+        std.debug.print("[PAT {d}] Searching for: {s}\n", .{idx, prefix_pattern.prefix});
         while (search_pos < text.len and match_count < MAX_MATCHES) {
+            std.debug.print("[PAT {d}] search_pos={d}\n", .{idx, search_pos});
             // Use SIMD-accelerated search via simd_core
             if (simd_core.findFirstPrefix(text[search_pos..], prefix_pattern.prefix)) |match_pos| {
                 const absolute_pos = search_pos + match_pos;
