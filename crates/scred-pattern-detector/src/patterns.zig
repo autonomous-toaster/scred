@@ -235,7 +235,6 @@ pub const PREFIX_VALIDATION_PATTERNS = [_]PrefixValidation{
 
 pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "1password-service-account-token", .pattern = "ops_eyJ[a-zA-Z0-9+/]{250,}={0,3}" , .tier = PatternTier.api_keys },
-    .{ .name = "adafruitio", .pattern = "\\b(aio\\_[a-zA-Z0-9]{28})\\b" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 28
     .{ .name = "age-secret-key", .pattern = "AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}" , .tier = PatternTier.critical }, // could be prefix with validation or just prefix + 58
     .{ .name = "aha", .pattern = "\\b([A-Za-z0-9](?:[A-Za-z0-9\\-]{0,61}[A-Za-z0-9])\\.aha\\.io)" , .tier = PatternTier.api_keys },
     .{ .name = "airtable-api-key", .pattern = "\\\\b(pat[[:alnum:]]{14}\\\\.[a-f0-9]{64})\\\\b" , .tier = PatternTier.api_keys },
@@ -303,7 +302,6 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "gcpapplicationdefaultcredentials", .pattern = "\\{[^{]+client_secret[^}]+\\}" , .tier = PatternTier.api_keys },
     .{ .name = "gemini", .pattern = "\\b((?:master-|account-)[0-9A-Za-z]{20})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "github-pat", .pattern = "ghp_[0-9a-zA-Z]{36,}" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 36
-    .{ .name = "github-oauth", .pattern = "gho_[0-9a-zA-Z]{36,}" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 36
     .{ .name = "github-user", .pattern = "ghu_[0-9a-zA-Z]{36,}" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 36
     .{ .name = "github-server", .pattern = "ghs_[0-9a-zA-Z]{36,}" , .tier = PatternTier.api_keys },
     .{ .name = "github-refresh", .pattern = "ghr_[0-9a-zA-Z]{36,}" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 36
