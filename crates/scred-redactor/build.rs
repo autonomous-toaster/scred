@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
+    println!("cargo:warning=✅ BUILD.RS RUNNING");
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let pattern_detector_dir = PathBuf::from(&manifest_dir).join("../scred-pattern-detector");
     
