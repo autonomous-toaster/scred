@@ -101,7 +101,6 @@ pub const RegexPattern = struct {
 
 pub const SIMPLE_PREFIX_PATTERNS = [_]SimplePrefixPattern{
     .{ .name = "age-secret-key", .prefix = "AGE-SECRET-KEY-1", .tier = .critical },
-    .{ .name = "apideck", .prefix = "sk_live_", .tier = .api_keys },
     .{ .name = "artifactoryreferencetoken", .prefix = "cmVmdGtu", .tier = .infrastructure },
     .{ .name = "azure-storage", .prefix = "AccountName", .tier = .infrastructure },
     .{ .name = "azure-app-config", .prefix = "Endpoint=https://", .tier = .infrastructure },
@@ -137,7 +136,6 @@ pub const SIMPLE_PREFIX_PATTERNS = [_]SimplePrefixPattern{
     .{ .name = "github-ghp", .prefix = "ghp_", .tier = .critical },
     .{ .name = "github-ghu", .prefix = "ghu_", .tier = .critical },
     .{ .name = "github-ghs", .prefix = "ghs_", .tier = .critical },
-    .{ .name = "github-gho", .prefix = "gho_", .tier = .critical },
     // OpenAI patterns
     .{ .name = "openai-sk-proj", .prefix = "sk-proj-", .tier = .critical },
     .{ .name = "openai-sk", .prefix = "sk-", .tier = .critical },
@@ -243,7 +241,6 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "anthropic", .pattern = "\\b(sk-ant-(?:admin01|api03)-[\\w\\-]{93}AA)\\b" , .tier = PatternTier.critical }, // could be multiple prefixes (sk-ant, sk-ant-admin, etc) with validation or just prefix + 95
     .{ .name = "anypoint", .pattern = "\\b([0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "api_key_header", .pattern = "(?i)(?:X-API-KEY|X-API-KEY-HEADER):\\s*([A-Za-z0-9\\-._~+\\/]+=*)" , .tier = PatternTier.api_keys },
-    .{ .name = "apideck", .pattern = "\\b(sk_live_[a-z0-9A-Z-]{93})\\b" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 93
     .{ .name = "apify", .pattern = "\\b(apify\\_api\\_[a-zA-Z-0-9]{36})\\b" , .tier = PatternTier.api_keys }, // could be multiple prefixes with validation or just prefix + 36
     .{ .name = "artifactory-api-key", .pattern = "\\\\bAKCp[A-Za-z0-9]{69}\\\\b" , .tier = PatternTier.infrastructure },
     .{ .name = "artifactoryreferencetoken", .pattern = "\\b(cmVmdGtu[A-Za-z0-9]{56})\\b" , .tier = PatternTier.api_keys },
@@ -253,7 +250,6 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "auth0oauth", .pattern = "\\b([a-zA-Z0-9_-]{64,})\\b" , .tier = PatternTier.critical },
     .{ .name = "auth0oauth-1", .pattern = "\\b([a-zA-Z0-9][a-zA-Z0-9._-]*auth0\\.com)\\b" , .tier = PatternTier.critical },
     .{ .name = "authorization_header", .pattern = "(?i)Authorization:\\s*(?:Bearer|Basic|Token)\\s+([A-Za-z0-9\\-._~+\\/]+=*)" , .tier = PatternTier.patterns },
-    .{ .name = "aws-access-token", .pattern = "((?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16})" , .tier = PatternTier.critical },
     .{ .name = "aws-session-token", .pattern = "([A-Za-z0-9/+=]{356,})" , .tier = PatternTier.critical },
     .{ .name = "azure-ad-client-secret", .pattern = "(?:^|[\\\\\\\\\\" , .tier = PatternTier.critical },
     .{ .name = "azure_batch-1", .pattern = "[A-Za-z0-9+/=]{88}" , .tier = PatternTier.critical },
@@ -401,7 +397,6 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "sidekiq-secret", .pattern = "(?i)\\\\bhttps?://([a-f0-9]{8}:[a-f0-9]{8})@(?:gems.contribsys.com|enterprise.contribsys.com)(?:[\\\\/|\\\\#|\\\\?|:]|$)" , .tier = PatternTier.api_keys },
     .{ .name = "signable", .pattern = "(?i)([a-z]{2})signable" , .tier = PatternTier.api_keys },
     .{ .name = "signalwire", .pattern = "\\b([0-9a-z-]{3,64}\\.signalwire\\.com)\\b" , .tier = PatternTier.api_keys },
-    .{ .name = "slack-bot-token", .pattern = "xoxb-[0-9]{10,13}-[0-9]{10,13}[a-zA-Z0-9-]*" , .tier = PatternTier.api_keys },
     .{ .name = "sourcegraph", .pattern = "\\b(sgp_(?:[a-fA-F0-9]{16}|local)_[a-fA-F0-9]{40}|sgp_[a-fA-F0-9]{40}|[a-fA-F0-9]{40})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "sourcegraphcody", .pattern = "\\b(slk_[a-f0-9]{64})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "squareapp", .pattern = "(?:sandbox-)?sq0i[a-z]{2}-[0-9A-Za-z_-]{22,43}" , .tier = PatternTier.api_keys },
