@@ -46,19 +46,10 @@ impl Default for RedactionConfig {
 // ============================================================================
 
 #[repr(C)]
-struct ZigMatchFFI {
-    start: usize,
-    end: usize,
-    pattern_type: u32,
-}
-
-#[repr(C)]
 struct ZigRedactionResult {
-    output: Option<*mut u8>,
+    output: *mut u8,
     output_len: usize,
-    matches: Option<*mut ZigMatchFFI>,
     match_count: u32,
-    error_code: u32,
 }
 
 extern "C" {
@@ -118,60 +109,37 @@ impl RedactionEngine {
         unsafe {
             let zig_result = scred_redact_text_optimized_stub(text.as_ptr(), text.len());
             
-            // Check for errors
-            if zig_result.error_code != 0 {
-                let error_msg = match zig_result.error_code {
-                    1 => "allocation-error",
-                    2 => "detection-error",
-                    3 => "redaction-error",
-                    _ => "unknown-error",
-                };
-                
+            // Convert Zig result to Rust result
+            if zig_result.output.is_null() || zig_result.output_len == 0 {
+                // Zig failed to allocate or redact, return original
                 let result = RedactionResult {
                     redacted: text.to_string(),
                     matches: Vec::new(),
                     warnings: vec![RedactionWarning {
-                        pattern_type: error_msg.to_string(),
+                        pattern_type: "zig-ffi-error".to_string(),
                         count: 0,
                     }],
                 };
-                
                 scred_free_redaction_result_stub(zig_result);
                 return result;
             }
 
             // Convert Zig output to Rust string
-            let redacted_text = if let Some(output_ptr) = zig_result.output {
-                let redacted_slice = std::slice::from_raw_parts(output_ptr, zig_result.output_len);
-                String::from_utf8_lossy(redacted_slice).into_owned()
+            let redacted_slice = std::slice::from_raw_parts(zig_result.output, zig_result.output_len);
+            let redacted_text = String::from_utf8_lossy(redacted_slice).into_owned();
+            
+            // Create basic match info (TODO: Zig should return match details)
+            let matches = if zig_result.match_count > 0 {
+                vec![PatternMatch {
+                    position: 0,
+                    pattern_type: "detected".to_string(),
+                    original_text: text.to_string(),
+                    redacted_text: redacted_text.clone(),
+                    match_len: text.len(),
+                }]
             } else {
-                text.to_string()
+                Vec::new()
             };
-
-            // Convert Zig matches to Rust match objects with pattern type
-            let mut matches = Vec::new();
-            if let Some(matches_ptr) = zig_result.matches {
-                if zig_result.match_count > 0 {
-                    let matches_slice = std::slice::from_raw_parts(
-                        matches_ptr, 
-                        zig_result.match_count as usize
-                    );
-                    
-                    for zig_match in matches_slice.iter() {
-                        let pattern_type_name = get_pattern_name(zig_match.pattern_type);
-                        
-                        if zig_match.start < text.len() && zig_match.end <= text.len() {
-                            matches.push(PatternMatch {
-                                position: zig_match.start,
-                                pattern_type: pattern_type_name,
-                                original_text: text[zig_match.start..zig_match.end].to_string(),
-                                redacted_text: redacted_text[zig_match.start..zig_match.end].to_string(),
-                                match_len: zig_match.end - zig_match.start,
-                            });
-                        }
-                    }
-                }
-            }
 
             let result = RedactionResult {
                 redacted: redacted_text,
@@ -179,39 +147,11 @@ impl RedactionEngine {
                 warnings: Vec::new(),
             };
 
-            // Free Zig allocated memory (both output and matches)
+            // Free Zig allocated memory
             scred_free_redaction_result_stub(zig_result);
             
             result
         }
-    }
-
-}
-
-/// Map pattern type index to pattern name  
-fn get_pattern_name(pattern_type: u32) -> String {
-    match pattern_type {
-        // Simple prefix patterns
-        0..=47 => {
-            let names = [
-                "age-secret-key", "apideck", "artifactoryreferencetoken", "azure-storage",
-                "azure-app-config", "coinbase", "context7-api-key", "context7-secret",
-                "fleetbase", "flutterwave-public-key", "linear-api-key", "linearapi",
-                "openaiadmin", "pagarme", "planetscale-1", "planetscaledb-1",
-                "pypi-upload-token", "ramp", "ramp-1", "rubygems",
-                "salad-cloud-api-key", "sentry-access-token", "sentryorgtoken", "stripepaymentintent-2",
-                "travisoauth", "tumblr-api-key", "upstash-redis", "vercel-token",
-                "generic-password", "generic-password-colon", "generic-password-lower", "generic-passwd",
-                "generic-pwd", "generic-secret", "generic-secret-upper", "generic-token",
-                "generic-token-upper", "generic-token-access",
-                "aws-akia", "aws-asia", "aws-abia", "aws-acca",
-                "github-ghp", "github-ghu", "github-ghs", "github-gho",
-                "openai-sk-proj", "openai-sk",
-            ];
-            names.get(pattern_type as usize).unwrap_or(&"unknown").to_string()
-        },
-        200 => "jwt".to_string(),
-        _ => "detected".to_string(),
     }
 }
 

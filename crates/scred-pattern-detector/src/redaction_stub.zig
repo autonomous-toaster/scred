@@ -1,12 +1,23 @@
 const std = @import("std");
 const redaction_impl = @import("redaction_impl.zig");
 const redaction_ffi = @import("redaction_ffi.zig");
-const allocator_pool = @import("allocator_pool.zig");
+
+var gpa: std.heap.GeneralPurposeAllocator(.{}) = undefined;
+var allocator_initialized = false;
+
+fn get_allocator() std.mem.Allocator {
+    if (!allocator_initialized) {
+        gpa = std.heap.GeneralPurposeAllocator(.{}){};
+        allocator_initialized = true;
+    }
+    return gpa.allocator();
+}
 
 pub const RedactionResultFFI = redaction_ffi.RedactionResultFFI;
 
 /// Redact text by finding patterns and replacing them
-/// Uses temporary allocators - no global state
+/// Returns full metadata including pattern type for each match
+/// IMPORTANT: Uses global GPA (not thread-safe, needs mutex for production)
 pub fn scred_redact_text_optimized_stub(
     text: [*]const u8,
     text_len: usize,
@@ -21,11 +32,7 @@ pub fn scred_redact_text_optimized_stub(
         };
     }
 
-    // Create temporary allocator for this call only
-    var temp_gpa = allocator_pool.create_temporary();
-    defer _ = temp_gpa.deinit();
-    const allocator = temp_gpa.allocator();
-
+    const allocator = get_allocator();
     const text_slice = text[0..text_len];
 
     // Find all pattern matches in the text
@@ -97,20 +104,9 @@ pub fn scred_redact_text_optimized_stub(
         };
     };
 
-    // Allocate matches array for FFI (caller will free)
-    const ffi_matches = redaction_ffi.allocate_matches(matches.matches, allocator) catch {
-        allocator.free(redacted);
-        allocator.free(matches.matches);
-        return RedactionResultFFI{
-            .output = null,
-            .output_len = 0,
-            .matches = null,
-            .match_count = 0,
-            .error_code = 1,
-        };
-    };
-
-    allocator.free(matches.matches);  // Free original, we have a copy in ffi_matches
+    // Keep matches array in memory for return to Rust
+    // (Memory is in global GPA, remains valid after return)
+    const ffi_matches = if (matches.match_count > 0) matches.matches.ptr else null;
 
     return RedactionResultFFI{
         .output = redacted.ptr,
@@ -122,11 +118,10 @@ pub fn scred_redact_text_optimized_stub(
 }
 
 /// Free redaction result buffer and matches array
-/// Note: Must use same allocator that was used to allocate (from temporary GPA)
-/// Rust should NOT use this for large-scale freeing - Zig GPA will clean up
+/// Note: Currently global GPA doesn't support selective freeing
+/// TODO: Implement proper allocator management for production
 pub fn scred_free_redaction_result_stub(result: RedactionResultFFI) void {
-    // This function is problematic: we can't easily get the original allocator
-    // Better approach: let Rust free the pointers directly using libc free
-    // For now, this is a no-op - Zig GPA will clean up the temporary allocator
+    // With global GPA, we can't free individual allocations
+    // Just mark as consumed. Full cleanup would require reset_allocator()
     _ = result;
 }
