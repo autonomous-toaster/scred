@@ -200,6 +200,7 @@ pub const PREFIX_VALIDATION_PATTERNS = [_]PrefixValidation{
     .{ .name = "stripe-api-key", .prefix = "sk_live_", .tier = .critical, .min_len = 32, .max_len = 0, .charset = .alphanumeric },
     .{ .name = "supabase-api-key", .prefix = "eyJhbGc", .tier = .api_keys, .min_len = 40, .max_len = 0, .charset = .base64 },
     .{ .name = "telegram-bot-token", .prefix = "Bot ", .tier = .services, .min_len = 30, .max_len = 0, .charset = .alphanumeric },
+    .{ .name = "twilio-api-key", .prefix = "AC", .tier = .api_keys, .min_len = 34, .max_len = 0, .charset = .alphanumeric },
     .{ .name = "twitch-oauth-token", .prefix = "oauth:", .tier = .api_keys, .min_len = 30, .max_len = 0, .charset = .alphanumeric },
     
     // Phase 1 Decomposition: TRIVIAL patterns (aio_, xoxp-, AGE-SECRET-KEY-1)
@@ -435,20 +436,32 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "supabasetoken", .pattern = "\\b(sbp_[a-z0-9]{40})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "tableau", .pattern = "\\b([A-Za-z0-9+/]{22}==:[A-Za-z0-9]{32})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "tableau-1", .pattern = "\\b([a-zA-Z0-9\\-]+\\.online\\.tableau\\.com)\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "tailscale", .pattern = "\\btskey-[a-z]+-[0-9A-Za-z_]+-[0-9A-Za-z_]+\\b" , .tier = PatternTier.api_keys },
     .{ .name = "terraformcloudpersonaltoken", .pattern = "\\b([A-Za-z0-9]{14}.atlasv1.[A-Za-z0-9]{67})\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "trufflehogenterprise", .pattern = "\\bthog-key-[0-9a-f]{16}\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "trufflehogenterprise-1", .pattern = "\\bthog-secret-[0-9a-f]{32}\\b" , .tier = PatternTier.api_keys },
     .{ .name = "trufflehogenterprise-2", .pattern = "\\b[a-z]+-[a-z]+-[a-z]+\\.[a-z][0-9]\\.[a-z]+\\.trufflehog\\.org\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "twilio-api-key", .pattern = "SK[0-9a-fA-F]{32}" , .tier = PatternTier.api_keys },
+    .{ .name = "twilioapikey", .pattern = "\\bSK[a-zA-Z0-9]{32}\\b" , .tier = PatternTier.api_keys },
     .{ .name = "twilioapikey-1", .pattern = "\\b[0-9a-zA-Z]{32}\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "ubidots", .pattern = "\\b(BBFF-[0-9a-zA-Z]{30})\\b" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 30
     .{ .name = "uri", .pattern = "\\bhttps?:\\/\\/[\\w!#$%&()*+,\\-./;<=>?@[\\\\\\]^_{|}~]{0,50}:([\\w!#$%&()*+,\\-./:;<=>?[\\\\\\]^_{|}~]{3,50})@[a-zA-Z0-9.-]+(?:\\.[a-zA-Z]{2,})?(?::\\d{1,5})?[\\w/]+\\b" , .tier = PatternTier.patterns },
+    .{ .name = "voiceflow", .pattern = "\\b(VF\\.(?:(?:DM|WS)\\.)?[a-fA-F0-9]{24}\\.[a-zA-Z0-9]{16})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "webexbot", .pattern = "([a-zA-Z0-9]{64}_[a-zA-Z0-9]{4}_[a-zA-Z0-9]{8}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{12})" , .tier = PatternTier.api_keys },
     .{ .name = "zendeskapi-1", .pattern = "\\b([a-zA-Z-0-9]{3,25}\\.zendesk\\.com)\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "zohocrm", .pattern = "\\b(1000\\.[a-f0-9]{32}\\.[a-f0-9]{32})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "zulipchat-1", .pattern = "(?i)\\b([a-z0-9-]+\\.zulip(?:chat)?\\.com|chat\\.zulip\\.org)\\b" , .tier = PatternTier.api_keys },
     .{ .name = "reserved-future-pattern-slot", .pattern = "(?!)" , .tier = PatternTier.patterns },
     .{ .name = "uri-credentials", .pattern = "(?:[a-z]+)://(?:[^:]+):([^\\s@]+)@" , .tier = PatternTier.patterns },
     // P0 Classical Secrets Patterns - SIMD Optimized (5 new patterns)
+    .{ .name = "bcrypt-hash", .pattern = "\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}" , .tier = PatternTier.critical }, // /etc/shadow bcrypt ($2a$, $2b$, $2y$)
+    .{ .name = "sha256-crypt", .pattern = "\\$5\\$(rounds=\\d+\\$)?[./a-zA-Z0-9]{1,16}\\$[./a-zA-Z0-9]{43}" , .tier = PatternTier.critical }, // /etc/shadow SHA-256 ($5$)
+    .{ .name = "sha512-crypt", .pattern = "\\$6\\$(rounds=\\d+\\$)?[./a-zA-Z0-9]{1,16}\\$[./a-zA-Z0-9]{86}" , .tier = PatternTier.critical }, // /etc/shadow SHA-512 ($6$)
     .{ .name = "database-connection-uri", .pattern = "[a-zA-Z][a-zA-Z0-9+.-]*://[a-zA-Z0-9._%-]+:[^@]+@[a-zA-Z0-9.-]+(:\\d+)?(/[a-zA-Z0-9._%-]*)?" , .tier = PatternTier.critical }, // mysql://, postgresql://, mongodb://, redis://, etc. with credentials
     .{ .name = "http-auth-header-token", .pattern = "(?i)X-(?:Auth|Access|API-)?Token\\s*:\\s*[a-zA-Z0-9_./+-]{20,}" , .tier = PatternTier.critical }, // X-Auth-Token, X-Access-Token, etc.
     // P1 Infrastructure Secrets Patterns (8 new patterns)
     .{ .name = "docker-dockercfg-auth", .pattern = "\"auth\"\\s*:\\s*\"([a-zA-Z0-9+/]{20,}={0,2})\"" , .tier = PatternTier.critical }, // .dockercfg base64 encoded credentials
+    .{ .name = "aws-ecr-token", .pattern = "\\bAQE[a-zA-Z0-9+/]{100,}={0,2}\\b" , .tier = PatternTier.critical }, // AWS ECR authentication tokens (base64)
     .{ .name = "rabbitmq-amqp-connection", .pattern = "amqps?://[a-zA-Z0-9._-]+:[^@\\s]+@[a-zA-Z0-9.-]+(:\\d+)?(/[a-zA-Z0-9._%-]*)?" , .tier = PatternTier.infrastructure }, // AMQP connection strings
     .{ .name = "kafka-sasl-credentials", .pattern = "SCRAM-SHA-(?:256|512)\\s+[a-zA-Z0-9._-]+:[^\\s]+" , .tier = PatternTier.infrastructure }, // Kafka SASL credentials
     .{ .name = "amqp-connection-string", .pattern = "amqp://[a-zA-Z0-9:._%-]+:[^@\\s]+@[a-zA-Z0-9.-]+(:\\d+)?(/[a-zA-Z0-9._%-]*)?" , .tier = PatternTier.infrastructure }, // Generic AMQP URLs
