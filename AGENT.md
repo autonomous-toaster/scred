@@ -8,3 +8,4 @@
 - pattern than can be simplified from prefix + leght + validation to prefix + length should be to take advatage of SIMD
 - no regex or pattern matching in rust. period.
 - patterns must be checked for overlap or duplicates.
+- redaction MUST keep original length. ex: sk-123456789 -> sk-xxxxxxxxx
