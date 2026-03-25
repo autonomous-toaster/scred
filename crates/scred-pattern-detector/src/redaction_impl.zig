@@ -4,8 +4,7 @@ const detectors = @import("detectors.zig");
 const patterns = @import("patterns.zig");
 const redaction_ffi = @import("redaction_ffi.zig");
 const validation = @import("validation.zig");
-const simd_match = @import("simd_match.zig");
-const simd_wrapper = @import("simd_wrapper.zig");
+const simd_core = @import("simd_core.zig");
 
 pub const Match = redaction_ffi.MatchFFI;  // Alias for clarity
 
@@ -33,8 +32,8 @@ pub fn find_all_matches(
 
         var search_pos: usize = 0;
         while (search_pos < text.len and match_count < MAX_MATCHES) {
-            // Use SIMD-accelerated search when beneficial
-            if (simd_wrapper.findPrefixSimd(text[search_pos..], prefix_pattern.prefix)) |match_pos| {
+            // Use SIMD-accelerated search via simd_core
+            if (simd_core.findFirstPrefix(text[search_pos..], prefix_pattern.prefix)) |match_pos| {
                 const absolute_pos = search_pos + match_pos;
                 const end_pos = @min(absolute_pos + prefix_pattern.prefix.len + 20, text.len);
 

@@ -6,7 +6,7 @@ const allocator_pool = @import("allocator_pool.zig");
 const allocator_safe = @import("allocator_safe.zig");
 pub const _redaction_stub_ref = redaction_stub.RedactionResultFFI;
 const validation = @import("validation.zig");
-const simd_wrapper = @import("simd_wrapper.zig");
+const simd_core = @import("simd_core.zig");
 const Allocator = std.mem.Allocator;
 pub const env_redactor = @import("env_redactor.zig");
 
