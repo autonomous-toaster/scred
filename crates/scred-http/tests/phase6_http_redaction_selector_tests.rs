@@ -16,7 +16,7 @@ mod phase6_http_proxy_redaction_selector_tests {
     #[test]
     fn test_redaction_engine_with_selector_critical() {
         let config = RedactionConfig::default();
-        let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::Critical]);
         
         let engine = Arc::new(RedactionEngine::with_selector(config, selector.clone()));
 
@@ -28,7 +28,7 @@ mod phase6_http_proxy_redaction_selector_tests {
     #[test]
     fn test_redaction_engine_with_selector_api_keys() {
         let config = RedactionConfig::default();
-        let selector = PatternSelector::Tier(vec![PatternTier::ApiKeys]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::ApiKeys]);
         
         let engine = Arc::new(RedactionEngine::with_selector(config, selector.clone()));
 
@@ -64,7 +64,7 @@ mod phase6_http_proxy_redaction_selector_tests {
     #[test]
     fn test_redaction_engine_with_multiple_tiers() {
         let config = RedactionConfig::default();
-        let selector = PatternSelector::Tier(vec![
+        let selector = PatternSelector::Tiers(vec![
             PatternTier::Critical,
             PatternTier::ApiKeys,
         ]);
@@ -78,7 +78,7 @@ mod phase6_http_proxy_redaction_selector_tests {
         assert!(engine.has_selector());
         assert_eq!(
             engine.get_selector(),
-            Some(&PatternSelector::Tier(vec![
+            Some(&PatternSelector::Tiers(vec![
                 PatternTier::Critical,
                 PatternTier::ApiKeys,
             ]))
@@ -112,7 +112,7 @@ mod phase6_http_proxy_redaction_selector_tests {
     #[test]
     fn test_redaction_preserves_http_structure_with_selector() {
         let config = RedactionConfig::default();
-        let selector = PatternSelector::Tier(vec![PatternTier::ApiKeys]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::ApiKeys]);
         let engine = Arc::new(RedactionEngine::with_selector(config, selector));
 
         let request = "GET / HTTP/1.1\r\nHost: example.com\r\nX-API-Key: secret123\r\n\r\n";
@@ -126,7 +126,7 @@ mod phase6_http_proxy_redaction_selector_tests {
     #[test]
     fn test_redaction_with_json_body_and_selector() {
         let config = RedactionConfig::default();
-        let selector = PatternSelector::Tier(vec![PatternTier::ApiKeys]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::ApiKeys]);
         let engine = Arc::new(RedactionEngine::with_selector(config, selector));
 
         let request = r#"POST / HTTP/1.1
@@ -149,7 +149,7 @@ Content-Type: application/json
     #[test]
     fn test_redaction_response_with_selector() {
         let config = RedactionConfig::default();
-        let selector = PatternSelector::Tier(vec![PatternTier::ApiKeys]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::ApiKeys]);
         let engine = Arc::new(RedactionEngine::with_selector(config, selector));
 
         let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"token\": \"sk_test_xyz\"}";
@@ -167,7 +167,7 @@ Content-Type: application/json
     #[test]
     fn test_engine_selector_storage_and_retrieval() {
         let config = RedactionConfig::default();
-        let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::Critical]);
         let engine = Arc::new(RedactionEngine::with_selector(config, selector.clone()));
 
         assert!(engine.has_selector());

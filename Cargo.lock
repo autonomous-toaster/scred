@@ -1523,6 +1523,7 @@ dependencies = [
  "anyhow",
  "criterion",
  "libc",
+ "regex",
  "tracing",
 ]
 
@@ -1554,7 +1555,6 @@ dependencies = [
  "aho-corasick",
  "criterion",
  "lazy_static",
- "regex",
  "scred-pattern-detector",
  "serde",
 ]

@@ -107,7 +107,7 @@ mod phase3_http_proxy_handler_selector_tests {
             add_scred_header: true,
         };
         let engine = Arc::new(RedactionEngine::new(Default::default()));
-        let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::Critical]);
 
         let handler = MockHttpProxyHandler::with_selectors(
             engine,
@@ -126,8 +126,8 @@ mod phase3_http_proxy_handler_selector_tests {
             add_scred_header: true,
         };
         let engine = Arc::new(RedactionEngine::new(Default::default()));
-        let detect_selector = PatternSelector::Tier(vec![PatternTier::Critical, PatternTier::ApiKeys]);
-        let redact_selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+        let detect_selector = PatternSelector::Tiers(vec![PatternTier::Critical, PatternTier::ApiKeys]);
+        let redact_selector = PatternSelector::Tiers(vec![PatternTier::Critical]);
 
         let handler = MockHttpProxyHandler::with_selectors(
             engine,
@@ -160,7 +160,7 @@ mod phase3_http_proxy_handler_selector_tests {
             add_scred_header: true,
         };
         let engine = Arc::new(RedactionEngine::new(Default::default()));
-        let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::Critical]);
 
         let handler = MockHttpProxyHandler::with_selectors(
             engine,
@@ -195,7 +195,7 @@ mod phase3_http_proxy_handler_selector_tests {
             add_scred_header: true,
         };
         let engine = Arc::new(RedactionEngine::new(Default::default()));
-        let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::Critical]);
 
         let handler = MockHttpProxyHandler::with_selectors(
             engine,
@@ -216,7 +216,7 @@ mod phase3_http_proxy_handler_selector_tests {
             add_scred_header: true,
         };
         let engine = Arc::new(RedactionEngine::new(Default::default()));
-        let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::Critical]);
 
         let handler = MockHttpProxyHandler::with_selectors(
             engine,
@@ -239,7 +239,7 @@ mod phase3_http_proxy_handler_selector_tests {
             add_scred_header: true,
         };
         let engine = Arc::new(RedactionEngine::new(Default::default()));
-        let selector = PatternSelector::Tier(vec![PatternTier::ApiKeys]);
+        let selector = PatternSelector::Tiers(vec![PatternTier::ApiKeys]);
 
         let handler = MockHttpProxyHandler::with_selectors(
             engine,
@@ -262,7 +262,7 @@ mod phase3_http_proxy_handler_selector_tests {
             add_scred_header: true,
         };
         let engine = Arc::new(RedactionEngine::new(Default::default()));
-        let selector = PatternSelector::Tier(vec![
+        let selector = PatternSelector::Tiers(vec![
             PatternTier::Critical,
             PatternTier::ApiKeys,
             PatternTier::Infrastructure,

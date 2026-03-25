@@ -4,9 +4,9 @@
 //! - SIMPLE_PREFIX_PATTERNS (26): Pure prefix, no validation
 //! - JWT_PATTERNS (1): eyJ prefix + 2 dots structure
 //! - PREFIX_VALIDATION_PATTERNS (45): Prefix + charset/length validation
-//! - REGEX_PATTERNS (198): Full regex patterns
+//! - REGEX_PATTERNS (203): Full regex patterns (198 original + 5 P0 classical secrets)
 //!
-//! Total: 270 patterns
+//! Total: 275 patterns (270 original + 5 P0 additions)
 
 const std = @import("std");
 
@@ -128,6 +128,17 @@ pub const SIMPLE_PREFIX_PATTERNS = [_]SimplePrefixPattern{
     .{ .name = "tumblr-api-key", .prefix = "tumblr_", .tier = .services },
     .{ .name = "upstash-redis", .prefix = "redis_", .tier = .infrastructure },
     .{ .name = "vercel-token", .prefix = "vercel_", .tier = .api_keys },
+    // Generic password/secret patterns (case-sensitive prefixes)
+    .{ .name = "generic-password", .prefix = "PASSWORD=", .tier = .critical },
+    .{ .name = "generic-password-colon", .prefix = "PASSWORD:", .tier = .critical },
+    .{ .name = "generic-password-lower", .prefix = "password=", .tier = .critical },
+    .{ .name = "generic-passwd", .prefix = "passwd=", .tier = .critical },
+    .{ .name = "generic-pwd", .prefix = "pwd=", .tier = .critical },
+    .{ .name = "generic-secret", .prefix = "secret=", .tier = .critical },
+    .{ .name = "generic-secret-upper", .prefix = "SECRET=", .tier = .critical },
+    .{ .name = "generic-token", .prefix = "token=", .tier = .api_keys },
+    .{ .name = "generic-token-upper", .prefix = "TOKEN=", .tier = .api_keys },
+    .{ .name = "generic-token-access", .prefix = "access_token=", .tier = .api_keys },
 };
 
 // ============================================================================
@@ -336,8 +347,8 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "posthog", .pattern = "\\b(phx_[a-zA-Z0-9_]{43})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "postman", .pattern = "\\b(PMAK-[a-zA-Z-0-9]{59})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "prefect", .pattern = "\\b(pnu_[a-zA-Z0-9]{36})\\b" , .tier = PatternTier.api_keys },
-    .{ .name = "private-key", .pattern = "(?i)-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----[\\\\s\\\\S-]{64,}?KEY(?: BLOCK)?-----" , .tier = PatternTier.patterns },
-    .{ .name = "privatekey", .pattern = "(?i)-----\\s*?BEGIN[ A-Z0-9_-]*?PRIVATE KEY\\s*?-----[\\s\\S]*?----\\s*?END[ A-Z0-9_-]*? PRIVATE KEY\\s*?-----" , .tier = PatternTier.api_keys },
+    .{ .name = "private-key", .pattern = "(?i)-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----[\\s\\S-]{64,}?KEY(?: BLOCK)?-----" , .tier = PatternTier.critical },
+    .{ .name = "privatekey", .pattern = "(?i)-----\\s*?BEGIN[ A-Z0-9_-]*?PRIVATE KEY\\s*?-----[\\s\\S]*?----\\s*?END[ A-Z0-9_-]*? PRIVATE KEY\\s*?-----" , .tier = PatternTier.critical },
     .{ .name = "pubnubpublishkey", .pattern = "\\b(pub-c-[0-9a-z]{8}-[0-9a-z]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "pubnubpublishkey-1", .pattern = "\\b(sub-c-[0-9a-z]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "pubnubsubscriptionkey", .pattern = "\\b(sub-c-[0-9a-z]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12})\\b" , .tier = PatternTier.api_keys },
@@ -405,6 +416,31 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "zulipchat-1", .pattern = "(?i)\\b([a-z0-9-]+\\.zulip(?:chat)?\\.com|chat\\.zulip\\.org)\\b" , .tier = PatternTier.api_keys },
     .{ .name = "reserved-future-pattern-slot", .pattern = "(?!)" , .tier = PatternTier.patterns },
     .{ .name = "uri-credentials", .pattern = "(?:[a-z]+)://(?:[^:]+):([^\\s@]+)@" , .tier = PatternTier.patterns },
+    // P0 Classical Secrets Patterns - SIMD Optimized (5 new patterns)
+    .{ .name = "bcrypt-hash", .pattern = "\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}" , .tier = PatternTier.critical }, // /etc/shadow bcrypt ($2a$, $2b$, $2y$)
+    .{ .name = "sha256-crypt", .pattern = "\\$5\\$(rounds=\\d+\\$)?[./a-zA-Z0-9]{1,16}\\$[./a-zA-Z0-9]{43}" , .tier = PatternTier.critical }, // /etc/shadow SHA-256 ($5$)
+    .{ .name = "sha512-crypt", .pattern = "\\$6\\$(rounds=\\d+\\$)?[./a-zA-Z0-9]{1,16}\\$[./a-zA-Z0-9]{86}" , .tier = PatternTier.critical }, // /etc/shadow SHA-512 ($6$)
+    .{ .name = "database-connection-uri", .pattern = "[a-zA-Z][a-zA-Z0-9+.-]*://[a-zA-Z0-9._%-]+:[^@]+@[a-zA-Z0-9.-]+(:\\d+)?(/[a-zA-Z0-9._%-]*)?" , .tier = PatternTier.critical }, // mysql://, postgresql://, mongodb://, redis://, etc. with credentials
+    .{ .name = "http-auth-header-token", .pattern = "(?i)X-(?:Auth|Access|API-)?Token\\s*:\\s*[a-zA-Z0-9_./+-]{20,}" , .tier = PatternTier.critical }, // X-Auth-Token, X-Access-Token, etc.
+    // P1 Infrastructure Secrets Patterns (8 new patterns)
+    .{ .name = "docker-dockercfg-auth", .pattern = "\"auth\"\\s*:\\s*\"([a-zA-Z0-9+/]{20,}={0,2})\"" , .tier = PatternTier.critical }, // .dockercfg base64 encoded credentials
+    .{ .name = "aws-ecr-token", .pattern = "\\bAQE[a-zA-Z0-9+/]{100,}={0,2}\\b" , .tier = PatternTier.critical }, // AWS ECR authentication tokens (base64)
+    .{ .name = "rabbitmq-amqp-connection", .pattern = "amqps?://[a-zA-Z0-9._-]+:[^@\\s]+@[a-zA-Z0-9.-]+(:\\d+)?(/[a-zA-Z0-9._%-]*)?" , .tier = PatternTier.infrastructure }, // AMQP connection strings
+    .{ .name = "kafka-sasl-credentials", .pattern = "SCRAM-SHA-(?:256|512)\\s+[a-zA-Z0-9._-]+:[^\\s]+" , .tier = PatternTier.infrastructure }, // Kafka SASL credentials
+    .{ .name = "amqp-connection-string", .pattern = "amqp://[a-zA-Z0-9:._%-]+:[^@\\s]+@[a-zA-Z0-9.-]+(:\\d+)?(/[a-zA-Z0-9._%-]*)?" , .tier = PatternTier.infrastructure }, // Generic AMQP URLs
+    .{ .name = "maven-password", .pattern = "<password>([^<]{8,})</password>" , .tier = PatternTier.infrastructure }, // Maven settings.xml passwords
+    .{ .name = "npm-auth-token", .pattern = "\\b([a-zA-Z0-9-_]{36})\\b(?=.*\\.npmrc)" , .tier = PatternTier.infrastructure }, // npm authentication tokens
+    .{ .name = "gradle-api-key", .pattern = "org\\.gradle\\.caching\\.http\\.authentication.*=\\s*([a-zA-Z0-9_-]{20,})" , .tier = PatternTier.infrastructure }, // Gradle build cache API keys
+    // P2 Structured Formats & Automation Patterns (9 new patterns)
+    .{ .name = "ansible-vault-encrypted", .pattern = "\\$ANSIBLE_VAULT;1\\.1;AES256;[a-zA-Z0-9_-]+" , .tier = PatternTier.critical }, // Encrypted Ansible variables
+    .{ .name = "terraform-state-secrets", .pattern = "\"password\"\\s*:\\s*\"([^\"]{8,})\"" , .tier = PatternTier.critical }, // Terraform state file credentials
+    .{ .name = "hashicorp-vault-token", .pattern = "\\b(hvs\\.[a-zA-Z0-9_-]{20,}|s\\.[a-zA-Z0-9_-]{20,})\\b" , .tier = PatternTier.critical }, // Vault tokens
+    .{ .name = "kubernetes-serviceaccount", .pattern = "eyJ[A-Za-z0-9_-]{100,}={0,2}" , .tier = PatternTier.critical }, // K8s JWT tokens (base64)
+    .{ .name = "kubeconfig-credentials", .pattern = "certificate-authority-data:\\s*([A-Za-z0-9+/]{50,}={0,2})" , .tier = PatternTier.critical }, // kubeconfig base64 certs
+    .{ .name = "saml-assertion", .pattern = "<saml:Assertion[^>]*>[\\s\\S]*?</saml:Assertion>" , .tier = PatternTier.infrastructure }, // SAML XML assertions
+    .{ .name = "base64-encoded-keys", .pattern = "-----BEGIN [A-Z]+ PRIVATE KEY-----[\\s\\S]{50,}-----END [A-Z]+ PRIVATE KEY-----" , .tier = PatternTier.critical }, // Private keys
+    .{ .name = "environment-file-secrets", .pattern = "([Ss][Ee][Cc][Rr][Ee][Tt]_?[Kk][Ee][Yy]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Aa][Pp][Ii]_?[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn])\\s*=\\s*([^\\n\\r]{10,})" , .tier = PatternTier.infrastructure }, // .env file secrets
+    .{ .name = "config-database-url", .pattern = "([Dd][Aa][Tt][Aa][Bb][Aa][Ss][Ee](?:_[Uu][Rr][Ll]|[Uu][Rr][Ll]))\\s*=\\s*([a-zA-Z][a-zA-Z0-9+:.\\-]*://[^\\s]+)" , .tier = PatternTier.critical }, // DATABASE_URL configs
 };
 
 // ============================================================================
@@ -414,8 +450,8 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
 pub const SIMPLE_PREFIX_COUNT = SIMPLE_PREFIX_PATTERNS.len; // 26
 pub const JWT_COUNT = JWT_PATTERNS.len; // 1
 pub const PREFIX_VALIDATION_COUNT = PREFIX_VALIDATION_PATTERNS.len; // 45
-pub const REGEX_COUNT = REGEX_PATTERNS.len; // 198
-pub const TOTAL_PATTERNS = SIMPLE_PREFIX_COUNT + JWT_COUNT + PREFIX_VALIDATION_COUNT + REGEX_COUNT; // 270
+pub const REGEX_COUNT = REGEX_PATTERNS.len; // 215 (198 original + 5 P0 + 8 P1 + 9 P2)
+pub const TOTAL_PATTERNS = SIMPLE_PREFIX_COUNT + JWT_COUNT + PREFIX_VALIDATION_COUNT + REGEX_COUNT; // 296 (270 baseline + 5 P0 + 8 P1 + 9 P2)
 /// Step 3: FFI Implementation Functions for 18 Pre-Marked Patterns
 /// Added to patterns.zig
 ///

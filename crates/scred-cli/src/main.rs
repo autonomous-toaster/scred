@@ -177,7 +177,8 @@ fn main() {
                 return;
             }
             "--list-patterns" => {
-                list_patterns();
+                let filter_type = extract_flag_value(&args, "--filter-type");
+                list_patterns(filter_type.as_deref());
                 return;
             }
             "--list-tiers" => {
@@ -241,10 +242,11 @@ fn print_help() {
     println!();
     println!("Usage: scred [OPTIONS]");
     println!();
-    println!("Pattern Tier Options:");
-    println!("  --detect <TIERS>        Which patterns to detect/log (default: ALL)");
-    println!("  --redact <TIERS>        Which patterns to redact (default: CRITICAL,API_KEYS)");
-    println!("  --list-tiers            Show available pattern tiers");
+    println!("Pattern Detection Options:");
+    println!("  --detect <TYPES>        Which patterns to detect: fast, structured, regex, all");
+    println!("                          (default: fast) - Controls performance");
+    println!("  --redact <TYPES>        Which patterns to redact: same as --detect");
+    println!("                          (default: fast) - Conservative by default");
     println!();
     println!("Mode Options:");
     println!("  -v, --verbose           Show statistics and detected patterns");
@@ -255,17 +257,17 @@ fn print_help() {
     println!();
     println!("Information Options:");
     println!("  --list-patterns         List all secret detection patterns");
+    println!("  --filter-type <TYPE>    Filter patterns by type: fast, structured, regex");
     println!("  --describe <NAME>       Show details for a specific pattern");
     println!("  --version               Show version information");
     println!("  --help, -h              Show this help message");
     println!();
-    println!("Tier Examples:");
-    println!("  CRITICAL                AWS, GitHub, Stripe, Database credentials");
-    println!("  API_KEYS                OpenAI, Twilio, SendGrid, and 165+ other services");
-    println!("  INFRASTRUCTURE          Kubernetes, Docker, Vault, HashiCorp secrets");
-    println!("  SERVICES                Specialty services (payments, comms, etc)");
-    println!("  PATTERNS                Generic patterns (JWT, Bearer, BasicAuth)");
-    println!("  ALL                     All patterns");
+    println!("Pattern Type Reference:");
+    println!("  fast                    FastPrefix (71 patterns, <5ms) - production");
+    println!("  structured              StructuredFormat (1 pattern) - JWT validation");
+    println!("  regex                   RegexBased (198 patterns, ~1000ms) - comprehensive");
+    println!("  all                     All 270 patterns - development only");
+    println!();
     println!();
     println!("Environment Variables:");
     println!("  SCRED_DETECT_PATTERNS   Which patterns to detect (same format as --detect, default: ALL)");
@@ -282,70 +284,90 @@ fn print_help() {
     println!();
 }
 
-fn list_patterns() {
+fn list_patterns(filter_type: Option<&str>) {
     use scred_http::get_pattern_tier;
     use scred_http::PatternTier;
     use std::collections::BTreeMap;
     
     // Get all patterns directly from Zig detector (single source of truth)
     let all_patterns = get_all_patterns();
-    let pattern_names: Vec<String> = all_patterns.iter().map(|p| p.name.clone()).collect();
-    let total = pattern_names.len();
     
-    // Group patterns by tier
-    let mut tiers: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    // Filter by pattern type if specified
+    let filtered_patterns: Vec<_> = if let Some(filter) = filter_type {
+        let filter_lower = filter.to_lowercase();
+        all_patterns.into_iter().filter(|p| {
+            match (p.pattern_type, filter_lower.as_str()) {
+                (0, "fast" | "fastprefix") => true,
+                (1, "structured" | "structuredformat") => true,
+                (2, "regex" | "regexbased") => true,
+                (_, "all") => true,
+                _ => false,
+            }
+        }).collect()
+    } else {
+        all_patterns
+    };
     
-    for pattern_name in pattern_names {
-        let tier = get_pattern_tier(&pattern_name);
-        let tier_str = match tier {
-            PatternTier::Critical => "CRITICAL (95%)".to_string(),
-            PatternTier::ApiKeys => "API_KEYS (80%)".to_string(),
-            PatternTier::Infrastructure => "INFRASTRUCTURE (60%)".to_string(),
-            PatternTier::Services => "SERVICES (40%)".to_string(),
-            PatternTier::Patterns => "PATTERNS (30%)".to_string(),
+    let total = filtered_patterns.len();
+    
+    // Group patterns by pattern type
+    let mut by_type: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+    
+    for pattern in &filtered_patterns {
+        let type_name = match pattern.pattern_type {
+            0 => "FastPrefix",
+            1 => "StructuredFormat",
+            2 => "RegexBased",
+            _ => "Unknown",
         };
         
-        tiers.entry(tier_str)
+        let type_key = match pattern.pattern_type {
+            0 => "0. FastPrefix (26+45 patterns, <5ms total)",
+            1 => "1. StructuredFormat (1 pattern, ~1ms)",
+            2 => "2. RegexBased (198 patterns, ~1000ms total)",
+            _ => "Unknown",
+        };
+        
+        by_type.entry(type_key.to_string())
             .or_insert_with(Vec::new)
-            .push(pattern_name.to_string());
+            .push((pattern.name.clone(), type_name.to_string()));
     }
     
     println!("╔════════════════════════════════════════════════════════════╗");
-    println!("║         SCRED Secret Pattern Library - {} patterns        ║", total);
+    println!("║         SCRED Pattern Library - {} patterns                ║", total);
+    println!("║                  Grouped by Performance Type                ║");
     println!("╚════════════════════════════════════════════════════════════╝\n");
     
-    println!("Patterns grouped by risk tier:\n");
+    println!("⚡ Use --filter-type to control performance:\n");
+    println!("  scred --list-patterns --filter-type fast       # Only FastPrefix");
+    println!("  scred --list-patterns --filter-type regex      # Only RegexBased");
+    println!("  scred --list-patterns --filter-type all        # All patterns\n");
     
-    for (tier, pattern_list) in tiers {
-        println!("📊 {} - {} patterns", tier, pattern_list.len());
+    for (type_key, pattern_list) in &by_type {
+        println!("📊 {} - {} patterns", type_key, pattern_list.len());
         
         // Print patterns in 3 columns
         let cols = 3;
         for chunk in pattern_list.chunks(cols) {
             let formatted: Vec<String> = chunk.iter()
-                .map(|p| format!("{:<30}", p))
+                .map(|(name, _)| format!("{:<30}", name))
                 .collect();
             println!("   {}", formatted.join("   "));
         }
         println!();
     }
     
-    println!("\n📋 Usage:");
-    println!("  Detect specific tiers:");
-    println!("    scred --detect CRITICAL,API_KEYS");
-    println!("    SCRED_DETECT_PATTERNS=CRITICAL,API_KEYS,INFRASTRUCTURE scred");
+    println!("\n📋 Usage Examples:");
+    println!("  Detect fast patterns only (production):");
+    println!("    SCRED_DETECT_PATTERNS=fast scred < input.txt");
+    println!("    scred --detect fast < input.txt");
     println!();
-    println!("  Detect ALL patterns:");
-    println!("    scred --detect ALL");
-    println!("    SCRED_DETECT_PATTERNS=ALL scred");
+    println!("  Detect fast + structured (balanced):");
+    println!("    SCRED_DETECT_PATTERNS=fast,structured scred < input.txt");
     println!();
-    println!("  Redact specific tiers:");
-    println!("    scred --redact CRITICAL");
-    println!("    SCRED_REDACT_PATTERNS=CRITICAL,API_KEYS scred");
-    println!();
-    println!("  Get more details:");
-    println!("    scred --list-tiers       # List all available tiers");
-    println!("    scred --describe <name>  # Get pattern details\n");
+    println!("  Detect all patterns (development):");
+    println!("    SCRED_DETECT_PATTERNS=all scred < input.txt");
+    println!("    scred --detect all < input.txt\n");
 }
 
 fn describe_pattern(name: &str) {

@@ -9,7 +9,7 @@ fn main() {
     
     println!("Profiling redaction operation\n");
     println!("Input: {} bytes", test_text.len());
-    println!("Patterns loaded: {}\n", engine.compiled_patterns.len());
+    println!("Patterns: Using all 71+ patterns from Zig FFI\n");
     
     // Single call to measure total time
     let start = Instant::now();

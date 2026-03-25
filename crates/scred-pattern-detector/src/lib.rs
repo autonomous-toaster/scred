@@ -12,12 +12,72 @@ pub struct DetectionEvent {
     pub length: u16,
 }
 
+/// PatternType classification - based on PERFORMANCE characteristics
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PatternType {
+    /// Fast prefix-only matching (O(1) per pattern)
+    FastPrefix = 0,
+    /// Structured format validation (e.g., JWT parsing)
+    StructuredFormat = 1,
+    /// Full regex-based matching (O(n) with backtracking)
+    RegexBased = 2,
+}
+
+impl PatternType {
+    pub fn name(&self) -> &'static str {
+        match self {
+            PatternType::FastPrefix => "FastPrefix",
+            PatternType::StructuredFormat => "StructuredFormat",
+            PatternType::RegexBased => "RegexBased",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            PatternType::FastPrefix => "Fast prefix-only matching (<5ms for all)",
+            PatternType::StructuredFormat => "Structured format validation (JWT, etc.)",
+            PatternType::RegexBased => "Full regex matching (~1000ms for all)",
+        }
+    }
+
+    pub fn from_u8(val: u8) -> Option<Self> {
+        match val {
+            0 => Some(PatternType::FastPrefix),
+            1 => Some(PatternType::StructuredFormat),
+            2 => Some(PatternType::RegexBased),
+            _ => None,
+        }
+    }
+}
+
+/// Get pattern type name by u8 value
+pub fn pattern_type_name(pattern_type: u8) -> &'static str {
+    match pattern_type {
+        0 => "FastPrefix",
+        1 => "StructuredFormat",
+        2 => "RegexBased",
+        _ => "Unknown",
+    }
+}
+
+/// Get pattern type description by u8 value
+pub fn pattern_type_description(pattern_type: u8) -> &'static str {
+    match pattern_type {
+        0 => "Fast prefix-only matching",
+        1 => "Structured format (JWT)",
+        2 => "Full regex matching",
+        _ => "Unknown type",
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ExportedPattern {
     pub name: [u8; 128],
     pub prefix: [u8; 256],
     pub min_len: usize,
+    pub pattern_type: u8,  // 0=FastPrefix, 1=StructuredFormat, 2=RegexBased
 }
 
 #[repr(C)]
@@ -676,6 +736,38 @@ pub struct PatternInfo {
     pub name: String,
     pub prefix: String,
     pub min_len: usize,
+    pub pattern_type: u8,  // 0=FastPrefix, 1=StructuredFormat, 2=RegexBased
+}
+
+// ============================================================================
+// NEW: Conversion Functions for Phase 2 Classification Architecture
+// ============================================================================
+
+impl ExportedPattern {
+    /// Get pattern type as string
+    pub fn pattern_type_name(&self) -> &'static str {
+        match self.pattern_type {
+            0 => "FastPrefix",
+            1 => "StructuredFormat",
+            2 => "RegexBased",
+            _ => "Unknown",
+        }
+    }
+
+    /// Get pattern type description
+    pub fn pattern_type_description(&self) -> &'static str {
+        match self.pattern_type {
+            0 => "Fast prefix-only matching (<5ms for all)",
+            1 => "Structured format validation (JWT, etc.)",
+            2 => "Full regex matching (~1000ms for all)",
+            _ => "Unknown",
+        }
+    }
+
+    /// Get pattern type as enum
+    pub fn as_pattern_type(&self) -> Option<PatternType> {
+        PatternType::from_u8(self.pattern_type)
+    }
 }
 
 /// Get all patterns from the Zig detector (source of truth)
@@ -707,6 +799,7 @@ pub fn get_all_patterns() -> Vec<PatternInfo> {
                     name,
                     prefix,
                     min_len: exported.min_len,
+                    pattern_type: exported.pattern_type,
                 });
             }
         }

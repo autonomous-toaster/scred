@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod phase2_streaming_redactor_selector_tests {
     use scred_redactor::{StreamingRedactor, StreamingConfig, RedactionConfig};
-    use scred_redactor::{PatternSelector, PatternTier};
+    use scred_redactor::pattern_selector::{PatternSelector, PatternTier};
     use std::sync::Arc;
 
     // =========================================================================

@@ -184,6 +184,11 @@ pub fn detect_regex(input: []const u8, pattern_idx: usize) bool {
         return detect_jwt_token(input);
     }
     
+    // Private key patterns (OpenSSH, RSA, EC, etc.)
+    if (std.mem.indexOf(u8, regex_pattern.pattern, "PRIVATE KEY")) |_| {
+        return detect_private_key(input);
+    }
+    
     // For other patterns, fall back to simple substring search
     if (std.mem.indexOf(u8, input, regex_pattern.pattern)) |_| {
         return true;
@@ -287,6 +292,50 @@ fn detect_jwt_token(input: []const u8) bool {
         }
         i += 1;
     }
+    return false;
+}
+
+/// Detect private key patterns (OpenSSH, RSA, EC, etc.)
+/// PEM format: -----BEGIN [TYPE] PRIVATE KEY-----
+/// ... multiline base64 content ...
+/// -----END [TYPE] PRIVATE KEY-----
+fn detect_private_key(input: []const u8) bool {
+    // Look for PEM format markers
+    if ((std.mem.indexOf(u8, input, "-----BEGIN")) == null) {
+        return false;
+    }
+    
+    if ((std.mem.indexOf(u8, input, "PRIVATE KEY-----")) == null) {
+        return false;
+    }
+    
+    if ((std.mem.indexOf(u8, input, "-----END")) == null) {
+        return false;
+    }
+    
+    // Additional verification: check for at least some content between markers
+    if (input.len < 64) {
+        return false;  // Minimum valid PEM size
+    }
+    
+    // Verify pattern: must have BEGIN...END with PRIVATE KEY between them
+    var begin_pos: usize = 0;
+    var end_pos: usize = 0;
+    
+    if (std.mem.indexOf(u8, input, "-----BEGIN")) |pos| {
+        begin_pos = pos;
+        if (std.mem.indexOf(u8, input[begin_pos..], "-----END")) |relative_pos| {
+            end_pos = begin_pos + relative_pos;
+            
+            // Check that "PRIVATE KEY" appears between BEGIN and END
+            const between = input[begin_pos..end_pos];
+            if (std.mem.indexOf(u8, between, "PRIVATE KEY") != null) {
+                // Valid PEM private key format found
+                return true;
+            }
+        }
+    }
+    
     return false;
 }
 

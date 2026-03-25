@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod phase1_redaction_engine_selector_tests {
     use scred_redactor::RedactionEngine;
-    use scred_redactor::{PatternSelector, PatternTier};
+    use scred_redactor::pattern_selector::{PatternSelector, PatternTier};
 
     // =========================================================================
     // CORE FUNCTIONALITY: Engine with Selector Support

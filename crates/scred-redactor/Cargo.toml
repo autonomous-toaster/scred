@@ -7,7 +7,7 @@ license.workspace = true
 description = "Core secret pattern redaction engine (244+ patterns)"
 
 [dependencies]
-regex = { workspace = true }
+# regex removed - all pattern detection now via Zig FFI (patterns.zig)
 serde = { workspace = true }
 lazy_static = "1.4"
 scred-pattern-detector = { path = "../scred-pattern-detector" }

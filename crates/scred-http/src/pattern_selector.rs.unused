@@ -70,6 +70,9 @@ pub enum PatternSelector {
     /// Select specific tiers (e.g., CRITICAL, API_KEYS, INFRASTRUCTURE)
     Tier(Vec<PatternTier>),
 
+    /// Select by pattern type (performance-based: FastPrefix, StructuredFormat, RegexBased)
+    Type(Vec<String>), // "fast", "structured", "regex"
+
     /// Wildcard patterns (e.g., "aws-*", "github-*")
     Wildcard(Vec<String>),
 
@@ -113,18 +116,54 @@ impl PatternSelector {
     }
 
     /// Parse selector from string
-    /// Format: "CRITICAL", "CRITICAL,API_KEYS", "aws-*", "regex:^aws", "all", "none"
+    /// Formats:
+    /// - Tiers: "CRITICAL", "CRITICAL,API_KEYS", "INFRASTRUCTURE"
+    /// - Types (new): "fast", "structured", "regex", "fast,structured"
+    /// - Wildcards: "aws-*", "github-*", "aws-*,github-*"
+    /// - Regex: "regex:^aws", "regex:^(aws|github)"
+    /// - Special: "all", "none"
     pub fn from_str(input: &str) -> Result<Self, String> {
         let input = input.trim();
 
         match input.to_lowercase().as_str() {
             "all" => Ok(Self::All),
             "none" => Ok(Self::None),
+            "fast" | "fastprefix" => {
+                Ok(Self::Type(vec!["fast".to_string()]))
+            }
+            "structured" | "structuredformat" => {
+                Ok(Self::Type(vec!["structured".to_string()]))
+            }
+            "regex" | "regexbased" => {
+                Ok(Self::Type(vec!["regex".to_string()]))
+            }
+            _ if input.starts_with("type:") => {
+                let type_str = &input[5..];
+                let types: Vec<String> = type_str.split(',')
+                    .map(|s| s.trim().to_lowercase())
+                    .collect();
+                Ok(Self::Type(types))
+            }
             _ if input.starts_with("regex:") => {
                 let regex_str = input[6..].to_string();
                 Ok(Self::Regex(vec![regex_str]))
             }
             _ if input.contains(',') => {
+                // Check if it's comma-separated types
+                let parts: Vec<&str> = input.split(',').map(|s| s.trim()).collect();
+                if parts.iter().all(|p| matches!(p.to_lowercase().as_str(), 
+                    "fast" | "fastprefix" | "structured" | "structuredformat" | "regex" | "regexbased")) {
+                    let types: Vec<String> = parts.iter()
+                        .map(|p| match p.to_lowercase().as_str() {
+                            "fastprefix" => "fast".to_string(),
+                            "structuredformat" => "structured".to_string(),
+                            "regexbased" => "regex".to_string(),
+                            other => other.to_string(),
+                        })
+                        .collect();
+                    return Ok(Self::Type(types));
+                }
+
                 // Could be tiers or patterns
                 // Try parsing as tiers first
                 if let Ok(tiers) = PatternTier::parse_list(input) {
@@ -216,6 +255,9 @@ impl PatternSelector {
             Self::Tier(tiers) => {
                 let tier_names: Vec<&str> = tiers.iter().map(|t| t.name()).collect();
                 format!("Tiers: {}", tier_names.join(", "))
+            }
+            Self::Type(types) => {
+                format!("Types: {} (performance-based)", types.join(", "))
             }
             Self::All => "All patterns".to_string(),
             Self::None => "No patterns".to_string(),

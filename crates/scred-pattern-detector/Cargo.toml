@@ -12,6 +12,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+regex = "1.10"
 
 [lib]
 name = "scred_pattern_detector"

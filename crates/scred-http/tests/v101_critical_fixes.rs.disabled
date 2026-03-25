@@ -117,7 +117,7 @@ fn test_valid_tier_single() {
     let result = PatternSelector::from_str("CRITICAL");
     assert!(result.is_ok());
     
-    if let Ok(PatternSelector::Tier(tiers)) = result {
+    if let Ok(PatternSelector::Tiers(tiers)) = result {
         assert_eq!(tiers.len(), 1);
     } else {
         panic!("Expected Tier selector");
@@ -129,7 +129,7 @@ fn test_valid_tier_multiple() {
     let result = PatternSelector::from_str("CRITICAL,API_KEYS");
     assert!(result.is_ok());
     
-    if let Ok(PatternSelector::Tier(tiers)) = result {
+    if let Ok(PatternSelector::Tiers(tiers)) = result {
         assert_eq!(tiers.len(), 2);
     } else {
         panic!("Expected Tier selector with 2 tiers");
