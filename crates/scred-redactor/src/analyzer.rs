@@ -165,7 +165,7 @@ mod tests {
         // Test simple prefix patterns (TIER1)
         // NOTE: sk_live_ was moved to PREFIX_VALIDATION tier for validation
         assert!(ZigAnalyzer::has_simple_prefix_pattern("AKIA1234567890123456"));  // AWS AKIA (stays in SIMPLE_PREFIX)
-        assert!(ZigAnalyzer::has_simple_prefix_pattern("lin_api_secret"));  // Linear API
+        assert!(ZigAnalyzer::has_simple_prefix_pattern("ghp_1234567890abcdef"));  // GitHub token (stays in SIMPLE_PREFIX)
         assert!(!ZigAnalyzer::has_simple_prefix_pattern("random_text"));
     }
 
