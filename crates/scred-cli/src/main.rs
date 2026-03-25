@@ -157,7 +157,6 @@ fn list_tiers_command() {
 
 fn main() {
     // Initialize logging - DISABLED FOR DEBUGGING
-    println!("DEBUG: scred started");
     
     // let log_level = if env::var("SCRED_DEBUG").is_ok() {
     //     "debug"
@@ -176,11 +175,9 @@ fn main() {
     //     .init();
 
     let args: Vec<String> = env::args().collect();
-    println!("DEBUG: args parsed");
     
     // Parse flags
     let verbose = args.iter().any(|arg| arg == "-v" || arg == "--verbose");
-    println!("DEBUG: flags parsed, verbose={}", verbose);
     let env_mode_forced = args.iter().any(|arg| arg == "--env-mode" || arg == "--env");
     let text_mode_forced = args.iter().any(|arg| arg == "--text-mode");
     let auto_detect_enabled = !args.iter().any(|arg| arg == "--auto-detect=off");
@@ -257,13 +254,10 @@ fn main() {
     };
     
     if use_env_mode {
-        println!("DEBUG: about to call run_env_redacting_stream");
         run_env_redacting_stream(verbose, &detect_selector, &redact_selector);
     } else {
-        println!("DEBUG: about to call run_redacting_stream");
         run_redacting_stream(verbose, &detect_selector, &redact_selector);
     }
-    println!("DEBUG: done");
 }
 
 fn print_help() {
@@ -414,25 +408,20 @@ fn describe_pattern(name: &str) {
 }
 
 fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact_selector: &PatternSelector) {
-    println!("DEBUG: inside run_redacting_stream");
     debug!("[redacting-stream] Starting");
     let start = Instant::now();
 
     // Create ConfigurableEngine with pattern selectors
-    println!("DEBUG: about to create RedactionEngine");
     debug!("[redacting-stream] Creating RedactionEngine");
     let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
-    println!("DEBUG: RedactionEngine created");
     debug!("[redacting-stream] RedactionEngine created");
     
-    println!("DEBUG: about to create ConfigurableEngine");
     debug!("[redacting-stream] Creating ConfigurableEngine");
     let config_engine = ConfigurableEngine::new(
         engine,
         detect_selector.clone(),
         redact_selector.clone(),
     );
-    println!("DEBUG: ConfigurableEngine created");
     debug!("[redacting-stream] ConfigurableEngine created");
 
     // FIX: Read in single shot to avoid pipe deadlock
@@ -444,22 +433,14 @@ fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact
     let mut total_read = 0;
     let mut total_written = 0;
 
-    println!("DEBUG: about to read from stdin (stdin_is_tty={})", stdin_is_tty());
     debug!("[redacting-stream] About to read from stdin");
     match io::stdin().read(&mut chunk) {
         Ok(n) if n > 0 => {
-            println!("DEBUG: read {} bytes from stdin", n);
-            println!("DEBUG: creating UTF-8 string");
             let input_str = String::from_utf8_lossy(&chunk[..n]);
-            println!("DEBUG: calling detect_and_redact");
             let result = config_engine.detect_and_redact(&input_str);
-            println!("DEBUG: detect_and_redact returned, result has {} bytes", result.redacted.len());
             
-            println!("DEBUG: writing to stdout");
             io::stdout().write_all(result.redacted.as_bytes()).ok();
-            println!("DEBUG: flushing stdout");
             io::stdout().flush().ok();
-            println!("DEBUG: stdout flushed");
             
             total_read = n;
             total_written = result.redacted.len();
