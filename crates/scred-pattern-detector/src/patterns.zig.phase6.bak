@@ -168,6 +168,7 @@ pub const PREFIX_VALIDATION_PATTERNS = [_]PrefixValidation{
     .{ .name = "contentful-personal-access-token", .prefix = "CFPAT-", .tier = .api_keys, .min_len = 43, .max_len = 43, .charset = .alphanumeric },
     .{ .name = "databricks-token", .prefix = "dapi", .tier = .infrastructure, .min_len = 32, .max_len = 0, .charset = .hex },
     .{ .name = "digicert-api-key", .prefix = "d7dc", .tier = .services, .min_len = 20, .max_len = 0, .charset = .alphanumeric },
+    .{ .name = "dynatrace-api-token", .prefix = "dt0c01.", .tier = .infrastructure, .min_len = 90, .max_len = 0, .charset = .alphanumeric },
     .{ .name = "expo-access-token", .prefix = "ExponentPushToken[", .tier = .services, .min_len = 60, .max_len = 0, .charset = .alphanumeric },
     .{ .name = "figma-token", .prefix = "figd_", .tier = .services, .min_len = 40, .max_len = 0, .charset = .alphanumeric },
     .{ .name = "flutterwave", .prefix = "FLWRSP_TEST_", .tier = .services, .min_len = 40, .max_len = 0, .charset = .alphanumeric },
@@ -325,6 +326,7 @@ pub const PREFIX_VALIDATION_PATTERNS = [_]PrefixValidation{
 // Note: Regex engine TBD (Oniguruma, PCRE, custom, or Zig's regex)
 
 pub const REGEX_PATTERNS = [_]RegexPattern{
+    .{ .name = "1password-service-account-token", .pattern = "ops_eyJ[a-zA-Z0-9+/]{250,}={0,3}" , .tier = PatternTier.api_keys },
     .{ .name = "aha", .pattern = "\\b([A-Za-z0-9](?:[A-Za-z0-9\\-]{0,61}[A-Za-z0-9])\\.aha\\.io)" , .tier = PatternTier.api_keys },
     .{ .name = "airtableoauth", .pattern = "\\b([[:alnum:]]+\\.v1\\.[a-zA-Z0-9_-]+\\.[a-f0-9]+)\\b" , .tier = PatternTier.api_keys },
     .{ .name = "alibaba", .pattern = "\\b([a-zA-Z0-9]{30})\\b" , .tier = PatternTier.api_keys },
@@ -350,6 +352,8 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "bitbucketapppassword", .pattern = "(?:^|[^A-Za-z0-9-_])(?P<username>[A-Za-z0-9-_]{1,30}):(?P<password>ATBB[A-Za-z0-9_=.-]+)\\b" , .tier = PatternTier.api_keys },
     .{ .name = "bitbucketapppassword-1", .pattern = "https://(?P<username>[A-Za-z0-9-_]{1,30}):(?P<password>ATBB[A-Za-z0-9_=.-]+)@bitbucket\\.org" , .tier = PatternTier.api_keys },
     .{ .name = "clickhelp", .pattern = "\\b([0-9A-Za-z-]{3,20}\\.(?:try\\.)?clickhelp\\.co)\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "closecrm", .pattern = "\\b(api_[a-z0-9A-Z.]{45})\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "cloudflarecakey", .pattern = "\\b(v1\\.0-[A-Za-z0-9-]{171})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "coinbase", .pattern = "\\b(organizations\\\\*/\\w{8}-\\w{4}-\\w{4}-\\w{4}-\\w{12}\\\\*/apiKeys\\\\*/\\w{8}-\\w{4}-\\w{4}-\\w{4}-\\w{12})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "couchbase", .pattern = "\\b(cb\\.[a-z0-9]+\\.cloud\\.couchbase\\.com)\\b" , .tier = PatternTier.api_keys },
     .{ .name = "databrickstoken", .pattern = "\\b([a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.(cloud\\.databricks\\.com|gcp\\.databricks\\.com|azuredatabricks\\.net))\\b" , .tier = PatternTier.api_keys },
@@ -358,11 +362,16 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "deputy", .pattern = "\\b([0-9a-z]{1,}\\.as\\.deputy\\.com)\\b" , .tier = PatternTier.api_keys },
     // ... (50/198 patterns)
     .{ .name = "digitaloceanv2", .pattern = "\\b((?:dop|doo|dor)_v1_[a-f0-9]{64})\\b" , .tier = PatternTier.api_keys }, // could be multiple prefixes with validation or just prefix + 64
+    .{ .name = "documo", .pattern = "\\b(ey[a-zA-Z0-9]{34}.ey[a-zA-Z0-9]{154}.[a-zA-Z0-9_-]{43})\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "dynatrace-api-token", .pattern = "dt0c01\\\\.(?i)[a-z0-9]{24}\\\\.[a-z0-9]{64}" , .tier = PatternTier.api_keys },
+    .{ .name = "flightlabs", .pattern = "\\b(eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9\\.ey[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]{86})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "flyio", .pattern = "\\b(FlyV1 fm\\d+_[A-Za-z0-9+\\/=,_-]{500,700})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "freshdesk", .pattern = "\\b([0-9a-z-]{1,}\\.freshdesk\\.com)\\b" , .tier = PatternTier.api_keys },
     .{ .name = "ftp", .pattern = "\\bftp://[\\S]{3,50}:([\\S]{3,50})@[-.%\\w\\/:]+\\b" , .tier = PatternTier.api_keys },
     .{ .name = "gcpapplicationdefaultcredentials", .pattern = "\\{[^{]+client_secret[^}]+\\}" , .tier = PatternTier.api_keys },
+    .{ .name = "gemini", .pattern = "\\b((?:master-|account-)[0-9A-Za-z]{20})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "grafanaserviceaccount-1", .pattern = "\\b([a-zA-Z0-9-]+\\.grafana\\.net)\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "graphcms", .pattern = "\\b(ey[a-zA-Z0-9]{73}.ey[a-zA-Z0-9]{365}.[a-zA-Z0-9_-]{683})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "harness-api-key", .pattern = "(?:pat|sat)\\\\.[a-zA-Z0-9_-]{22}\\\\.[a-zA-Z0-9]{24}\\\\.[a-zA-Z0-9]{20}" , .tier = PatternTier.api_keys },
     .{ .name = "hashicorp-tf-api-token", .pattern = "(?i)[a-z0-9]{14}\\\\.(?-i:atlasv1)\\\\.[a-z0-9\\\\-_=]{60,70}" , .tier = PatternTier.api_keys },
     .{ .name = "hasura", .pattern = "\\b([a-zA-Z0-9-]+\\.hasura\\.app)\\b" , .tier = PatternTier.api_keys },
