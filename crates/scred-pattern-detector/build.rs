@@ -7,9 +7,9 @@ fn main() {
     
     println!("cargo:warning=Building Zig pattern detector...");
     
-    // Build Zig library
+    // Build Zig library with macOS 11.0 target to match Rust linker
     let zig_build = Command::new("zig")
-        .args(["build-lib", "src/lib.zig", "-O", "ReleaseFast"])
+        .args(["build-lib", "src/lib.zig", "-O", "ReleaseFast", "-target", "aarch64-macos.11.0"])
         .current_dir(&manifest_dir)
         .output()
         .expect("Failed to build Zig library");

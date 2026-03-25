@@ -101,7 +101,6 @@ fn validate_charset_simd(data: []const u8, charset: patterns.Charset) usize {
     // Process main loop: 16 bytes at a time with SIMD
     while (i + vector_size <= data.len) {
         // Check 16 characters at once (vectorizable operation)
-        var all_valid = true;
         var j: usize = 0;
         while (j < vector_size) : (j += 1) {
             if (!is_valid_char_in_charset(data[i + j], charset)) {

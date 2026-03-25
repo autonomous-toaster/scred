@@ -16,7 +16,7 @@ pub const env_redactor = @import("env_redactor.zig");
 
 pub const patterns = @import("patterns.zig");
 pub const detectors = @import("detectors.zig");
-// pub const detector_ffi = @import("detector_ffi.zig"); // TODO: Fix compatibility issues
+pub const detector_ffi = @import("detector_ffi.zig");
 
 // Re-export pattern definitions for public API
 pub const SIMPLE_PREFIX_PATTERNS = patterns.SIMPLE_PREFIX_PATTERNS;
@@ -1218,4 +1218,19 @@ export fn scred_redact_text_optimized_stub(
 
 export fn scred_free_redaction_result_stub(result: RedactionResultFFI) void {
     return redaction_stub.scred_free_redaction_result_stub(result);
+}
+
+// Wave 1 validators are already exported from detector_ffi.zig,
+// just ensure detector_ffi is imported so symbols are included
+pub const _validator_exports = detector_ffi;
+
+// Force inclusion of detector_ffi exports by declaring public wrappers
+pub fn get_validator_function_pointers() void {
+    // This ensures the compiler includes the exported functions from detector_ffi
+    _ = detector_ffi.validate_alphanumeric_token;
+    _ = detector_ffi.validate_aws_credential;
+    _ = detector_ffi.validate_github_token;
+    _ = detector_ffi.validate_hex_token;
+    _ = detector_ffi.validate_base64_token;
+    _ = detector_ffi.validate_base64url_token;
 }
