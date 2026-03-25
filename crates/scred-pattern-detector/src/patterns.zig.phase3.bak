@@ -291,7 +291,9 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "anthropic", .pattern = "\\b(sk-ant-(?:admin01|api03)-[\\w\\-]{93}AA)\\b" , .tier = PatternTier.critical }, // could be multiple prefixes (sk-ant, sk-ant-admin, etc) with validation or just prefix + 95
     .{ .name = "anypoint", .pattern = "\\b([0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "api_key_header", .pattern = "(?i)(?:X-API-KEY|X-API-KEY-HEADER):\\s*([A-Za-z0-9\\-._~+\\/]+=*)" , .tier = PatternTier.api_keys },
+    .{ .name = "apify", .pattern = "\\b(apify\\_api\\_[a-zA-Z-0-9]{36})\\b" , .tier = PatternTier.api_keys }, // could be multiple prefixes with validation or just prefix + 36
     .{ .name = "artifactory-api-key", .pattern = "\\\\bAKCp[A-Za-z0-9]{69}\\\\b" , .tier = PatternTier.infrastructure },
+    .{ .name = "artifactoryreferencetoken", .pattern = "\\b(cmVmdGtu[A-Za-z0-9]{56})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "artifactoryreferencetoken-1", .pattern = "\\b([A-Za-z0-9][A-Za-z0-9\\-]{0,61}[A-Za-z0-9]\\.jfrog\\.io)" , .tier = PatternTier.api_keys },
     .{ .name = "auth0managementapitoken", .pattern = "\\b(ey[a-zA-Z0-9._-]+)\\b" , .tier = PatternTier.critical },
     .{ .name = "auth0managementapitoken-1", .pattern = "([a-zA-Z0-9\\-]{2,16}\\.[a-zA-Z0-9_-]{2,3}\\.auth0\\.com)" , .tier = PatternTier.critical },
@@ -314,14 +316,19 @@ pub const REGEX_PATTERNS = [_]RegexPattern{
     .{ .name = "caflou", .pattern = "\\b(eyJhbGciOiJIUzI1NiJ9[a-zA-Z0-9._-]{135})\\b" , .tier = PatternTier.patterns },
     .{ .name = "clickhelp", .pattern = "\\b([0-9A-Za-z-]{3,20}\\.(?:try\\.)?clickhelp\\.co)\\b" , .tier = PatternTier.api_keys },
     .{ .name = "clickhouse-cloud-api-secret-key", .pattern = "\\\\b(4b1d[A-Za-z0-9]{38})\\\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "clojars-api-token", .pattern = "(?i)CLOJARS_[a-z0-9]{60}" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 60
     .{ .name = "closecrm", .pattern = "\\b(api_[a-z0-9A-Z.]{45})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "cloudflarecakey", .pattern = "\\b(v1\\.0-[A-Za-z0-9-]{171})\\b" , .tier = PatternTier.api_keys },
     .{ .name = "coinbase", .pattern = "\\b(organizations\\\\*/\\w{8}-\\w{4}-\\w{4}-\\w{4}-\\w{12}\\\\*/apiKeys\\\\*/\\w{8}-\\w{4}-\\w{4}-\\w{4}-\\w{12})\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "contentfulpersonalaccesstoken", .pattern = "\\b(CFPAT-[a-zA-Z0-9_\\-]{43})\\b" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 43
     .{ .name = "couchbase", .pattern = "\\b(cb\\.[a-z0-9]+\\.cloud\\.couchbase\\.com)\\b" , .tier = PatternTier.api_keys },
     .{ .name = "databrickstoken", .pattern = "\\b([a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.(cloud\\.databricks\\.com|gcp\\.databricks\\.com|azuredatabricks\\.net))\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "databrickstoken-1", .pattern = "\\b(dapi[0-9a-f]{32}(-\\d)?)\\b" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 32 + optional -digit
     .{ .name = "datadogapikey", .pattern = "\\b(api(?:\\.[a-z0-9-]+)?\\.(?:datadoghq|ddog-gov)\\.(com|eu))\\b" , .tier = PatternTier.api_keys },
     .{ .name = "datadogtoken", .pattern = "\\b(api(?:\\.[a-z0-9-]+)?\\.(?:datadoghq|ddog-gov)\\.(com|eu))\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "deno", .pattern = "\\b(dd[pw]_[a-zA-Z0-9]{36})\\b" , .tier = PatternTier.api_keys }, // could be multiple prefixes with validation or just prefix + 36
     .{ .name = "deputy", .pattern = "\\b([0-9a-z]{1,}\\.as\\.deputy\\.com)\\b" , .tier = PatternTier.api_keys },
+    .{ .name = "dfuse", .pattern = "\\b(web\\_[0-9a-z]{32})\\b" , .tier = PatternTier.api_keys }, // could be prefix with validation or just prefix + 32
     // ... (50/198 patterns)
     .{ .name = "digitaloceanv2", .pattern = "\\b((?:dop|doo|dor)_v1_[a-f0-9]{64})\\b" , .tier = PatternTier.api_keys }, // could be multiple prefixes with validation or just prefix + 64
     .{ .name = "documo", .pattern = "\\b(ey[a-zA-Z0-9]{34}.ey[a-zA-Z0-9]{154}.[a-zA-Z0-9_-]{43})\\b" , .tier = PatternTier.api_keys },
