@@ -1,54 +1,41 @@
 //! Thread-safe allocator wrapper for pattern redaction
-//! Wraps global GPA with a mutex to allow concurrent calls
+//! SIMPLIFIED: Removed mutex for debugging
 
 const std = @import("std");
 
 var gpa: std.heap.GeneralPurposeAllocator(.{}) = undefined;
-var gpa_mutex: std.Thread.Mutex = .{};
 var allocator_initialized = false;
 
-/// Get thread-safe access to the global GPA allocator
-/// IMPORTANT: Must call release() after use to unlock
+/// Get allocator (no mutex for debugging)
 pub fn get_allocator() std.mem.Allocator {
-    gpa_mutex.lock();
-    defer gpa_mutex.unlock();
-    
     if (!allocator_initialized) {
+        std.debug.print("[ALLOC] Initializing GPA\n", .{});
         gpa = std.heap.GeneralPurposeAllocator(.{}){};
         allocator_initialized = true;
+        std.debug.print("[ALLOC] GPA initialized\n", .{});
     }
+    std.debug.print("[ALLOC] Returning allocator\n", .{});
     return gpa.allocator();
 }
 
-/// Allocate memory with thread-safe locking
+/// Allocate memory
 pub fn allocate(size: usize) ![]u8 {
-    gpa_mutex.lock();
-    defer gpa_mutex.unlock();
-    
     if (!allocator_initialized) {
         gpa = std.heap.GeneralPurposeAllocator(.{}){};
         allocator_initialized = true;
     }
-    
     return gpa.allocator().alloc(u8, size);
 }
 
-/// Free memory with thread-safe locking
+/// Free memory
 pub fn free(memory: []u8) void {
-    gpa_mutex.lock();
-    defer gpa_mutex.unlock();
-    
     if (allocator_initialized) {
         gpa.allocator().free(memory);
     }
 }
 
-/// Reset the allocator (call after important operations complete)
-/// This is optional but recommended for long-running processes
+/// Reset the allocator
 pub fn reset() void {
-    gpa_mutex.lock();
-    defer gpa_mutex.unlock();
-    
     if (allocator_initialized) {
         _ = gpa.deinit();
         gpa = std.heap.GeneralPurposeAllocator(.{}){};
