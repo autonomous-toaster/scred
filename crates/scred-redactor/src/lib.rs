@@ -7,20 +7,6 @@
 //! - **Character-preserving**: Output length = input length
 //! - **Streaming mode**: Bounded memory (64KB chunks), handles GB-scale files
 
-// Force linking of Zig FFI library
-extern "C" {
-    // These symbols are defined in scred-pattern-detector (Zig FFI)
-    // We declare them here to ensure the Zig library gets linked
-    fn scred_redact_text_optimized_stub(text: *const u8, text_len: usize) -> ZigRedactionResult;
-}
-
-#[repr(C)]
-struct ZigRedactionResult {
-    output: *mut u8,
-    output_len: usize,
-    match_count: u32,
-}
-
 pub mod analyzer;
 pub mod detector;
 pub mod redactor;
