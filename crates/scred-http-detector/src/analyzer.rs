@@ -3,9 +3,8 @@
 //! Provides the main trait and implementation for analyzing HTTP content.
 
 use crate::body_analysis::BodyAnalyzer;
-use crate::classification::Sensitivity;
 use crate::header_analysis::HeaderAnalyzer;
-use crate::models::{AnalysisResult, ContentType, Finding};
+use crate::models::{AnalysisResult, ContentType};
 use std::sync::Arc;
 
 /// Trait for analyzing HTTP content

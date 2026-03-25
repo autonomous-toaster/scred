@@ -24,7 +24,7 @@ fn main() {
         let elapsed = start.elapsed();
         
         let per_call_us = elapsed.as_micros() as f64 / iterations as f64;
-        let per_byte_ns = (elapsed.as_nanos() as f64 / (iterations as f64 * input.len() as f64)) as f64;
+        let per_byte_ns = (elapsed.as_nanos() as f64 / (iterations as f64 * input.len() as f64));
         
         println!("Total time: {:?}", elapsed);
         println!("Per call: {:.3} µs", per_call_us);

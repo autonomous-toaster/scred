@@ -272,11 +272,9 @@ impl PatternSelector {
     
     /// Wildcard matching: "aws-*" matches "aws-access-key", etc.
     fn wildcard_match_name(&self, pattern: &str, name: &str) -> bool {
-        if pattern.ends_with('*') {
-            let prefix = &pattern[..pattern.len()-1];
+        if let Some(prefix) = pattern.strip_suffix('*') {
             name.starts_with(prefix)
-        } else if pattern.starts_with('*') {
-            let suffix = &pattern[1..];
+        } else if let Some(suffix) = pattern.strip_prefix('*') {
             name.ends_with(suffix)
         } else if pattern.contains('*') {
             // Simple * replacement pattern

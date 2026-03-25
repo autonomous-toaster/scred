@@ -8,7 +8,6 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -456,7 +455,7 @@ impl ConfigLoader {
 
     /// Validate pattern tier names
     fn validate_patterns(patterns: &PatternConfig) -> Result<()> {
-        let valid_tiers = vec!["CRITICAL", "API_KEYS", "INFRASTRUCTURE", "SERVICES", "PATTERNS"];
+        let valid_tiers = ["CRITICAL", "API_KEYS", "INFRASTRUCTURE", "SERVICES", "PATTERNS"];
 
         for tier in &patterns.detect {
             if !valid_tiers.contains(&tier.as_str()) {

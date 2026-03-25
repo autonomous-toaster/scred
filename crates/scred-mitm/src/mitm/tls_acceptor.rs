@@ -87,7 +87,7 @@ impl TlsClientAcceptor {
 
         // Extract negotiated ALPN protocol
         let negotiated_protocol = tls_stream.get_ref().1.alpn_protocol()
-            .and_then(|proto| HttpProtocol::from_bytes(proto))
+            .and_then(HttpProtocol::from_bytes)
             .unwrap_or(HttpProtocol::Http11);
 
         info!(

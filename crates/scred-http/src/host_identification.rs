@@ -127,7 +127,7 @@ impl HostIdentification {
         }
 
         // Validate consistency
-        let sources_consistent = Self::validate_sources(&host, &sources);
+        let sources_consistent = Self::validate_sources(&host, sources);
         if !sources_consistent {
             warn!(
                 "Host identification sources are inconsistent. \
@@ -243,7 +243,7 @@ pub fn parse_host_header(header_value: &str) -> Result<(String, u16)> {
 /// Note: SNI extraction is handled by the TLS library (tokio-rustls).
 /// This function is kept for documentation but not used in current implementation.
 #[allow(dead_code)]
-pub fn extract_sni_from_clienthello(data: &[u8]) -> Option<String> {
+pub fn extract_sni_from_clienthello(_data: &[u8]) -> Option<String> {
     // SNI extraction is complex and handled by tokio-rustls
     // which provides SNI info through the TLS connection
     None

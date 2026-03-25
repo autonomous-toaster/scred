@@ -6,7 +6,6 @@ use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequest
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
 use scred_http::{dns_resolver::DnsResolver, http_line_reader::read_response_line};
 use scred_http::{PatternSelector, ConfigurableEngine};
-use scred_http_redactor::H2Redactor;
 use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::env;
 use std::sync::Arc;
@@ -14,8 +13,6 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsConnector;
 use tracing::{info, debug, warn};
-use h2::client;
-use http::Request;
 use bytes::Bytes;
 
 /// Application mode for redaction
@@ -231,7 +228,7 @@ impl ProxyConfig {
         if list_tiers {
             println!("SCRED Proxy - Pattern Tiers");
             println!();
-            println!("{:<20} {:<10} {}", "Tier", "Risk", "Redact by Default");
+            println!("{:<20} {:<10} Redact by Default", "Tier", "Risk");
             println!("{}", "=".repeat(50));
             let tiers = [
                 ("CRITICAL", "95%", "YES"),
@@ -423,7 +420,7 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
     info!("[{}] Redact selector: {}", peer_addr, config.redact_selector.description());
     
     // In Detect mode, create ConfigurableEngine for detection logging
-    let detection_engine = if config.redaction_mode == RedactionMode::Detect {
+    let _detection_engine = if config.redaction_mode == RedactionMode::Detect {
         let mut engine = ConfigurableEngine::with_defaults(redaction_engine.clone());
         engine.set_detect_selector(config.detect_selector.clone());
         
@@ -454,7 +451,7 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
     
     // Extract proxy_host from Host header if available, otherwise use peer address
     // First, peek at headers to find Host
-    let mut proxy_host = format!("{}:{}", peer_addr.ip(), config.listen_port);
+    let proxy_host = format!("{}:{}", peer_addr.ip(), config.listen_port);
     
     // Try to read headers to find Host header (this will be consumed by stream_request_to_upstream too)
     // For now, use the peer's IP as fallback - production should use actual Host header
@@ -551,7 +548,7 @@ async fn handle_h2c_connection(
     _first_line: String,
 ) -> Result<()> {
     use tokio::io::AsyncWriteExt;
-    use std::io::Cursor;
+    
     
     info!("[H2C] HTTP/2 Cleartext upgrade initiated");
     
@@ -614,7 +611,7 @@ async fn handle_h2c_connection(
     
     // Connect to upstream and start h2 client
     let upstream_stream = DnsResolver::connect_with_retry(&upstream_addr).await?;
-    let (mut send_request, upstream_conn) = h2::client::handshake(upstream_stream).await?;
+    let (send_request, upstream_conn) = h2::client::handshake(upstream_stream).await?;
     
     tokio::spawn(async move {
         if let Err(e) = upstream_conn.await {
@@ -626,7 +623,7 @@ async fn handle_h2c_connection(
     while let Some(result) = h2_conn.accept().await {
         let (request, respond) = result?;
         let engine = redaction_engine.clone();
-        let mut sender = send_request.clone();
+        let sender = send_request.clone();
         
         tokio::spawn(async move {
             if let Err(e) = handle_h2c_stream(request, respond, sender, engine).await {

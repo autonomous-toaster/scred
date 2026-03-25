@@ -4,7 +4,7 @@
 /// without buffering the entire response body.
 /// Now with support for chunked transfer-encoding.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use scred_redactor::StreamingRedactor;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
@@ -232,7 +232,7 @@ async fn stream_response_body_content_length_passthrough<R, W>(
     client_writer: &mut W,
     content_length: usize,
     redactor: Arc<StreamingRedactor>,
-    config: &StreamingResponseConfig,
+    _config: &StreamingResponseConfig,
 ) -> Result<StreamingStats>
 where
     R: AsyncReadExt + Unpin,
@@ -270,7 +270,7 @@ async fn stream_response_body_chunked_passthrough<R, W>(
     upstream_reader: &mut BufReader<R>,
     client_writer: &mut W,
     redactor: Arc<StreamingRedactor>,
-    config: &StreamingResponseConfig,
+    _config: &StreamingResponseConfig,
 ) -> Result<StreamingStats>
 where
     R: AsyncReadExt + Unpin,

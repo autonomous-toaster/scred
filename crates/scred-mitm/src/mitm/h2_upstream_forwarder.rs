@@ -192,12 +192,12 @@ pub async fn handle_upstream_h2_connection(
 /// Try to forward via HTTP/2 direct connection
 async fn try_forward_h2(
     request: Request<Bytes>,
-    engine: Arc<RedactionEngine>,
+    _engine: Arc<RedactionEngine>,
     upstream_addr: &str,
     host: &str,
 ) -> Result<Vec<u8>> {
-    let method = request.method().clone();
-    let uri = request.uri().clone();
+    let _method = request.method().clone();
+    let _uri = request.uri().clone();
     let (request_parts, request_body) = request.into_parts();
     
     // Connect to the configured upstream address (not to 'host'!)
@@ -419,7 +419,7 @@ async fn forward_via_http1_1(
         // If DETECT mode: log detected secrets
         if mode.should_detect() {
             tracing::info!("[H2 Upstream HTTP/1.1] DETECT mode - scanning for secrets");
-            log_detected_secrets(engine, &response_bytes, &detect_patterns);
+            log_detected_secrets(engine, &response_bytes, detect_patterns);
         }
         
         return Ok(body);
@@ -608,7 +608,7 @@ async fn forward_via_http1_1_with_body(
         // If DETECT mode: log detected secrets
         if mode.should_detect() {
             tracing::info!("[H2 Upstream HTTP/1.1] DETECT mode - scanning for secrets");
-            log_detected_secrets(engine, &response_bytes, &detect_patterns);
+            log_detected_secrets(engine, &response_bytes, detect_patterns);
         }
         
         return Ok(body);

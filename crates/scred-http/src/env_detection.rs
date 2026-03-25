@@ -111,7 +111,7 @@ pub fn detect_format(input: &[u8]) -> DetectionResult {
 
 /// Check if content contains null bytes (binary indicator)
 fn contains_null_bytes(data: &[u8]) -> bool {
-    data.iter().any(|&b| b == 0)
+    data.contains(&0)
 }
 
 /// Check if high ratio of non-printable characters (binary indicator)
@@ -126,7 +126,7 @@ fn has_high_non_printable_ratio(data: &[u8]) -> bool {
             // Count bytes that are not:
             // - ASCII printable (32-126)
             // - Tab (9), newline (10), carriage return (13)
-            !(b >= 32 && b <= 126 || b == 9 || b == 10 || b == 13)
+            !((32..=126).contains(&b) || b == 9 || b == 10 || b == 13)
         })
         .count();
 

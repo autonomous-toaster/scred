@@ -4,7 +4,7 @@
 
 use crate::classification::{classify_form_field, classify_json_field, classify_xml_element, Sensitivity};
 use crate::models::{BodyAnalysis, ContentType, Finding};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 /// Analyzer for HTTP body content
 pub struct BodyAnalyzer;

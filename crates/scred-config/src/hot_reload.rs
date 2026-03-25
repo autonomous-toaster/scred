@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 use std::path::PathBuf;
-use tracing::{info, debug};
+use tracing::info;
 use tokio::sync::Mutex;
 
 /// Configuration hot-reload handler

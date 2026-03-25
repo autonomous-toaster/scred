@@ -116,8 +116,8 @@ impl Default for Config {
                 redact_patterns: PatternSelector::default_redact(),
             },
             tls: TlsConfig {
-                ca_key: PathBuf::from(home_dir()).join(".scred/ca.key"),
-                ca_cert: PathBuf::from(home_dir()).join(".scred/ca.pem"),
+                ca_key: home_dir().join(".scred/ca.key"),
+                ca_cert: home_dir().join(".scred/ca.pem"),
                 cert_cache_dir: PathBuf::from("/tmp/scred-certs"),
             },
             secrets: SecretsConfig::default(),

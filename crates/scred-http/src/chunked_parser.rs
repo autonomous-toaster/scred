@@ -114,7 +114,7 @@ impl ChunkedParser {
 
                     // Redact chunk with lookahead
                     let is_complete = true; // Will be updated when we handle continuation
-                    let (redacted, bytes_written, patterns) =
+                    let (redacted, _bytes_written, patterns) =
                         redactor.process_chunk(&chunk_data, &mut self.lookahead_buffer, is_complete);
 
                     stats.total_data_bytes += chunk_data.len() as u64;
@@ -159,7 +159,7 @@ impl ChunkedParser {
 
                     // Optionally redact trailer headers (they may contain sensitive data)
                     if !trailer_headers.is_empty() {
-                        let (redacted, _stats) =
+                        let (_redacted, _stats) =
                             redactor.redact_buffer(trailer_headers.as_bytes());
                         debug!("[chunked] Trailers redacted");
                         // Trailer redaction handled by caller

@@ -42,7 +42,7 @@ impl Default for SecretsConfig {
 
 impl SecretsConfig {
     /// Check if a secret should be redacted based on rules
-    pub fn should_redact(&self, secret_name: &str, host: Option<&str>) -> bool {
+    pub fn should_redact(&self, secret_name: &str, _host: Option<&str>) -> bool {
         // If no rules defined, redact everything
         if self.rules.is_empty() {
             return true;

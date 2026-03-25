@@ -59,23 +59,15 @@ fn main() {
 fn generate_test_data() -> String {
     let mut data = String::new();
 
-    let aws_keys = vec![
-        "AKIAIOSFODNN7EXAMPLE",
-        "ASIAIOSFODNN7EXAMPLE",
-    ];
+    let aws_keys = ["AKIAIOSFODNN7EXAMPLE",
+        "ASIAIOSFODNN7EXAMPLE"];
 
-    let github_tokens = vec![
-        "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
-        "gho_1234567890abcdefghijklmnopqrstuvwxyz",
-    ];
+    let github_tokens = ["ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+        "gho_1234567890abcdefghijklmnopqrstuvwxyz"];
 
-    let openai_keys = vec![
-        "sk-proj-1234567890abcdefghijklmnopqrstuvwxyz",
-    ];
+    let openai_keys = ["sk-proj-1234567890abcdefghijklmnopqrstuvwxyz"];
 
-    let jwt_tokens = vec![
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
-    ];
+    let jwt_tokens = ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"];
 
     let lorem = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. \
                 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. \

@@ -5,6 +5,7 @@ use std::env;
 /// Pattern selection mode for redaction
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum PatternSelection {
     /// Only redact explicitly listed patterns
     #[serde(rename = "whitelist")]
@@ -16,6 +17,7 @@ pub enum PatternSelection {
     
     /// Redact all 244+ patterns (strictest)
     #[serde(rename = "all")]
+    #[default]
     All,
     
     /// Don't redact anything (for testing)
@@ -69,11 +71,6 @@ impl RedactionConfig {
     }
 }
 
-impl Default for PatternSelection {
-    fn default() -> Self {
-        PatternSelection::All
-    }
-}
 
 impl Default for RedactionConfig {
     fn default() -> Self {

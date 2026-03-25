@@ -11,7 +11,7 @@
 /// Phase 6: Streaming-first architecture with unlimited request/response sizes
 
 use anyhow::{anyhow, Result};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use std::sync::Arc;
 use tracing::{debug, info, warn, error};
 use rustls::{ServerConfig, Certificate, PrivateKey};
@@ -22,7 +22,6 @@ use super::config::RedactionMode;
 use scred_http::dns_resolver::DnsResolver;
 use scred_http::duplex::DuplexSocket;
 use scred_http::http_line_reader::{read_request_line, read_response_line};
-use scred_http::http_headers::*;
 use scred_http::proxy_resolver::connect_through_proxy;
 use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequestConfig};
 use rustls::{ClientConfig, RootCertStore, ServerName};
@@ -113,7 +112,7 @@ pub async fn handle_tls_mitm(
 
     // Extract negotiated ALPN protocol
     let negotiated_protocol = client_tls.get_ref().1.alpn_protocol()
-        .and_then(|proto| HttpProtocol::from_bytes(proto))
+        .and_then(HttpProtocol::from_bytes)
         .unwrap_or(HttpProtocol::Http11);
 
     info!(
@@ -296,11 +295,11 @@ where
         connect_through_proxy(upstream_addr, target_host, 443).await
             .map_err(|e| {
                 error!("Failed to connect to upstream {}: {}", upstream_addr, e);
-                std::io::Error::new(std::io::ErrorKind::Other, e)
+                std::io::Error::other(e)
             })?
     } else {
         DnsResolver::connect_with_retry(&format!("{}:443", target_host)).await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+            .map_err(std::io::Error::other)?
     };
     
     info!("Connected to upstream {}", upstream_addr);
@@ -338,7 +337,7 @@ where
         .await
         .map_err(|e| {
             error!("[TLS] Upstream TLS handshake FAILED: {}", e);
-            std::io::Error::new(std::io::ErrorKind::Other, format!("upstream TLS failed: {}", e))
+            std::io::Error::other(format!("upstream TLS failed: {}", e))
         })?;
     
     // Extract and log upstream protocol negotiation
@@ -346,7 +345,7 @@ where
     let (upstream_protocol, _upstream_info) = handle_upstream_protocol_selection(
         upstream_alpn,
         target_host,
-    ).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    ).map_err(|e| std::io::Error::other(e.to_string()))?;
 
     // TODO: Phase 1.2+ - Implement H2 upstream support via h2 crate
     // For now, HTTP/2 upstream connections will fall through to HTTP/1.1 code path
@@ -379,7 +378,7 @@ where
             }
             Err(e) => {
                 warn!("Failed to stream request to upstream: {}", e);
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+                return Err(std::io::Error::other(e));
             }
         }
     }
@@ -417,7 +416,7 @@ where
             }
             Err(e) => {
                 error!("Failed to stream response to client with redaction: {}", e);
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+                return Err(std::io::Error::other(e));
             }
         }
     } else {
@@ -427,7 +426,7 @@ where
         // Parse headers
         let headers = scred_http::http_headers::parse_http_headers(&mut upstream_buf_reader)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
         
         // Forward response line
         client_tls
@@ -484,7 +483,7 @@ fn handle_upstream_protocol_selection(
     let protocol = extract_upstream_protocol(upstream_alpn)?;
     
     let connection_info = UpstreamConnectionInfo {
-        protocol: protocol.clone(),
+        protocol,
         server_addr: target_host.to_string(),
     };
 

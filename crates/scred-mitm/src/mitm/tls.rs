@@ -246,7 +246,7 @@ impl CertificateGenerator {
             for entry in fs::read_dir(&self.cache_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                if path.extension().map_or(false, |ext| ext == "pem" || ext == "key") {
+                if path.extension().is_some_and(|ext| ext == "pem" || ext == "key") {
                     fs::remove_file(path)?;
                 }
             }
@@ -267,11 +267,9 @@ impl CertificateGenerator {
 
         if self.cache_dir.exists() {
             if let Ok(entries) = fs::read_dir(&self.cache_dir) {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        if entry.path().extension().map_or(false, |ext| ext == "pem") {
-                            disk_count += 1;
-                        }
+                for entry in entries.flatten() {
+                    if entry.path().extension().is_some_and(|ext| ext == "pem") {
+                        disk_count += 1;
                     }
                 }
             }

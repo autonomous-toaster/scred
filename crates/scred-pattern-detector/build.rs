@@ -9,7 +9,7 @@ fn main() {
     
     // Build Zig library
     let zig_build = Command::new("zig")
-        .args(&["build-lib", "src/lib.zig", "-O", "ReleaseFast"])
+        .args(["build-lib", "src/lib.zig", "-O", "ReleaseFast"])
         .current_dir(&manifest_dir)
         .output()
         .expect("Failed to build Zig library");

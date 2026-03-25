@@ -3,7 +3,6 @@
 //! Determines how sensitive different headers, fields, and patterns are.
 
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
 
 /// Sensitivity levels for content
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]

@@ -27,10 +27,10 @@
 //! let result = config_engine.detect_and_redact("some secret text");
 //! ```
 
-use scred_redactor::{RedactionEngine, RedactionWarning, RedactionResult};
+use scred_redactor::{RedactionEngine, RedactionWarning};
 use std::sync::Arc;
 
-use crate::{PatternSelector, PatternTier, get_pattern_tier};
+use crate::{PatternSelector, get_pattern_tier};
 
 /// Filtered redaction result that includes detection warnings
 #[derive(Debug, Clone)]
@@ -220,8 +220,8 @@ impl ConfigurableEngine {
         // Check if any patterns should be redacted
         let should_redact_any = warnings.iter().any(|warning| {
             let tier = get_pattern_tier(&warning.pattern_type);
-            let matches = self.redact_selector.matches_pattern(&warning.pattern_type, tier);
-            matches
+            
+            self.redact_selector.matches_pattern(&warning.pattern_type, tier)
         });
 
 
@@ -257,7 +257,7 @@ impl ConfigurableEngine {
         &self,
         original: &str,
         fully_redacted: &str,
-        patterns_to_keep_redacted: &[String],
+        _patterns_to_keep_redacted: &[String],
     ) -> String {
         // This is a best-effort approach since we don't have position data per-pattern
         // Strategy: If MOST patterns are being un-redacted, assume all x's should be restored

@@ -147,10 +147,7 @@ fn parse_header_line(line: &str) -> Option<(String, String)> {
         return None;
     }
 
-    match line.split_once(':') {
-        Some((key, value)) => Some((key.to_string(), value.trim().to_string())),
-        None => None,
-    }
+    line.split_once(':').map(|(key, value)| (key.to_string(), value.trim().to_string()))
 }
 
 /// Read exactly N bytes from a reader (for Content-Length bodies)

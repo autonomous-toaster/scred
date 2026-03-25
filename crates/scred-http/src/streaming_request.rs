@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use scred_redactor::StreamingRedactor;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::http_headers::parse_http_headers;
 
@@ -142,7 +142,7 @@ async fn stream_request_body_content_length<R, W>(
     upstream_writer: &mut W,
     content_length: usize,
     redactor: Arc<StreamingRedactor>,
-    config: &StreamingRequestConfig,
+    _config: &StreamingRequestConfig,
 ) -> Result<StreamingStats>
 where
     R: AsyncReadExt + Unpin,

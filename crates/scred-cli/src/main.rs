@@ -3,10 +3,10 @@ use std::env;
 use std::time::Instant;
 use std::sync::Arc;
 
-use scred_redactor::{get_all_patterns, analyzer::ZigAnalyzer, RedactionEngine, RedactionConfig};
+use scred_redactor::{get_all_patterns, RedactionEngine, RedactionConfig};
 use scred_http::{ConfigurableEngine, PatternSelector, env_detection};
 use scred_config::ConfigLoader;
-use tracing::{info, warn, debug};
+use tracing::{info, debug};
 
 mod env_mode;
 
@@ -30,7 +30,7 @@ fn extract_flag_value(args: &[String], flag: &str) -> Option<String> {
 fn parse_pattern_selectors(
     detect_flag: Option<&str>,
     redact_flag: Option<&str>,
-    verbose: bool,
+    _verbose: bool,
 ) -> (PatternSelector, PatternSelector) {
     // Get environment variable values
     let detect_env = env::var("SCRED_DETECT_PATTERNS").ok();
@@ -39,13 +39,13 @@ fn parse_pattern_selectors(
     // CLI flags take precedence over env vars
     // Detect ALL patterns by default (for logging visibility)
     let detect_str = detect_flag
-        .or_else(|| detect_env.as_deref())
+        .or(detect_env.as_deref())
         .unwrap_or("ALL");
     // Redact conservatively: only CRITICAL and API_KEYS by default
     // PATTERNS tier (JWT, Bearer, BasicAuth) excluded to reduce log noise
     // Users can explicitly enable: --redact CRITICAL,API_KEYS,PATTERNS
     let redact_str = redact_flag
-        .or_else(|| redact_env.as_deref())
+        .or(redact_env.as_deref())
         .unwrap_or("CRITICAL,API_KEYS");
 
     // Parse selectors - EXIT on error instead of fallback
@@ -113,7 +113,7 @@ fn load_cli_config() -> (PatternSelector, PatternSelector) {
 fn list_tiers_command() {
     println!("SCRED Pattern Tiers");
     println!();
-    println!("{:<20} {:<10} {}", "Tier", "Risk", "Redact by Default");
+    println!("{:<20} {:<10} Redact by Default", "Tier", "Risk");
     println!("{}", "=".repeat(50));
     
     let tiers = [
@@ -285,8 +285,8 @@ fn print_help() {
 }
 
 fn list_patterns(filter_type: Option<&str>) {
-    use scred_http::get_pattern_tier;
-    use scred_http::PatternTier;
+    
+    
     use std::collections::BTreeMap;
     
     // Get all patterns directly from Zig detector (single source of truth)
@@ -329,7 +329,7 @@ fn list_patterns(filter_type: Option<&str>) {
         };
         
         by_type.entry(type_key.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((pattern.name.clone(), type_name.to_string()));
     }
     
@@ -505,7 +505,7 @@ fn run_with_auto_detect(
     detect_selector: &PatternSelector,
     redact_selector: &PatternSelector,
 ) -> bool {
-    let start = Instant::now();
+    let _start = Instant::now();
     
     // Read first 512 bytes for detection (much faster than 4KB)
     // Typical env files are 0.1-10 KB, so 512B is sufficient for first few lines

@@ -725,7 +725,6 @@ mod realistic_throughput_tests {
     }
 }
 
-use std::sync::Arc;
 
 // ============================================================================
 // Public API: Get patterns from Zig (source of truth)

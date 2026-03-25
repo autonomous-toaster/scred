@@ -3,7 +3,6 @@
 use anyhow::Result;
 use std::sync::Arc;
 use scred_redactor::RedactionEngine;
-use tokio::net::TcpStream;
 use h2::server;
 use http::Response;
 use bytes::Bytes;

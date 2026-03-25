@@ -195,17 +195,17 @@ pub struct MetadataCache {
 impl MetadataCache {
     /// Initialize cache from FFI
     pub fn new() -> Self {
-        let cache = MetadataCache {
-            patterns_by_name: HashMap::new(),
-            patterns_by_tier: HashMap::new(),
-            patterns_by_tag: HashMap::new(),
-            total_patterns: 0,
-        };
+        
         
         // Load patterns from Zig via FFI (if implemented)
         // For now, this is a template for the integration
         
-        cache
+        MetadataCache {
+            patterns_by_name: HashMap::new(),
+            patterns_by_tier: HashMap::new(),
+            patterns_by_tag: HashMap::new(),
+            total_patterns: 0,
+        }
     }
     
     /// Get pattern by name - O(1)
@@ -232,7 +232,7 @@ impl MetadataCache {
     pub fn tier_statistics(&self) -> HashMap<RiskTier, usize> {
         let mut stats = HashMap::new();
         for (tier, patterns) in &self.patterns_by_tier {
-            stats.insert(tier.clone(), patterns.len());
+            stats.insert(*tier, patterns.len());
         }
         stats
     }
@@ -256,7 +256,7 @@ pub static METADATA_CACHE: OnceLock<MetadataCache> = OnceLock::new();
 
 /// Get the global metadata cache (lazy-initialized on first access)
 pub fn get_cache() -> &'static MetadataCache {
-    METADATA_CACHE.get_or_init(|| MetadataCache::new())
+    METADATA_CACHE.get_or_init(MetadataCache::new)
 }
 
 /// Initialize cache explicitly (optional, called automatically on first access)
