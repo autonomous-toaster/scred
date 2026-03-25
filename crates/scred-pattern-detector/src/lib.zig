@@ -1,4 +1,5 @@
 const std = @import("std");
+const redaction_impl = @import("redaction_impl.zig");
 const redaction_stub = @import("redaction_stub.zig");
 pub const _redaction_stub_ref = redaction_stub.RedactionResultFFI;
 const Allocator = std.mem.Allocator;

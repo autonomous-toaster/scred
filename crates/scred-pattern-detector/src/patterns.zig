@@ -128,6 +128,19 @@ pub const SIMPLE_PREFIX_PATTERNS = [_]SimplePrefixPattern{
     .{ .name = "tumblr-api-key", .prefix = "tumblr_", .tier = .services },
     .{ .name = "upstash-redis", .prefix = "redis_", .tier = .infrastructure },
     .{ .name = "vercel-token", .prefix = "vercel_", .tier = .api_keys },
+    // AWS patterns
+    .{ .name = "aws-akia", .prefix = "AKIA", .tier = .critical },
+    .{ .name = "aws-asia", .prefix = "ASIA", .tier = .critical },
+    .{ .name = "aws-abia", .prefix = "ABIA", .tier = .critical },
+    .{ .name = "aws-acca", .prefix = "ACCA", .tier = .critical },
+    // GitHub patterns
+    .{ .name = "github-ghp", .prefix = "ghp_", .tier = .critical },
+    .{ .name = "github-ghu", .prefix = "ghu_", .tier = .critical },
+    .{ .name = "github-ghs", .prefix = "ghs_", .tier = .critical },
+    .{ .name = "github-gho", .prefix = "gho_", .tier = .critical },
+    // OpenAI patterns
+    .{ .name = "openai-sk-proj", .prefix = "sk-proj-", .tier = .critical },
+    .{ .name = "openai-sk", .prefix = "sk-", .tier = .critical },
     // Generic password/secret patterns (case-sensitive prefixes)
     .{ .name = "generic-password", .prefix = "PASSWORD=", .tier = .critical },
     .{ .name = "generic-password-colon", .prefix = "PASSWORD:", .tier = .critical },
