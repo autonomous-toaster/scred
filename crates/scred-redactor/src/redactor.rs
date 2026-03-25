@@ -105,15 +105,15 @@ impl RedactionEngine {
             };
         }
 
-        eprintln!("[RUST-REDACT-1] Starting redaction");
-        eprintln!("[RUST-REDACT-2] Text len: {}", text.len());
+        
+        
         
         // Call Zig FFI for pattern detection and redaction
-        eprintln!("[RUST-REDACT-3] About to call Zig FFI");
+        
         unsafe {
-            eprintln!("[RUST-REDACT-4] Calling scred_redact_text_optimized_stub");
+            
             let zig_result = scred_redact_text_optimized_stub(text.as_ptr(), text.len());
-            eprintln!("[RUST-REDACT-5] FFI returned!");
+            
             
             // Convert Zig result to Rust result
             if zig_result.output.is_null() || zig_result.output_len == 0 {
