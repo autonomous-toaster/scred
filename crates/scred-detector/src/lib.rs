@@ -13,6 +13,7 @@ pub mod simd_charset;
 pub mod simd_pattern_matching;
 pub mod vectorized_pattern_matching;
 pub mod pattern_trie;
+pub mod simd_memchr;
 pub mod detector;
 pub mod regex_patterns;
 
