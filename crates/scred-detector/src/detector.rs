@@ -178,13 +178,6 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
         return detect_validation_sequential(text);
     }
     
-    // Initialize SIMD pattern organizer (cached globally for efficiency)
-    use std::sync::OnceLock;
-    static PATTERN_ORGANIZER: OnceLock<crate::simd_pattern_matching::PatternGroupOrganizer> = OnceLock::new();
-    let _organizer = PATTERN_ORGANIZER.get_or_init(|| {
-        crate::simd_pattern_matching::PatternGroupOrganizer::new(PREFIX_VALIDATION_PATTERNS)
-    });
-    
     // Get only relevant patterns (whose first byte appears in text)
     let relevant_indices = get_relevant_validation_patterns(text);
     
