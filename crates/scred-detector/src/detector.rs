@@ -76,7 +76,7 @@ fn build_first_byte_index() -> &'static Vec<Vec<usize>> {
 }
 
 /// Get charset lookup table for a charset type
-fn get_charset_lut(charset: Charset) -> &'static CharsetLut {
+pub fn get_charset_lut(charset: Charset) -> &'static CharsetLut {
     match charset {
         Charset::Alphanumeric => get_alphanumeric_lut(),
         Charset::Base64 => get_base64_lut(),
@@ -177,6 +177,13 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
     if text.len() < 1024 {
         return detect_validation_sequential(text);
     }
+    
+    // Initialize SIMD pattern organizer (cached globally for efficiency)
+    use std::sync::OnceLock;
+    static PATTERN_ORGANIZER: OnceLock<crate::simd_pattern_matching::PatternGroupOrganizer> = OnceLock::new();
+    let _organizer = PATTERN_ORGANIZER.get_or_init(|| {
+        crate::simd_pattern_matching::PatternGroupOrganizer::new(PREFIX_VALIDATION_PATTERNS)
+    });
     
     // Get only relevant patterns (whose first byte appears in text)
     let relevant_indices = get_relevant_validation_patterns(text);

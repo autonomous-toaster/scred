@@ -10,6 +10,8 @@ pub mod patterns;
 pub mod match_result;
 pub mod simd_core;
 pub mod simd_charset;
+pub mod simd_pattern_matching;
+pub mod vectorized_pattern_matching;
 pub mod detector;
 pub mod regex_patterns;
 
