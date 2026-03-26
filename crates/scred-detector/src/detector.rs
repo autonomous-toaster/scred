@@ -35,7 +35,44 @@ fn get_charset_lut(charset: Charset) -> CharsetLut {
 }
 
 /// Detect all simple prefix patterns (fast path, no validation)
+/// Parallelized version
 pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
+    use rayon::prelude::*;
+    
+    // For small inputs, sequential is faster
+    if text.len() < 512 {
+        return detect_simple_prefix_sequential(text);
+    }
+    
+    let results: Vec<DetectionResult> = SIMPLE_PREFIX_PATTERNS
+        .par_iter()
+        .enumerate()
+        .map(|(idx, pattern)| {
+            let mut result = DetectionResult::with_capacity(10);
+            let prefix_bytes = pattern.prefix.as_bytes();
+            let charset = CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-");
+            let mut search_pos = 0;
+
+            while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
+                let absolute_pos = search_pos + pos;
+                let token_len = charset.scan_token_end(text, absolute_pos);
+                let end_pos = (absolute_pos + token_len).min(text.len());
+                result.add(Match::new(absolute_pos, end_pos, idx as u16));
+                search_pos = absolute_pos + pattern.prefix.len();
+            }
+            result
+        })
+        .collect();
+    
+    let mut final_result = DetectionResult::with_capacity(100);
+    for r in results {
+        final_result.extend(r);
+    }
+    final_result
+}
+
+/// Sequential version for small inputs
+fn detect_simple_prefix_sequential(text: &[u8]) -> DetectionResult {
     let mut result = DetectionResult::with_capacity(100);
 
     for (idx, pattern) in SIMPLE_PREFIX_PATTERNS.iter().enumerate() {
@@ -45,15 +82,12 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
         while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
             let absolute_pos = search_pos + pos;
             
-            // For simple prefixes, scan forward to find token boundary
-            // Use standard charset (alphanumeric + common separators, but NOT dots/slashes to prevent URL scanning)
             let charset = CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-");
             let token_len = charset.scan_token_end(text, absolute_pos);
             let end_pos = (absolute_pos + token_len).min(text.len());
             
             result.add(Match::new(absolute_pos, end_pos, idx as u16));
             
-            // Continue search after this match
             search_pos = absolute_pos + pattern.prefix.len();
         }
     }
