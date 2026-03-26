@@ -402,38 +402,37 @@ fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact
     );
     debug!("[redacting-stream] ConfigurableEngine created");
 
-    // FIX: Read in single shot to avoid pipe deadlock
-    // (Unix pipe won't send EOF until parent shell closes write-end,
-    //  but parent waits for child to exit - causing deadlock if we loop)
-    // Solution: Read once, process, exit. 64KB is sufficient for CLI.
+    // Stream input in 64KB chunks
     const CHUNK_SIZE: usize = 64 * 1024;
     let mut chunk = vec![0u8; CHUNK_SIZE];
     let mut total_read = 0;
     let mut total_written = 0;
 
-    debug!("[redacting-stream] About to read from stdin");
-    match io::stdin().read(&mut chunk) {
-        Ok(n) if n > 0 => {
-            let input_str = String::from_utf8_lossy(&chunk[..n]);
-            let result = config_engine.detect_and_redact(&input_str);
-            
-            io::stdout().write_all(result.redacted.as_bytes()).ok();
-            io::stdout().flush().ok();
-            
-            total_read = n;
-            total_written = result.redacted.len();
-            
-            if verbose {
-                eprintln!("[redacting-stream]");
-                eprintln!("  Patterns detected: {}", result.warnings.len());
+    debug!("[redacting-stream] Starting read loop");
+    loop {
+        match io::stdin().read(&mut chunk) {
+            Ok(0) => {
+                debug!("[redacting-stream] EOF reached");
+                break;
+            },
+            Ok(n) => {
+                let input_str = String::from_utf8_lossy(&chunk[..n]);
+                let result = config_engine.detect_and_redact(&input_str);
+                
+                io::stdout().write_all(result.redacted.as_bytes()).ok();
+                io::stdout().flush().ok();
+                
+                total_read += n;
+                total_written += result.redacted.len();
+                
+                if verbose {
+                    eprintln!("[redacting-stream-chunk] {} → {}", n, result.redacted.len());
+                }
+            },
+            Err(e) => {
+                eprintln!("Error reading input: {}", e);
+                std::process::exit(1);
             }
-        }
-        Ok(_) => {
-            // EOF or 0 bytes read - just exit cleanly
-        }
-        Err(e) => {
-            eprintln!("Error reading input: {}", e);
-            std::process::exit(1);
         }
     }
 
@@ -590,6 +589,7 @@ fn process_env_chunk_and_stream(
         io::stdout().write_all(b"\n").ok();
         total_written += redacted.len() + 1;
     }
+    io::stdout().flush().ok();
     
     // Continue with remaining stream
     const CHUNK_SIZE: usize = 64 * 1024;
@@ -606,6 +606,7 @@ fn process_env_chunk_and_stream(
                     io::stdout().write_all(b"\n").ok();
                     total_written += redacted.len() + 1;
                 }
+                io::stdout().flush().ok();
                 total_read += n;
             }
             Err(e) => {
@@ -638,6 +639,8 @@ fn process_text_chunk_and_stream(
     let start = Instant::now();
     let mut total_read = initial_buffer.len();
     let mut total_written = 0;
+    
+    eprintln!("[DEBUG] Starting process_text_chunk_and_stream with initial {} bytes", initial_buffer.len());
 
     // Create ConfigurableEngine
     let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
@@ -651,6 +654,7 @@ fn process_text_chunk_and_stream(
     let input_str = String::from_utf8_lossy(initial_buffer);
     let result = config_engine.detect_and_redact(&input_str);
     io::stdout().write_all(result.redacted.as_bytes()).ok();
+    io::stdout().flush().ok();
     total_written += result.redacted.len();
     
     // Continue with remaining stream
@@ -664,6 +668,7 @@ fn process_text_chunk_and_stream(
                 let input_str = String::from_utf8_lossy(&chunk[..n]);
                 let result = config_engine.detect_and_redact(&input_str);
                 io::stdout().write_all(result.redacted.as_bytes()).ok();
+                io::stdout().flush().ok();
                 total_read += n;
                 total_written += result.redacted.len();
             }

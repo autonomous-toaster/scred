@@ -1,0 +1,1 @@
+{"type":"config","name":"Optimize scred detector/redactor for speed, throughput, and correctness","metricName":"redaction_time_ms","metricUnit":"ms","bestDirection":"lower"}

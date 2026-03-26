@@ -212,6 +212,40 @@ pub struct PatternInfo {
 }
 
 pub fn get_all_patterns() -> Vec<PatternInfo> {
-    // Return empty for now - CLI listing features deprecated
-    Vec::new()
+    let mut patterns = Vec::new();
+    
+    // FastPrefix patterns (type 0)
+    for (idx, p) in scred_detector::SIMPLE_PREFIX_PATTERNS.iter().enumerate() {
+        patterns.push(PatternInfo {
+            name: p.name.to_string(),
+            pattern_type: 0,
+            prefix: p.prefix.to_string(),
+            min_len: 0,
+            max_len: 0,
+        });
+    }
+    
+    // PrefixValidation patterns (type 0, same category)
+    for (idx, p) in scred_detector::PREFIX_VALIDATION_PATTERNS.iter().enumerate() {
+        patterns.push(PatternInfo {
+            name: p.name.to_string(),
+            pattern_type: 0,
+            prefix: p.prefix.to_string(),
+            min_len: p.min_len,
+            max_len: p.max_len,
+        });
+    }
+    
+    // JWT patterns (type 1)
+    for (idx, p) in scred_detector::JWT_PATTERNS.iter().enumerate() {
+        patterns.push(PatternInfo {
+            name: p.name.to_string(),
+            pattern_type: 1,
+            prefix: "eyJ".to_string(),
+            min_len: 0,
+            max_len: 0,
+        });
+    }
+    
+    patterns
 }
