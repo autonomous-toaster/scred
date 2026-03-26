@@ -420,7 +420,7 @@ fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact
                 let result = config_engine.detect_and_redact(&input_str);
                 
                 io::stdout().write_all(result.redacted.as_bytes()).ok();
-                io::stdout().flush().ok();
+                // Don't flush on every chunk - let OS buffer
                 
                 total_read += n;
                 total_written += result.redacted.len();
@@ -435,6 +435,9 @@ fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact
             }
         }
     }
+    
+    // Flush at end
+    io::stdout().flush().ok();
 
     if verbose {
         let elapsed = start.elapsed();

@@ -67,7 +67,7 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
 
     for (idx, pattern) in PREFIX_VALIDATION_PATTERNS.iter().enumerate() {
         let prefix_bytes = pattern.prefix.as_bytes();
-        let charset_lut = get_charset_lut(pattern.charset);
+        let charset_lut = get_charset_lut(pattern.charset);  // Create once per pattern
         let mut search_pos = 0;
 
         while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
