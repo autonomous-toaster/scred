@@ -41,3 +41,7 @@ harness = false
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bin]]
+name = "profile_components"
+path = "src/bin/profile_components.rs"
