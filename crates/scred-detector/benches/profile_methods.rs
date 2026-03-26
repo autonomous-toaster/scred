@@ -24,6 +24,16 @@ fn benchmark_individual_methods(c: &mut Criterion) {
     c.bench_function("jwt", |b| {
         b.iter(|| detect_jwt(black_box(&data)))
     });
+    
+    c.bench_function("all_methods", |b| {
+        b.iter(|| {
+            let mut result = scred_detector::DetectionResult::new();
+            result.extend(detect_simple_prefix(black_box(&data)));
+            result.extend(detect_validation(black_box(&data)));
+            result.extend(detect_jwt(black_box(&data)));
+            result
+        })
+    });
 }
 
 criterion_group!(benches, benchmark_individual_methods);
