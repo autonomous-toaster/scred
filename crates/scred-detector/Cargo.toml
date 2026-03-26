@@ -43,3 +43,7 @@ harness = false
 [[bench]]
 name = "workload_variations"
 harness = false
+
+[[bench]]
+name = "redaction"
+harness = false
