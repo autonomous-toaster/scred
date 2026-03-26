@@ -44,7 +44,8 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
         return detect_simple_prefix_sequential(text);
     }
     
-    let results: Vec<DetectionResult> = SIMPLE_PREFIX_PATTERNS
+    // Use reduce to minimize allocations
+    SIMPLE_PREFIX_PATTERNS
         .par_iter()
         .enumerate()
         .map(|(idx, pattern)| {
@@ -62,13 +63,13 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
             }
             result
         })
-        .collect();
-    
-    let mut final_result = DetectionResult::with_capacity(100);
-    for r in results {
-        final_result.extend(r);
-    }
-    final_result
+        .reduce(
+            || DetectionResult::with_capacity(100),
+            |mut acc, item| {
+                acc.extend(item);
+                acc
+            },
+        )
 }
 
 /// Sequential version for small inputs
@@ -106,7 +107,8 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
     }
     
     // Parallelize pattern detection: each pattern runs independently
-    let results: Vec<DetectionResult> = PREFIX_VALIDATION_PATTERNS
+    // Use reduce instead of collect+extend to minimize allocations
+    PREFIX_VALIDATION_PATTERNS
         .par_iter()
         .enumerate()
         .map(|(idx, pattern)| {
@@ -130,14 +132,13 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
             }
             result
         })
-        .collect();
-    
-    // Merge results
-    let mut final_result = DetectionResult::with_capacity(100);
-    for r in results {
-        final_result.extend(r);
-    }
-    final_result
+        .reduce(
+            || DetectionResult::with_capacity(100),
+            |mut acc, item| {
+                acc.extend(item);
+                acc
+            },
+        )
 }
 
 /// Sequential version for small inputs or fallback
