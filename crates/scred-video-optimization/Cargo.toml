@@ -1,0 +1,13 @@
+[package]
+name = "scred-video-optimization"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+scred-redactor = { path = "../scred-redactor" }
+
+[[bin]]
+name = "frame_ring_comparison"
+path = "benches/frame_ring_comparison.rs"
