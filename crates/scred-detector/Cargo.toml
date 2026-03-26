@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 memchr = "2"
 rayon = "1"
+num_cpus = "1"
 
 [dev-dependencies]
 criterion = "0.5"

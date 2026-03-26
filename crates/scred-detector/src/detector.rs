@@ -86,13 +86,30 @@ pub fn get_charset_lut(charset: Charset) -> &'static CharsetLut {
     }
 }
 
+/// Calculate optimal threshold for simple_prefix based on CPU core count
+#[inline]
+fn get_simple_prefix_threshold() -> usize {
+    let num_cpus = num_cpus::get();
+    
+    // Simple prefix has fewer patterns (23), so lower thresholds
+    match num_cpus {
+        1 => 256,
+        2 => 384,
+        3..=4 => 448,
+        5..=8 => 512,     // 8 cores: optimal
+        9..=16 => 768,
+        _ => 1024,
+    }
+}
+
 /// Detect all simple prefix patterns (fast path, no validation)
 /// Parallelized version
 pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
     use rayon::prelude::*;
     
     // For small inputs, sequential is faster
-    if text.len() < 512 {
+    let threshold = get_simple_prefix_threshold();
+    if text.len() < threshold {
         return detect_simple_prefix_sequential(text);
     }
     
@@ -170,11 +187,36 @@ fn get_relevant_validation_patterns(text: &[u8]) -> Vec<usize> {
     relevant
 }
 
+/// Calculate optimal parallelization threshold based on CPU core count
+/// More cores → higher threshold (amortize overhead over larger sequential pass)
+/// Fewer cores → lower threshold (parallelize more aggressively)
+#[inline]
+fn get_validation_threshold() -> usize {
+    let num_cpus = num_cpus::get();
+    
+    // Empirically derived formula based on core count:
+    // 2 cores: 2048
+    // 4 cores: 3072  
+    // 8 cores: 4096 (measured optimal)
+    // 16 cores: 6000
+    // 32+ cores: 8000
+    
+    match num_cpus {
+        1 => 512,         // Single core: minimal threshold
+        2 => 2048,
+        3..=4 => 3072,
+        5..=8 => 4096,    // 8 cores: optimal configuration
+        9..=16 => 6000,
+        _ => 8000,        // Many cores: higher threshold
+    }
+}
+
 pub fn detect_validation(text: &[u8]) -> DetectionResult {
     use rayon::prelude::*;
     
     // For small inputs, don't bother with parallelization overhead
-    if text.len() < 4096 {
+    let threshold = get_validation_threshold();
+    if text.len() < threshold {
         return detect_validation_sequential(text);
     }
     
