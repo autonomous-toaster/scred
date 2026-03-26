@@ -150,6 +150,26 @@ fn detect_simple_prefix_sequential(text: &[u8]) -> DetectionResult {
 
 /// Detect prefix validation patterns (with length and charset validation - NO REGEX!)
 /// Parallelized with rayon for multi-core speedup
+/// Build a set of relevant pattern indices based on bytes present in text
+/// Only parallelizes patterns whose first byte appears in text
+fn get_relevant_validation_patterns(text: &[u8]) -> Vec<usize> {
+    // Quick scan: identify which first bytes appear in text
+    let mut byte_appears = [false; 256];
+    for &byte in text {
+        byte_appears[byte as usize] = true;
+    }
+    
+    // Collect indices of patterns whose first byte appears
+    let mut relevant = Vec::new();
+    let index = build_first_byte_index();
+    for byte in 0..256 {
+        if byte_appears[byte] && !index[byte].is_empty() {
+            relevant.extend(&index[byte]);
+        }
+    }
+    relevant
+}
+
 pub fn detect_validation(text: &[u8]) -> DetectionResult {
     use rayon::prelude::*;
     
@@ -158,13 +178,15 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
         return detect_validation_sequential(text);
     }
     
-    // Parallelize pattern detection: each pattern runs independently
-    // Use reduce instead of collect+extend to minimize allocations
-    PREFIX_VALIDATION_PATTERNS
+    // Get only relevant patterns (whose first byte appears in text)
+    let relevant_indices = get_relevant_validation_patterns(text);
+    
+    // Parallelize only relevant patterns
+    relevant_indices
         .par_iter()
-        .enumerate()
-        .map(|(idx, pattern)| {
+        .map(|&idx| {
             let mut result = DetectionResult::with_capacity(10);
+            let pattern = &PREFIX_VALIDATION_PATTERNS[idx];
             let prefix_bytes = pattern.prefix.as_bytes();
             let charset_lut = get_charset_lut(pattern.charset);
             let mut search_pos = 0;
