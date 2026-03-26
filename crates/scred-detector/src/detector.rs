@@ -62,26 +62,67 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
 }
 
 /// Detect prefix validation patterns (with length and charset validation - NO REGEX!)
+/// Parallelized with rayon for multi-core speedup
 pub fn detect_validation(text: &[u8]) -> DetectionResult {
+    use rayon::prelude::*;
+    
+    // For small inputs, don't bother with parallelization overhead
+    if text.len() < 1024 {
+        return detect_validation_sequential(text);
+    }
+    
+    // Parallelize pattern detection: each pattern runs independently
+    let results: Vec<DetectionResult> = PREFIX_VALIDATION_PATTERNS
+        .par_iter()
+        .enumerate()
+        .map(|(idx, pattern)| {
+            let mut result = DetectionResult::with_capacity(10);
+            let prefix_bytes = pattern.prefix.as_bytes();
+            let charset_lut = get_charset_lut(pattern.charset);
+            let mut search_pos = 0;
+
+            while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
+                let absolute_pos = search_pos + pos;
+                let token_start = absolute_pos + pattern.prefix.len();
+
+                let token_len = charset_lut.scan_token_end(text, token_start);
+
+                if token_len >= pattern.min_len && (pattern.max_len == 0 || token_len <= pattern.max_len) {
+                    let end_pos = (token_start + token_len).min(text.len());
+                    result.add(Match::new(absolute_pos, end_pos, (100 + idx) as u16));
+                }
+
+                search_pos = absolute_pos + pattern.prefix.len();
+            }
+            result
+        })
+        .collect();
+    
+    // Merge results
+    let mut final_result = DetectionResult::with_capacity(100);
+    for r in results {
+        final_result.extend(r);
+    }
+    final_result
+}
+
+/// Sequential version for small inputs or fallback
+fn detect_validation_sequential(text: &[u8]) -> DetectionResult {
     let mut result = DetectionResult::with_capacity(100);
 
     for (idx, pattern) in PREFIX_VALIDATION_PATTERNS.iter().enumerate() {
         let prefix_bytes = pattern.prefix.as_bytes();
-        let charset_lut = get_charset_lut(pattern.charset);  // Create once per pattern
+        let charset_lut = get_charset_lut(pattern.charset);
         let mut search_pos = 0;
 
         while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
             let absolute_pos = search_pos + pos;
             let token_start = absolute_pos + pattern.prefix.len();
 
-            // Scan token end using charset validation (Zig optimization)
             let token_len = charset_lut.scan_token_end(text, token_start);
 
-            // Validate token meets length requirements
             if token_len >= pattern.min_len && (pattern.max_len == 0 || token_len <= pattern.max_len) {
                 let end_pos = (token_start + token_len).min(text.len());
-                
-                // Pattern type: 100+ for validation patterns
                 result.add(Match::new(absolute_pos, end_pos, (100 + idx) as u16));
             }
 
