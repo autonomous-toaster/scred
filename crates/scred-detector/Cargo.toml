@@ -22,3 +22,7 @@ harness = false
 [[bench]]
 name = "charset_simd"
 harness = false
+
+[[bench]]
+name = "quick_simd"
+harness = false
