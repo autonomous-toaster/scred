@@ -24,15 +24,38 @@ pub fn scan_token_end_fast(data: &[u8], charset: &CharsetLut, start: usize) -> u
     }
 }
 
-/// Scalar fallback: process bytes one at a time
+/// Scalar fallback: process bytes with 4x loop unrolling for better ILP
 #[inline]
 fn scan_token_end_scalar(data: &[u8], charset: &CharsetLut) -> usize {
-    for (i, &byte) in data.iter().enumerate() {
-        if !charset.contains(byte) {
+    let mut i = 0;
+    let len = data.len();
+    
+    // Process 4 bytes at a time (unrolled loop)
+    while i + 4 <= len {
+        if !charset.contains(data[i]) {
             return i;
         }
+        if !charset.contains(data[i + 1]) {
+            return i + 1;
+        }
+        if !charset.contains(data[i + 2]) {
+            return i + 2;
+        }
+        if !charset.contains(data[i + 3]) {
+            return i + 3;
+        }
+        i += 4;
     }
-    data.len()
+    
+    // Process remaining bytes
+    while i < len {
+        if !charset.contains(data[i]) {
+            return i;
+        }
+        i += 1;
+    }
+    
+    len
 }
 
 /// SIMD version: process 16 bytes at a time (when available)
