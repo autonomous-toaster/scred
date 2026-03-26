@@ -26,13 +26,14 @@ impl CharsetLut {
         CharsetLut { table }
     }
 
-    /// Check if a byte is in the charset (O(1))
+    #[inline]
     pub fn contains(&self, byte: u8) -> bool {
         self.table[byte as usize]
     }
 
     /// Scan data for end of token (first byte NOT in charset)
     /// Zig optimization: scanForTokenEnd32 but portable
+    #[inline]
     pub fn scan_token_end(&self, data: &[u8], start: usize) -> usize {
         let mut len = 0;
         for &byte in &data[start..] {
@@ -48,6 +49,7 @@ impl CharsetLut {
 
 /// Find first occurrence of prefix in data
 /// Uses memchr for first byte, then validates full prefix
+#[inline]
 pub fn find_first_prefix(data: &[u8], prefix: &[u8]) -> Option<usize> {
     if data.is_empty() || prefix.is_empty() {
         return if prefix.is_empty() { Some(0) } else { None };
