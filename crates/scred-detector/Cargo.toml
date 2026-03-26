@@ -47,3 +47,7 @@ harness = false
 [[bench]]
 name = "redaction"
 harness = false
+
+[[bench]]
+name = "pattern_frequency"
+harness = false
