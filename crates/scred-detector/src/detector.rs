@@ -53,6 +53,28 @@ fn get_any_lut() -> &'static CharsetLut {
     })
 }
 
+/// Build a simple first-byte index for patterns (computed once, cached)
+/// Maps first byte -> vec of pattern indices
+fn build_first_byte_index() -> &'static Vec<Vec<usize>> {
+    // Use OnceLock to build once and cache
+    static INDEX: OnceLock<Vec<Vec<usize>>> = OnceLock::new();
+    
+    INDEX.get_or_init(|| {
+        // Initialize empty vecs for all 256 bytes
+        let mut index: Vec<Vec<usize>> = vec![Vec::new(); 256];
+        
+        // Index PREFIX_VALIDATION_PATTERNS by first byte
+        for (idx, pattern) in PREFIX_VALIDATION_PATTERNS.iter().enumerate() {
+            if !pattern.prefix.is_empty() {
+                let first_byte = pattern.prefix.as_bytes()[0] as usize;
+                index[first_byte].push(idx);
+            }
+        }
+        
+        index
+    })
+}
+
 /// Get charset lookup table for a charset type
 fn get_charset_lut(charset: Charset) -> &'static CharsetLut {
     match charset {
@@ -174,24 +196,27 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
 /// Sequential version for small inputs or fallback
 fn detect_validation_sequential(text: &[u8]) -> DetectionResult {
     let mut result = DetectionResult::with_capacity(100);
+    let index = build_first_byte_index();
 
-    for (idx, pattern) in PREFIX_VALIDATION_PATTERNS.iter().enumerate() {
-        let prefix_bytes = pattern.prefix.as_bytes();
-        let charset_lut = get_charset_lut(pattern.charset);
-        let mut search_pos = 0;
+    for pos in 0..text.len() {
+        let byte = text[pos] as usize;
+        let pattern_indices = &index[byte];
+        
+        // Only check patterns that start with this byte
+        for &idx in pattern_indices {
+            let pattern = &PREFIX_VALIDATION_PATTERNS[idx];
+            let prefix_bytes = pattern.prefix.as_bytes();
+            let charset_lut = get_charset_lut(pattern.charset);
 
-        while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
-            let absolute_pos = search_pos + pos;
-            let token_start = absolute_pos + pattern.prefix.len();
+            if pos + prefix_bytes.len() <= text.len() && &text[pos..pos + prefix_bytes.len()] == prefix_bytes {
+                let token_start = pos + prefix_bytes.len();
+                let token_len = charset_lut.scan_token_end(text, token_start);
 
-            let token_len = charset_lut.scan_token_end(text, token_start);
-
-            if token_len >= pattern.min_len && (pattern.max_len == 0 || token_len <= pattern.max_len) {
-                let end_pos = (token_start + token_len).min(text.len());
-                result.add(Match::new(absolute_pos, end_pos, (100 + idx) as u16));
+                if token_len >= pattern.min_len && (pattern.max_len == 0 || token_len <= pattern.max_len) {
+                    let end_pos = (token_start + token_len).min(text.len());
+                    result.add(Match::new(pos, end_pos, (100 + idx) as u16));
+                }
             }
-
-            search_pos = absolute_pos + pattern.prefix.len();
         }
     }
 
