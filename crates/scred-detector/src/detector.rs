@@ -12,25 +12,55 @@ use crate::patterns::{
     Charset,
 };
 use crate::simd_core::{self, CharsetLut};
+use std::sync::OnceLock;
 
 // ============================================================================
-// Phase 4d: Performance Optimization Notes
+// Cached Charsets - Avoid repeated initialization in hot path
 // ============================================================================
-// Current implementation uses bounded lookahead buffers (3-20KB per pattern).
-// Future optimizations available:
-// 1. Thread-local buffer pool to avoid repeated allocations (10-15% improvement)
-// 2. Pattern type matching optimization via prefix grouping (20-30% improvement)
-// 3. Early exit on first match for fast-path scenarios (5-10% improvement)
-// Current performance is acceptable (<100µs per call).
+static ALPHANUMERIC_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
+static BASE64_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
+static BASE64URL_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
+static HEX_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
+static ANY_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
+
+fn get_alphanumeric_lut() -> &'static CharsetLut {
+    ALPHANUMERIC_CHARSET.get_or_init(|| {
+        CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
+    })
+}
+
+fn get_base64_lut() -> &'static CharsetLut {
+    BASE64_CHARSET.get_or_init(|| {
+        CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
+    })
+}
+
+fn get_base64url_lut() -> &'static CharsetLut {
+    BASE64URL_CHARSET.get_or_init(|| {
+        CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=")
+    })
+}
+
+fn get_hex_lut() -> &'static CharsetLut {
+    HEX_CHARSET.get_or_init(|| {
+        CharsetLut::new(b"0123456789abcdefABCDEF")
+    })
+}
+
+fn get_any_lut() -> &'static CharsetLut {
+    ANY_CHARSET.get_or_init(|| {
+        CharsetLut::new(b" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~")
+    })
+}
 
 /// Get charset lookup table for a charset type
-fn get_charset_lut(charset: Charset) -> CharsetLut {
+fn get_charset_lut(charset: Charset) -> &'static CharsetLut {
     match charset {
-        Charset::Alphanumeric => CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"),
-        Charset::Base64 => CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="),
-        Charset::Base64Url => CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_="),
-        Charset::Hex => CharsetLut::new(b"0123456789abcdefABCDEF"),
-        Charset::Any => CharsetLut::new(b" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"),
+        Charset::Alphanumeric => get_alphanumeric_lut(),
+        Charset::Base64 => get_base64_lut(),
+        Charset::Base64Url => get_base64url_lut(),
+        Charset::Hex => get_hex_lut(),
+        Charset::Any => get_any_lut(),
     }
 }
 
@@ -51,7 +81,7 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
         .map(|(idx, pattern)| {
             let mut result = DetectionResult::with_capacity(10);
             let prefix_bytes = pattern.prefix.as_bytes();
-            let charset = CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-");
+            let charset = get_alphanumeric_lut();
             let mut search_pos = 0;
 
             while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
@@ -83,7 +113,7 @@ fn detect_simple_prefix_sequential(text: &[u8]) -> DetectionResult {
         while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
             let absolute_pos = search_pos + pos;
             
-            let charset = CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-");
+            let charset = get_alphanumeric_lut();
             let token_len = charset.scan_token_end(text, absolute_pos);
             let end_pos = (absolute_pos + token_len).min(text.len());
             
@@ -173,7 +203,7 @@ pub fn detect_jwt(text: &[u8]) -> DetectionResult {
     let mut result = DetectionResult::with_capacity(10);
 
     let prefix = b"eyJ";
-    let jwt_charset = CharsetLut::new(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=");
+    let jwt_charset = get_base64url_lut();
     
     let mut search_pos = 0;
 
