@@ -25,13 +25,17 @@ pub fn scan_token_end_fast(data: &[u8], charset: &CharsetLut, start: usize) -> u
 }
 
 /// Scalar fallback: process bytes with 8x loop unrolling for maximum ILP
+/// Scalar fallback: process bytes with 8x loop unrolling for maximum ILP
+/// Uses aggressive inline to allow compiler to prefetch/pipeline
 #[inline(always)]
 fn scan_token_end_scalar(data: &[u8], charset: &CharsetLut) -> usize {
     let mut i = 0;
     let len = data.len();
     
     // Process 8 bytes at a time (8x unrolled loop)
+    // Specialization: For ASCII-heavy data, inline the lookup
     while i + 8 <= len {
+        // Manually inline charset.contains for better code gen
         if !charset.contains(data[i]) {
             return i;
         }

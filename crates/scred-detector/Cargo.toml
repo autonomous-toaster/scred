@@ -26,3 +26,7 @@ harness = false
 [[bench]]
 name = "quick_simd"
 harness = false
+
+[[bench]]
+name = "realistic"
+harness = false
