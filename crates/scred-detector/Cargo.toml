@@ -31,3 +31,7 @@ harness = false
 [[bench]]
 name = "realistic"
 harness = false
+
+[[bench]]
+name = "scaling"
+harness = false
