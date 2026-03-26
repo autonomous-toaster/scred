@@ -45,3 +45,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bin]]
 name = "profile_components"
 path = "src/bin/profile_components.rs"
+
+[[bin]]
+name = "micro_profile"
+path = "src/bin/micro_profile.rs"
