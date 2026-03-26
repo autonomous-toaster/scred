@@ -174,7 +174,7 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
     use rayon::prelude::*;
     
     // For small inputs, don't bother with parallelization overhead
-    if text.len() < 2048 {
+    if text.len() < 4096 {
         return detect_validation_sequential(text);
     }
     
