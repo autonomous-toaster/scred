@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![cfg_attr(feature = "simd-accel", feature(portable_simd))]
+
 //! SCRED Pattern Detector - Pure Rust SIMD Implementation
 //! 
 //! Replaces broken Zig FFI with fast Rust pattern detection.
@@ -6,6 +9,7 @@
 pub mod patterns;
 pub mod match_result;
 pub mod simd_core;
+pub mod simd_charset;
 pub mod detector;
 pub mod regex_patterns;
 

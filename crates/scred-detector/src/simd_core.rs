@@ -33,55 +33,10 @@ impl CharsetLut {
 
     /// Scan data for end of token (first byte NOT in charset)
     /// Zig optimization: scanForTokenEnd32 but portable
-    /// Optimized: Process 4 bytes at a time for better CPU utilization
+    /// Optimized: Uses SIMD when available, falls back to scalar
     #[inline]
     pub fn scan_token_end(&self, data: &[u8], start: usize) -> usize {
-        if start >= data.len() {
-            return 0;
-        }
-
-        let mut len = 0;
-        let mut pos = start;
-        
-        // Fast path: process 4 bytes at a time if we have enough data
-        while pos + 4 <= data.len() {
-            let b0 = self.contains(data[pos]);
-            let b1 = self.contains(data[pos + 1]);
-            let b2 = self.contains(data[pos + 2]);
-            let b3 = self.contains(data[pos + 3]);
-            
-            // If all 4 bytes are in charset, continue
-            if b0 && b1 && b2 && b3 {
-                len += 4;
-                pos += 4;
-            } else {
-                // Found boundary within these 4 bytes
-                if b0 {
-                    len += 1;
-                    if !b1 { return len; }
-                    len += 1;
-                    if !b2 { return len; }
-                    len += 1;
-                    if !b3 { return len; }
-                    len += 1;
-                } else {
-                    return len;
-                }
-            }
-        }
-        
-        // Slow path: finish remaining bytes
-        for &byte in &data[pos..] {
-            if self.contains(byte) {
-                len += 1;
-            } else {
-                break;
-            }
-        }
-        
-        len
-    }
-        len
+        crate::simd_charset::scan_token_end_fast(data, self, start)
     }
 }
 
