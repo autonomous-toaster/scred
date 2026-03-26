@@ -24,31 +24,39 @@ pub fn scan_token_end_fast(data: &[u8], charset: &CharsetLut, start: usize) -> u
     }
 }
 
-/// Scalar fallback: process bytes with 16x loop unrolling for maximum ILP
-#[inline]
+/// Scalar fallback: process bytes with 8x loop unrolling for maximum ILP
+#[inline(always)]
 fn scan_token_end_scalar(data: &[u8], charset: &CharsetLut) -> usize {
     let mut i = 0;
     let len = data.len();
     
-    // Process 16 bytes at a time (16x unrolled loop)
-    while i + 16 <= len {
-        if !charset.contains(data[i]) { return i; }
-        if !charset.contains(data[i + 1]) { return i + 1; }
-        if !charset.contains(data[i + 2]) { return i + 2; }
-        if !charset.contains(data[i + 3]) { return i + 3; }
-        if !charset.contains(data[i + 4]) { return i + 4; }
-        if !charset.contains(data[i + 5]) { return i + 5; }
-        if !charset.contains(data[i + 6]) { return i + 6; }
-        if !charset.contains(data[i + 7]) { return i + 7; }
-        if !charset.contains(data[i + 8]) { return i + 8; }
-        if !charset.contains(data[i + 9]) { return i + 9; }
-        if !charset.contains(data[i + 10]) { return i + 10; }
-        if !charset.contains(data[i + 11]) { return i + 11; }
-        if !charset.contains(data[i + 12]) { return i + 12; }
-        if !charset.contains(data[i + 13]) { return i + 13; }
-        if !charset.contains(data[i + 14]) { return i + 14; }
-        if !charset.contains(data[i + 15]) { return i + 15; }
-        i += 16;
+    // Process 8 bytes at a time (8x unrolled loop)
+    while i + 8 <= len {
+        if !charset.contains(data[i]) {
+            return i;
+        }
+        if !charset.contains(data[i + 1]) {
+            return i + 1;
+        }
+        if !charset.contains(data[i + 2]) {
+            return i + 2;
+        }
+        if !charset.contains(data[i + 3]) {
+            return i + 3;
+        }
+        if !charset.contains(data[i + 4]) {
+            return i + 4;
+        }
+        if !charset.contains(data[i + 5]) {
+            return i + 5;
+        }
+        if !charset.contains(data[i + 6]) {
+            return i + 6;
+        }
+        if !charset.contains(data[i + 7]) {
+            return i + 7;
+        }
+        i += 8;
     }
     
     // Process remaining bytes
