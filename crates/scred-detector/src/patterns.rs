@@ -1,8 +1,6 @@
 //! Pattern definitions - extracted from Zig source of truth
 //! All 275 patterns organized by detection type
 
-use crate::match_result::Match;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PatternTier {
     Critical,

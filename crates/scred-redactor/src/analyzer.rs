@@ -20,7 +20,6 @@
 // }
 
 use std::str;
-use std::os::raw::c_int;
 
 // ============================================================================
 // High-level Rust API - ZigAnalyzer

@@ -12,16 +12,6 @@ serde = { workspace = true }
 lazy_static = "1.4"
 scred-detector = { path = "../scred-detector" }
 
-
-
-[[bin]]
-name = "perf_bench"
-path = "benches/redaction_perf.rs"
-
-[[bin]]
-name = "engine_bench"
-path = "benches/engine_creation.rs"
-
 [dependencies.aho-corasick]
 version = "1.1"
 optional = true
@@ -29,12 +19,21 @@ optional = true
 [features]
 aho-corasick = ["dep:aho-corasick"]
 
-[[bin]]
+[[bench]]
+name = "redaction_perf"
+harness = false
+
+[[bench]]
+name = "engine_creation"
+harness = false
+
+[[bench]]
 name = "detailed_profile"
-path = "benches/detailed_profile.rs"
-[[bin]]
+harness = false
+
+[[bench]]
 name = "fastpath_test"
-path = "benches/fastpath_test.rs"
+harness = false
 
 [[bench]]
 name = "streaming_benchmark"
