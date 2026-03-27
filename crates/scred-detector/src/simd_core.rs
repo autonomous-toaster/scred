@@ -13,7 +13,7 @@ use memchr::memchr;
 /// This is faster than scanning every byte
 #[derive(Clone, Copy)]
 pub struct CharsetLut {
-    table: [bool; 256],
+    pub table: [bool; 256],  // ← Now public for SIMD access
 }
 
 impl CharsetLut {
