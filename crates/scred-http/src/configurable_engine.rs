@@ -203,11 +203,21 @@ impl ConfigurableEngine {
         original: &str,
         matches: &[PatternMatch],
     ) -> String {
+        use scred_redactor::metadata_cache::RiskTier;
+        
         // Filter matches: keep only those matching redact_selector
         let selected_matches: Vec<&PatternMatch> = matches
             .iter()
             .filter(|m| {
-                let tier = get_pattern_tier(&m.pattern_type);
+                // Parse tier name from pattern_type (CRITICAL, API_KEYS, PATTERNS, etc.)
+                let tier = match m.pattern_type.as_str() {
+                    "CRITICAL" => RiskTier::Critical,
+                    "API_KEYS" => RiskTier::ApiKeys,
+                    "INFRASTRUCTURE" => RiskTier::Infrastructure,
+                    "SERVICES" => RiskTier::Services,
+                    "PATTERNS" => RiskTier::Patterns,
+                    _ => RiskTier::Patterns, // Default to least critical
+                };
                 self.redact_selector.matches_pattern(&m.pattern_type, tier)
             })
             .collect();

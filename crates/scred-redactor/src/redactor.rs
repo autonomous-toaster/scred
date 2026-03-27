@@ -111,10 +111,11 @@ impl RedactionEngine {
         let mut tier_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for m in &detection_result.matches {
             let tier_name = match m.pattern_type {
-                0..=25 => "CRITICAL",      // SIMPLE_PREFIX patterns
-                100..=144 => "API_KEYS",   // PREFIX_VALIDATION patterns
-                200 => "API_KEYS",         // JWT pattern
-                _ => "PATTERNS",
+                0..=99 => "CRITICAL",          // Simple prefix patterns (AWS, etc.)
+                100..=199 => "API_KEYS",       // Validation patterns (GitHub, Stripe, etc.)
+                200..=299 => "PATTERNS",       // JWT, regex-based patterns
+                300..=399 => "INFRASTRUCTURE", // SSH keys, certificates, etc.
+                _ => "SERVICES",               // Everything else
             };
             *tier_counts.entry(tier_name.to_string()).or_insert(0) += 1;
         }
@@ -134,12 +135,13 @@ impl RedactionEngine {
             let original = &text_bytes[m.start..m.end];
             let redacted = &redacted_bytes[m.start..m.end];
             
-            // Map pattern type number to tier name (CRITICAL, API_KEYS, PATTERNS)
+            // Map pattern type number to tier name (CRITICAL, API_KEYS, PATTERNS, etc.)
             let tier_name = match m.pattern_type {
-                0..=25 => "CRITICAL",
-                100..=144 => "API_KEYS",
-                200 => "API_KEYS",
-                _ => "PATTERNS",
+                0..=99 => "CRITICAL",          // Simple prefix patterns
+                100..=199 => "API_KEYS",       // Validation patterns
+                200..=299 => "PATTERNS",       // JWT and regex patterns
+                300..=399 => "INFRASTRUCTURE", // SSH keys, certificates
+                _ => "SERVICES",               // Other patterns
             };
             
             PatternMatch {
