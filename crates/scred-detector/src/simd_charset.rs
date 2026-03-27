@@ -20,7 +20,7 @@ pub fn scan_token_end_fast(data: &[u8], charset: &CharsetLut, start: usize) -> u
 
     #[cfg(not(feature = "simd-accel"))]
     {
-        return scan_token_end_scalar(&data[start..], charset);
+        scan_token_end_scalar(&data[start..], charset)
     }
 }
 
