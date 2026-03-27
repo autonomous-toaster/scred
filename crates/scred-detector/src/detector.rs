@@ -221,10 +221,19 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
         let pattern = &PREFIX_VALIDATION_PATTERNS[pattern_idx];
         let pos = m.start();  // Position where prefix was found
 
-        // Validate token: check length and charset constraints
+        // Early rejection: check if remaining text is long enough for min_len
         let token_start = pos + pattern.prefix.len();
+        let remaining = text.len().saturating_sub(token_start);
+        if remaining < pattern.min_len {
+            continue;  // Not enough data, skip validation
+        }
+
+        // Validate token: check length and charset constraints
+        // Limit scan to max_len to avoid scanning too far
         let charset_lut = get_charset_lut(pattern.charset);
+        let max_scan = if pattern.max_len > 0 { pattern.max_len } else { remaining };
         let token_len = charset_lut.scan_token_end(text, token_start);
+        let token_len = token_len.min(max_scan);
 
         // Check if token passes validation constraints (length/charset)
         if token_len >= pattern.min_len && (pattern.max_len == 0 || token_len <= pattern.max_len) {
