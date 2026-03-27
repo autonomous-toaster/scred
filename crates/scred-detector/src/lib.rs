@@ -11,7 +11,6 @@ pub mod match_result;
 pub mod simd_core;
 pub mod simd_charset;
 pub mod detector;
-pub mod regex_patterns;
 pub mod prefix_index;
 pub mod uri_patterns;
 
