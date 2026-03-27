@@ -13,6 +13,7 @@ pub mod streaming;
 pub mod pattern_selector;
 pub mod metadata_cache;
 pub mod frame_ring;
+pub mod buffer_pool;
 
 // ============================================================================
 // PUBLIC API - PRIMARY EXPORTS
@@ -46,6 +47,8 @@ pub use metadata_cache::RiskTier as PatternTier;
 pub use streaming::{
     StreamingRedactor, StreamingConfig, StreamingStats, FrameRingRedactor,
 };
+
+pub use buffer_pool::{BufferPool, BufferPoolStats};
 
 #[cfg(test)]
 mod tests {
