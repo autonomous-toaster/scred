@@ -1,6 +1,5 @@
 //! Debug validation performance
 
-use scred_detector;
 
 fn main() {
     // Generate realistic data
