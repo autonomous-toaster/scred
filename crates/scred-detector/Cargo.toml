@@ -9,7 +9,6 @@ license = "MIT"
 memchr = "2"
 rayon = "1"
 num_cpus = "1"
-regex = "1"
 aho-corasick = "1"
 
 [dev-dependencies]

@@ -18,6 +18,7 @@ pub mod simd_validation;
 pub mod simd_multi_search;
 pub mod detector;
 pub mod regex_patterns;
+pub mod prefix_index;
 pub mod uri_patterns;
 
 pub use match_result::{Match, DetectionResult, RedactionResult};
