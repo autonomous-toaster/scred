@@ -1475,6 +1475,7 @@ dependencies = [
 name = "scred-detector"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "criterion",
  "memchr",
  "num_cpus",

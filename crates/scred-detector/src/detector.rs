@@ -14,6 +14,7 @@ use crate::patterns::{
 use crate::uri_patterns;
 use crate::simd_core::{self, CharsetLut};
 use std::sync::OnceLock;
+use aho_corasick::AhoCorasick;
 
 // ============================================================================
 // Cached Charsets - Avoid repeated initialization in hot path
@@ -23,6 +24,7 @@ static BASE64_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
 static BASE64URL_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
 static HEX_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
 static ANY_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
+static VALIDATION_AUTOMATON: OnceLock<AhoCorasick> = OnceLock::new();
 
 fn get_alphanumeric_lut() -> &'static CharsetLut {
     ALPHANUMERIC_CHARSET.get_or_init(|| {
@@ -212,76 +214,48 @@ fn get_validation_threshold() -> usize {
     }
 }
 
-pub fn detect_validation(text: &[u8]) -> DetectionResult {
-    use rayon::prelude::*;
-    
-    // For small inputs, don't bother with parallelization overhead
-    let threshold = get_validation_threshold();
-    if text.len() < threshold {
-        return detect_validation_sequential(text);
-    }
-    
-    // Get only relevant patterns (whose first byte appears in text)
-    let relevant_indices = get_relevant_validation_patterns(text);
-    
-    // Parallelize only relevant patterns
-    relevant_indices
-        .par_iter()
-        .map(|&idx| {
-            let mut result = DetectionResult::with_capacity(10);
-            let pattern = &PREFIX_VALIDATION_PATTERNS[idx];
-            let prefix_bytes = pattern.prefix.as_bytes();
-            let charset_lut = get_charset_lut(pattern.charset);
-            let mut search_pos = 0;
-
-            while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
-                let absolute_pos = search_pos + pos;
-                let token_start = absolute_pos + pattern.prefix.len();
-
-                let token_len = charset_lut.scan_token_end(text, token_start);
-
-                if token_len >= pattern.min_len && (pattern.max_len == 0 || token_len <= pattern.max_len) {
-                    let end_pos = (token_start + token_len).min(text.len());
-                    result.add(Match::new(absolute_pos, end_pos, (100 + idx) as u16));
-                }
-
-                search_pos = absolute_pos + pattern.prefix.len();
-            }
-            result
-        })
-        .reduce(
-            || DetectionResult::with_capacity(100),
-            |mut acc, item| {
-                acc.extend(item);
-                acc
-            },
-        )
+/// Build Aho-Corasick automaton from PREFIX_VALIDATION_PATTERNS prefixes
+/// Called once via OnceLock - creates single-pass pattern matching automaton
+fn get_validation_automaton() -> &'static AhoCorasick {
+    VALIDATION_AUTOMATON.get_or_init(|| {
+        // Build automaton from all PREFIX_VALIDATION_PATTERNS prefixes
+        // Each pattern's prefix is a simple string we want to find
+        let prefixes: Vec<&str> = PREFIX_VALIDATION_PATTERNS
+            .iter()
+            .map(|p| p.prefix)
+            .collect();
+        
+        AhoCorasick::new(&prefixes).expect("Valid Aho-Corasick automaton")
+    })
 }
 
-/// Sequential version for small inputs or fallback
-fn detect_validation_sequential(text: &[u8]) -> DetectionResult {
+pub fn detect_validation(text: &[u8]) -> DetectionResult {
+    // Phase 3: Aho-Corasick Multi-Pattern Matching
+    // Replaces old 18-pass algorithm with single-pass automaton
+    // Expected: ~12-16x faster (2400ms → 150-200ms for 100MB)
+    //
+    // Key insight: Old algorithm did independent SIMD search for each pattern
+    // Aho-Corasick builds optimal state machine for all patterns simultaneously
+    
+    let automaton = get_validation_automaton();
     let mut result = DetectionResult::with_capacity(100);
-    let index = build_first_byte_index();
 
-    for pos in 0..text.len() {
-        let byte = text[pos] as usize;
-        let pattern_indices = &index[byte];
-        
-        // Only check patterns that start with this byte
-        for &idx in pattern_indices {
-            let pattern = &PREFIX_VALIDATION_PATTERNS[idx];
-            let prefix_bytes = pattern.prefix.as_bytes();
-            let charset_lut = get_charset_lut(pattern.charset);
+    // Single-pass matching: O(n + m) where m = number of matches
+    // Each match tells us: which pattern (0-17) and position in text
+    for m in automaton.find_iter(text) {
+        let pattern_idx = m.pattern().as_usize();  // Convert PatternID to usize
+        let pattern = &PREFIX_VALIDATION_PATTERNS[pattern_idx];
+        let pos = m.start();  // Position where prefix was found
 
-            if pos + prefix_bytes.len() <= text.len() && &text[pos..pos + prefix_bytes.len()] == prefix_bytes {
-                let token_start = pos + prefix_bytes.len();
-                let token_len = charset_lut.scan_token_end(text, token_start);
+        // Validate token: check length and charset constraints
+        let token_start = pos + pattern.prefix.len();
+        let charset_lut = get_charset_lut(pattern.charset);
+        let token_len = charset_lut.scan_token_end(text, token_start);
 
-                if token_len >= pattern.min_len && (pattern.max_len == 0 || token_len <= pattern.max_len) {
-                    let end_pos = (token_start + token_len).min(text.len());
-                    result.add(Match::new(pos, end_pos, (100 + idx) as u16));
-                }
-            }
+        // Check if token passes validation constraints (length/charset)
+        if token_len >= pattern.min_len && (pattern.max_len == 0 || token_len <= pattern.max_len) {
+            let end_pos = (token_start + token_len).min(text.len());
+            result.add(Match::new(pos, end_pos, (100 + pattern_idx) as u16));
         }
     }
 
