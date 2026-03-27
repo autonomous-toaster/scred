@@ -209,15 +209,54 @@ impl StreamingRedactor {
     /// 
     /// Returns (redacted_output, stats)
     pub fn redact_buffer(&self, data: &[u8]) -> (String, StreamingStats) {
+        // Phase 2.1: Default to in-place redaction for better performance
+        self.redact_buffer_in_place(data, false)
+    }
+
+    /// Legacy method using copy-based redaction (for testing/compatibility)
+    /// 
+    /// Use `redact_buffer()` for default optimized path (in-place redaction).
+    /// This method is provided for backward compatibility and benchmarking.
+    pub fn redact_buffer_copy_based(&self, data: &[u8]) -> (String, StreamingStats) {
         let mut stats = StreamingStats::default();
         let mut lookahead = Vec::with_capacity(self.config.lookahead_size);
         let mut output = String::new();
 
-        // Process in chunks
+        // Process in chunks using copy-based redaction
         for chunk in data.chunks(self.config.chunk_size) {
             let is_eof = chunk.len() < self.config.chunk_size;
             let (chunk_output, bytes_written, patterns) = 
                 self.process_chunk(chunk, &mut lookahead, is_eof);
+            
+            output.push_str(&chunk_output);
+            stats.bytes_read += chunk.len() as u64;
+            stats.bytes_written += bytes_written;
+            stats.patterns_found += patterns;
+            stats.chunks_processed += 1;
+        }
+
+        (output, stats)
+    }
+
+    /// In-place redaction (optimized zero-copy path, now default)
+    /// 
+    /// Phase 2.1: In-place redaction is the default path for StreamingRedactor.
+    /// This uses scred_detector::redact_in_place() instead of creating separate
+    /// output buffers, reducing memory allocations and improving throughput.
+    /// 
+    /// # Arguments
+    /// * `data` - Input data to redact
+    /// * `_use_copy_based` - DEPRECATED: ignored, kept for compatibility
+    pub fn redact_buffer_in_place(&self, data: &[u8], _use_copy_based: bool) -> (String, StreamingStats) {
+        let mut stats = StreamingStats::default();
+        let mut lookahead = Vec::with_capacity(self.config.lookahead_size);
+        let mut output = String::new();
+
+        // Process in chunks with in-place redaction
+        for chunk in data.chunks(self.config.chunk_size) {
+            let is_eof = chunk.len() < self.config.chunk_size;
+            let (chunk_output, bytes_written, patterns) = 
+                self.process_chunk_in_place(chunk, &mut lookahead, is_eof);
             
             output.push_str(&chunk_output);
             stats.bytes_read += chunk.len() as u64;
