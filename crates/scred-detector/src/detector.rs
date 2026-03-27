@@ -307,6 +307,13 @@ fn get_prefix_index() -> &'static PrefixIndex {
 pub fn detect_ssh_keys(text: &[u8]) -> DetectionResult {
     let mut result = DetectionResult::with_capacity(10);
     
+    // Optimization: Quick check - if no "-----BEGIN" marker in text, skip expensive scanning
+    // This avoids O(n*m) byte-by-byte scanning for texts without SSH keys
+    // (40.9 MB/s → expected 2000+ MB/s for empty case)
+    if !text.windows(11).any(|w| w == b"-----BEGIN ") {
+        return result;
+    }
+    
     // Get prefix index (cached, built once at startup)
     let index = get_prefix_index();
     
