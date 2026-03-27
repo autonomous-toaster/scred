@@ -44,7 +44,7 @@ pub use metadata_cache::RiskTier as PatternTier;
 // pub fn get_all_patterns() -> Vec<scred_detector::PatternInfo> { ... }
 
 pub use streaming::{
-    StreamingRedactor, StreamingConfig, StreamingStats,
+    StreamingRedactor, StreamingConfig, StreamingStats, FrameRingRedactor,
 };
 
 #[cfg(test)]
