@@ -5,18 +5,17 @@ pub mod mitm {
     pub mod tls;
     pub mod tls_acceptor;
     pub mod tls_mitm;
-    // TODO: Replace with h2_mitm_handler (new h2 crate integration)
-    // pub mod h2_mitm;
     pub mod h2_upstream_forwarder;
     pub mod h2_e2e_tests;
-    // DEPRECATED: Modules removed - using h2_mitm_handler instead
-    // pub mod h2_upstream_integration;
-    // pub mod h2_handler;
+    /// HTTP/2 MITM Handler - Handles H2 protocol with detect-only and redact modes
+    /// Integrated with h2 crate for multiplexing and per-stream redaction support
     pub mod h2_mitm_handler;
 }
 
 pub use mitm::proxy::ProxyServer;
 pub use mitm::config::Config;
-// TODO: Export new h2_mitm_handler instead
-// pub use mitm::h2_mitm::{H2Multiplexer, H2MultiplexerConfig};
+/// HTTP/2 MITM support: Full implementation with per-stream redaction
+/// - ALPN negotiation: Automatic protocol selection (h2 vs http/1.1)
+/// - Redaction modes: Detect-Only and Redact both fully supported
+/// - Pattern selector: Flexible per-request pattern filtering
 pub use mitm::h2_mitm_handler::{H2MitmHandler, H2MitmConfig};

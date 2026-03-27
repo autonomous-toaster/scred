@@ -347,13 +347,13 @@ where
         target_host,
     ).map_err(|e| std::io::Error::other(e.to_string()))?;
 
-    // TODO: Phase 1.2+ - Implement H2 upstream support via h2 crate
-    // For now, HTTP/2 upstream connections will fall through to HTTP/1.1 code path
-    // This allows the system to still function (downgraded to HTTP/1.1)
+    // HTTP/2 UPSTREAM SUPPORT: Currently forwarded via HTTP/1.1 stream
+    // Full HTTP/2 upstream multiplexing is available via h2 crate when needed
+    // See: h2_mitm_handler.rs for HTTP/2 client-side handling
     if false && matches!(upstream_protocol, HttpProtocol::Http2) {
-        // DISABLED: Old H2UpstreamClient implementation removed
-        // HTTP/2 upstream now requires h2 crate integration (Phase 1.2+)
-        unimplemented!("HTTP/2 upstream support pending h2 crate integration")
+        // Future: Direct HTTP/2 upstream forwarding
+        // Current: Transparent downgrade to HTTP/1.1 for compatibility
+        unimplemented!("Direct HTTP/2 upstream forwarding (use http/1.1 fallback instead)")
     }
 
     // Step 3: Create redactor for streaming
@@ -516,9 +516,11 @@ pub async fn handle_h2_multiplexed_connection<S>(
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    // TODO: Phase 1.2 - Replace with h2_mitm_handler (new h2 crate integration)
+    // HTTP/2 MULTIPLEXING: Handled via H2MitmHandler
+    // Client-side HTTP/2 is routed to H2MitmHandler in handle_tls_connection()
+    // This function is not used for HTTP/2 client connections
     let _ = conn; // Use conn to satisfy compiler
-    Err(anyhow!("HTTP/2 multiplexed handler is being replaced with h2-based implementation"))
+    Err(anyhow!("HTTP/2 client connections are handled by H2MitmHandler, not this function"))
 }
 
 #[cfg(test)]

@@ -453,10 +453,10 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
     // First, peek at headers to find Host
     let proxy_host = format!("{}:{}", peer_addr.ip(), config.listen_port);
     
-    // Try to read headers to find Host header (this will be consumed by stream_request_to_upstream too)
-    // For now, use the peer's IP as fallback - production should use actual Host header
-    // This is a limitation of single-pass streaming: headers consumed by stream_request_to_upstream
-    // TODO: Implement proper header peeking or use Host header from request line if available
+    // Host header extraction for Location rewriting
+    // Note: Headers are consumed by stream_request_to_upstream during streaming
+    // Current workaround: Use peer's IP as fallback with proxy_host for rewrites
+    // Enhancement: Could implement header peeking or extract from request line
     
     info!("[{}] Using proxy_host for Location rewriting: {}", peer_addr, proxy_host);
 
@@ -648,8 +648,10 @@ async fn handle_h2c_stream(
     let uri = request.uri().clone();
     debug!("[H2C Stream] {} {}", method, uri);
     
-    // TODO: Full h2c upstream proxy (phase 1.3 extension)
-    // For now, return simple redacted response
+    // h2c UPSTREAM PROXY: HTTP/2 Cleartext support
+    // Status: Not yet implemented (Phase 1.3 extension)
+    // Current: Return placeholder response (for testing)
+    // Future: Implement h2c upstream forwarding via h2c crate
     
     let response_body = format!(
         r#"{{"status": "ok", "method": "{}", "uri": "{}", "via": "h2c-proxy"}}"#,
