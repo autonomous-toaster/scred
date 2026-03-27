@@ -131,9 +131,18 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
     // Typical API keys are 20-200 bytes, so cap scan at 256 for performance
     const MAX_SIMPLE_TOKEN_LEN: usize = 256;
     
+    let mut last_end = 0;  // Track end of last kept match
+    
     for m in automaton.find_iter(text) {
-        let pattern_idx = m.pattern().as_usize();
         let pos = m.start();
+        
+        // Quick skip: if this match starts before the last match ended, it overlaps
+        // We'll remove overlaps later anyway, so skip expensive scan here
+        if pos < last_end {
+            continue;
+        }
+        
+        let pattern_idx = m.pattern().as_usize();
         
         // Token is everything from start to end of alphanumeric run
         // Limit scan to MAX_SIMPLE_TOKEN_LEN to avoid scanning too far
@@ -142,6 +151,7 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
         let end_pos = (pos + token_len).min(text.len());
         
         result.add(Match::new(pos, end_pos, pattern_idx as u16));
+        last_end = end_pos;
     }
 
     result
@@ -218,13 +228,22 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
     
     let automaton = get_validation_automaton();
     let mut result = DetectionResult::with_capacity(100);
+    
+    let mut last_end = 0;  // Track end of last kept match
 
     // Single-pass matching: O(n + m) where m = number of matches
     // Each match tells us: which pattern (0-17) and position in text
     for m in automaton.find_iter(text) {
+        let pos = m.start();
+        
+        // Quick skip: if this match starts before the last match ended, it overlaps
+        // We'll remove overlaps later anyway, so skip expensive scan here
+        if pos < last_end {
+            continue;
+        }
+        
         let pattern_idx = m.pattern().as_usize();  // Convert PatternID to usize
         let pattern = &PREFIX_VALIDATION_PATTERNS[pattern_idx];
-        let pos = m.start();  // Position where prefix was found
 
         // Early rejection: check if remaining text is long enough for min_len
         let token_start = pos + pattern.prefix.len();
@@ -244,6 +263,7 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
         if token_len >= pattern.min_len && (pattern.max_len == 0 || token_len <= pattern.max_len) {
             let end_pos = (token_start + token_len).min(text.len());
             result.add(Match::new(pos, end_pos, (100 + pattern_idx) as u16));
+            last_end = end_pos;
         }
     }
 
