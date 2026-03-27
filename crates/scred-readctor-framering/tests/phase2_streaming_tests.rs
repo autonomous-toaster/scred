@@ -1,7 +1,7 @@
 //! Phase 2 Streaming Integration Tests
 //! Tests detection of all 72 patterns in streaming scenarios
 
-use scred_redactor::analyzer::ZigAnalyzer;
+use scred_readctor_framering::analyzer::ZigAnalyzer;
 
 #[test]
 fn test_tier1_streaming() {

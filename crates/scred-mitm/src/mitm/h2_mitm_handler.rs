@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use std::sync::Arc;
-use scred_redactor::RedactionEngine;
+use scred_readctor_framering::RedactionEngine;
 use h2::server;
 use http::Response;
 use bytes::Bytes;
@@ -230,7 +230,7 @@ impl H2MitmHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scred_redactor::RedactionConfig;
+    use scred_readctor_framering::RedactionConfig;
 
     #[test]
     fn test_handler_creation() {

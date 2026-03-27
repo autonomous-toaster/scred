@@ -1,10 +1,10 @@
 [package]
-name = "scred-redactor"
+name = "scred-readctor-framering"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Core secret pattern redaction engine (244+ patterns)"
+description = "Core secret pattern redaction engine with FrameRing optimization (244+ patterns)"
 
 [dependencies]
 # Pure Rust SIMD pattern detection (no Zig FFI)

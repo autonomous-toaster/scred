@@ -13,7 +13,7 @@ use rustls_pemfile;
 use tracing::{debug, info};
 
 use super::tls::CertificateGenerator;
-use scred_redactor::RedactionEngine;
+use scred_readctor_framering::RedactionEngine;
 use scred_http::h2::alpn::{HttpProtocol, alpn_protocols};
 
 /// Handles TLS client connections with generated certificates

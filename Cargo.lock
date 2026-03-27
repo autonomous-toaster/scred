@@ -1450,7 +1450,7 @@ dependencies = [
  "libc",
  "scred-config",
  "scred-http",
- "scred-redactor",
+ "scred-readctor-framering",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1496,7 +1496,7 @@ dependencies = [
  "rayon",
  "regex",
  "rustls",
- "scred-redactor",
+ "scred-readctor-framering",
  "serde",
  "serde_yaml",
  "tempfile",
@@ -1526,7 +1526,7 @@ dependencies = [
  "rustls-pki-types",
  "scred-config",
  "scred-http",
- "scred-redactor",
+ "scred-readctor-framering",
  "serde",
  "serde_yaml",
  "tokio",
@@ -1548,7 +1548,7 @@ dependencies = [
  "rustls",
  "scred-config",
  "scred-http",
- "scred-redactor",
+ "scred-readctor-framering",
  "tokio",
  "tokio-rustls",
  "tracing",
@@ -1557,7 +1557,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scred-redactor"
+name = "scred-readctor-framering"
 version = "0.1.0"
 dependencies = [
  "aho-corasick",
@@ -1571,7 +1571,7 @@ dependencies = [
 name = "scred-video-optimization"
 version = "0.1.0"
 dependencies = [
- "scred-redactor",
+ "scred-readctor-framering",
 ]
 
 [[package]]

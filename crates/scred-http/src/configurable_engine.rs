@@ -12,7 +12,7 @@
 //!
 //! ```ignore
 //! use scred_http::ConfigurableEngine;
-//! use scred_redactor::RedactionEngine;
+//! use scred_readctor_framering::RedactionEngine;
 //!
 //! let engine = RedactionEngine::new(Default::default());
 //! let config_engine = ConfigurableEngine::with_defaults(engine);
@@ -27,7 +27,7 @@
 //! let result = config_engine.detect_and_redact("some secret text");
 //! ```
 
-use scred_redactor::{RedactionEngine, RedactionWarning};
+use scred_readctor_framering::{RedactionEngine, RedactionWarning};
 use std::sync::Arc;
 
 use crate::{PatternSelector, get_pattern_tier};
@@ -353,7 +353,7 @@ impl ConfigurableEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scred_redactor::RedactionConfig;
+    use scred_readctor_framering::RedactionConfig;
 
     fn create_engine() -> ConfigurableEngine {
         let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));

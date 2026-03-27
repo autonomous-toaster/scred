@@ -1,6 +1,6 @@
 //! Micro-profile each detection function individually
 //! 
-//! Run with: cargo run --bin micro_profile --release -p scred-redactor
+//! Run with: cargo run --bin micro_profile --release -p scred-readctor-framering
 
 use scred_detector;
 use scred_detector::detector::detect_ssh_keys;

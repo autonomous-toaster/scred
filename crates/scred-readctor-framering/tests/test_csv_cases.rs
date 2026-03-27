@@ -31,7 +31,7 @@ fn test_all_patterns_redaction() {
     let mut passed_tests = 0;
     let mut failed_tests = Vec::new();
 
-    use scred_redactor::analyzer::ZigAnalyzer;
+    use scred_readctor_framering::analyzer::ZigAnalyzer;
 
     for (line_num, line) in lines.enumerate() {
         let line = match line {

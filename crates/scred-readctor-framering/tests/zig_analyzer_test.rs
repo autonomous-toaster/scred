@@ -1,6 +1,6 @@
 #[test]
 fn test_zig_analyzer_aws() {
-    use scred_redactor::analyzer::ZigAnalyzer;
+    use scred_readctor_framering::analyzer::ZigAnalyzer;
     
     let text = "AKIAIOSFODNN7EXAMPLE";
     
@@ -16,7 +16,7 @@ fn test_zig_analyzer_aws() {
 
 #[test]
 fn test_zig_analyzer_github() {
-    use scred_redactor::analyzer::ZigAnalyzer;
+    use scred_readctor_framering::analyzer::ZigAnalyzer;
     
     let text = "ghp_1234567890123456789012345678901";
     

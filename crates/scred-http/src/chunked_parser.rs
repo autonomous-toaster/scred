@@ -4,7 +4,7 @@
 /// Handles pattern boundaries via lookahead buffer.
 
 use anyhow::{anyhow, Result};
-use scred_redactor::StreamingRedactor;
+use scred_readctor_framering::StreamingRedactor;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
 use tracing::{debug, warn};

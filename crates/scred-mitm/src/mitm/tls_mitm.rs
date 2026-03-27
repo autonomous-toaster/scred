@@ -44,7 +44,7 @@ pub async fn handle_tls_mitm(
     _port: u16,
     upstream_addr: &str,
     cert_generator: Arc<CertificateGenerator>,
-    redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    redaction_engine: Arc<scred_readctor_framering::RedactionEngine>,
     redaction_mode: RedactionMode,
     _h2_redact_headers: bool,
     detect_patterns: scred_http::PatternSelector,
@@ -222,13 +222,13 @@ async fn handle_single_request<RW>(
     client_tls: &mut RW,
     target_host: &str,
     upstream_addr: &str,
-    redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    redaction_engine: Arc<scred_readctor_framering::RedactionEngine>,
     redaction_mode: RedactionMode,
 ) -> std::io::Result<bool>
 where
     RW: AsyncReadExt + AsyncWriteExt + Unpin,
 {
-    use scred_redactor::StreamingRedactor;
+    use scred_readctor_framering::StreamingRedactor;
     use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
     
     // Step 1: Read request line from client
@@ -511,7 +511,7 @@ pub async fn handle_h2_multiplexed_connection<S>(
     conn: S,
     _host: &str,
     _upstream_addr: &str,
-    _redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    _redaction_engine: Arc<scred_readctor_framering::RedactionEngine>,
 ) -> Result<()>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
@@ -560,7 +560,7 @@ mod tests {
 async fn handle_h2_connection_bidirectional<S>(
     _conn: S,
     _host: &str,
-    _redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    _redaction_engine: Arc<scred_readctor_framering::RedactionEngine>,
 ) -> Result<()>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
@@ -573,7 +573,7 @@ async fn handle_h2_with_upstream<S, U>(
     _client_conn: S,
     _upstream_conn: U,
     _host: &str,
-    _redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    _redaction_engine: Arc<scred_readctor_framering::RedactionEngine>,
     _h2_redact_headers: bool,
 ) -> Result<()>
 where
@@ -588,7 +588,7 @@ async fn handle_h2_with_frame_forwarding<S, U>(
     _client_conn: S,
     _upstream_conn: U,
     _host: &str,
-    _redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    _redaction_engine: Arc<scred_readctor_framering::RedactionEngine>,
     _h2_redact_headers: bool,
 ) -> Result<()>
 where

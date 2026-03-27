@@ -11,7 +11,7 @@
 /// - Acceptable performance with 270 patterns (< 10% regression)
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use scred_redactor::{RedactionEngine, RedactionConfig};
+use scred_readctor_framering::{RedactionEngine, RedactionConfig};
 
 /// Generate test data with embedded secrets
 fn generate_test_data_with_secrets(size_kb: usize) -> String {

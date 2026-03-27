@@ -1,4 +1,4 @@
-use scred_redactor::{RedactionEngine, RedactionConfig};
+use scred_readctor_framering::{RedactionEngine, RedactionConfig};
 use scred_video_optimization::FrameRingRedactor;
 use std::sync::Arc;
 use std::time::Instant;
@@ -21,7 +21,7 @@ fn main() {
     println!("Test 1: FRESH StreamingRedactor each iteration");
     let mut times_fresh = Vec::new();
     for i in 0..5 {
-        let redactor = scred_redactor::StreamingRedactor::with_defaults(engine.clone());
+        let redactor = scred_readctor_framering::StreamingRedactor::with_defaults(engine.clone());
         let start = Instant::now();
         let (output, _) = redactor.redact_buffer(&data);
         let elapsed = start.elapsed();
@@ -34,7 +34,7 @@ fn main() {
 
     // Test 2: Reused StreamingRedactor (like real use)
     println!("\nTest 2: REUSED StreamingRedactor");
-    let redactor = scred_redactor::StreamingRedactor::with_defaults(engine.clone());
+    let redactor = scred_readctor_framering::StreamingRedactor::with_defaults(engine.clone());
     let mut times_reused = Vec::new();
     for i in 0..5 {
         let start = Instant::now();

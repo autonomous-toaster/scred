@@ -1,4 +1,4 @@
-use scred_redactor::{RedactionEngine, RedactionConfig};
+use scred_readctor_framering::{RedactionEngine, RedactionConfig};
 use scred_video_optimization::FrameRingRedactor;
 use std::sync::Arc;
 use std::time::Instant;
@@ -24,7 +24,7 @@ fn main() {
 
     for i in 0..10 {
         // Fresh sequential
-        let redactor_seq = scred_redactor::StreamingRedactor::with_defaults(engine.clone());
+        let redactor_seq = scred_readctor_framering::StreamingRedactor::with_defaults(engine.clone());
         let start = Instant::now();
         let _ = redactor_seq.redact_buffer(&data);
         sequential_fresh.push(start.elapsed().as_secs_f64());
@@ -50,7 +50,7 @@ fn main() {
 
     // Test B: Reused redactors (fair_profile pattern)
     println!("Test B: REUSED redactors (fair_profile pattern)");
-    let redactor_seq = scred_redactor::StreamingRedactor::with_defaults(engine.clone());
+    let redactor_seq = scred_readctor_framering::StreamingRedactor::with_defaults(engine.clone());
     let mut redactor_ring = FrameRingRedactor::new(engine.clone());
     
     let mut sequential_reused = Vec::new();

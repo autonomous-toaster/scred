@@ -7,7 +7,7 @@ license.workspace = true
 description = "Shared HTTP library for SCRED proxies"
 
 [dependencies]
-scred-redactor = { path = "../scred-redactor" }
+scred-readctor-framering = { path = "../scred-readctor-framering" }
 regex = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }

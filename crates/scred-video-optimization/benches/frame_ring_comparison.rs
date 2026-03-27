@@ -1,4 +1,4 @@
-use scred_redactor::{RedactionEngine, RedactionConfig};
+use scred_readctor_framering::{RedactionEngine, RedactionConfig};
 use scred_video_optimization::FrameRingRedactor;
 use std::sync::Arc;
 use std::time::Instant;
@@ -22,7 +22,7 @@ fn main() {
 
     // Benchmark 1: Sequential (original - uses standard StreamingRedactor)
     println!("1️⃣  SEQUENTIAL (Original)");
-    let redactor_seq = scred_redactor::StreamingRedactor::with_defaults(engine.clone());
+    let redactor_seq = scred_readctor_framering::StreamingRedactor::with_defaults(engine.clone());
     
     // Warmup
     let _ = redactor_seq.redact_buffer(&data);

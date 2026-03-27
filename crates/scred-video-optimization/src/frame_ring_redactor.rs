@@ -1,12 +1,12 @@
 //! Optimized Streaming Redactor using Frame Ring Buffer
 //!
-//! Simple wrapper around scred_redactor::StreamingRedactor that uses
+//! Simple wrapper around scred_readctor_framering::StreamingRedactor that uses
 //! pre-allocated frame buffers for better cache locality.
 //!
 //! This is Phase 1 of video transcoding optimization: frame ring buffers.
 //! No algorithm changes, just memory layout optimization.
 
-use scred_redactor::{RedactionEngine, RedactionConfig, StreamingConfig, StreamingStats};
+use scred_readctor_framering::{RedactionEngine, RedactionConfig, StreamingConfig, StreamingStats};
 use std::sync::Arc;
 
 /// Frame Ring: Pre-allocated circular buffer for streaming

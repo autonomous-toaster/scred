@@ -5,7 +5,7 @@
 
 #[cfg(test)]
 mod tests {
-    use scred_redactor::{RedactionEngine, RedactionConfig, StreamingRedactor};
+    use scred_readctor_framering::{RedactionEngine, RedactionConfig, StreamingRedactor};
     use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequestConfig};
     use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
     use std::sync::Arc;

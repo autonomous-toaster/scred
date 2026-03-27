@@ -10,7 +10,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 pub struct ProxyServer {
     config: Config,
     cert_generator: Arc<CertificateGenerator>,
-    redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    redaction_engine: Arc<scred_readctor_framering::RedactionEngine>,
 }
 
 impl ProxyServer {
@@ -21,8 +21,8 @@ impl ProxyServer {
             std::path::Path::new(&config.tls.cert_cache_dir),
         )?;
         
-        let redaction_engine = scred_redactor::RedactionEngine::new(
-            scred_redactor::RedactionConfig {
+        let redaction_engine = scred_readctor_framering::RedactionEngine::new(
+            scred_readctor_framering::RedactionConfig {
                 enabled: true,
             },
         );
@@ -62,7 +62,7 @@ async fn handle_client(
     peer_addr: SocketAddr,
     upstream_resolver: Arc<scred_http::proxy_resolver::MitmConfig>,
     cert_generator: Arc<CertificateGenerator>,
-    redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    redaction_engine: Arc<scred_readctor_framering::RedactionEngine>,
     config: Config,
 ) -> Result<()> {
     let (mut socket_read, mut socket_write) = socket.into_split();

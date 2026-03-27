@@ -1,4 +1,4 @@
-use scred_redactor::{RedactionEngine, RedactionConfig};
+use scred_readctor_framering::{RedactionEngine, RedactionConfig};
 use scred_video_optimization::FrameRingRedactor;
 use std::sync::Arc;
 use std::time::Instant;
@@ -20,7 +20,7 @@ fn main() {
 
     // Warmup
     {
-        let redactor_seq = scred_redactor::StreamingRedactor::with_defaults(engine.clone());
+        let redactor_seq = scred_readctor_framering::StreamingRedactor::with_defaults(engine.clone());
         let _ = redactor_seq.redact_buffer(&data);
     }
 
@@ -28,7 +28,7 @@ fn main() {
     println!("Running Sequential (10 iterations)...");
     let mut times_seq = Vec::new();
     for i in 0..10 {
-        let redactor_seq = scred_redactor::StreamingRedactor::with_defaults(engine.clone());
+        let redactor_seq = scred_readctor_framering::StreamingRedactor::with_defaults(engine.clone());
         let start = Instant::now();
         let (output, _) = redactor_seq.redact_buffer(&data);
         let elapsed = start.elapsed();

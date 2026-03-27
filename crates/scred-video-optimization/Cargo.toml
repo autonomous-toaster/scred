@@ -6,4 +6,4 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-scred-redactor = { path = "../scred-redactor" }
+scred-readctor-framering = { path = "../scred-readctor-framering" }

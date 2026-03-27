@@ -1,4 +1,4 @@
-use scred_redactor::{RedactionConfig, RedactionEngine};
+use scred_readctor_framering::{RedactionConfig, RedactionEngine};
 use std::time::Instant;
 
 fn main() {

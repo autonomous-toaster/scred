@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod openssh_key_tests {
-    use scred_redactor::RedactionEngine;
+    use scred_readctor_framering::RedactionEngine;
 
     #[test]
     fn test_openssh_private_key_simple() {

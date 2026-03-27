@@ -4,7 +4,7 @@
 //! - Frame ring buffer for cache locality (Phase 1)
 //! - Parallel pattern batches (Phase 2)
 //!
-//! Keep it simple: wrap existing scred-redactor with optimizations
+//! Keep it simple: wrap existing scred-readctor-framering with optimizations
 
 pub mod frame_ring_redactor;
 

@@ -1,6 +1,6 @@
 //! Benchmark different chunk sizes to find optimal performance
 
-use scred_redactor::{RedactionEngine, RedactionConfig, StreamingRedactor, StreamingConfig};
+use scred_readctor_framering::{RedactionEngine, RedactionConfig, StreamingRedactor, StreamingConfig};
 use std::sync::Arc;
 use std::time::Instant;
 

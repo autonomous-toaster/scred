@@ -1,4 +1,4 @@
-use scred_redactor::*;
+use scred_readctor_framering::*;
 use std::time::Instant;
 
 fn main() {

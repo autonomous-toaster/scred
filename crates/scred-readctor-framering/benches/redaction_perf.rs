@@ -1,5 +1,5 @@
 use std::time::Instant;
-use scred_redactor::redact_text;
+use scred_readctor_framering::redact_text;
 
 fn main() {
     let test_cases = vec![

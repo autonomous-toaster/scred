@@ -14,7 +14,7 @@ streaming_mode = []
 [dependencies]
 scred-config = { path = "../scred-config" }
 scred-http = { path = "../scred-http" }
-scred-redactor = { path = "../scred-redactor" }
+scred-readctor-framering = { path = "../scred-readctor-framering" }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 rustls = { workspace = true }

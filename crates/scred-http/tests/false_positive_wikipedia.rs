@@ -3,7 +3,7 @@ use tokio::io::{AsyncWriteExt, BufReader};
 
 use scred_http::http_line_reader::read_response_line;
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
-use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor};
+use scred_readctor_framering::{RedactionConfig, RedactionEngine, StreamingRedactor};
 
 fn assert_no_obvious_false_positive(body: &str) {
     // Just check for obvious false-positive redaction markers

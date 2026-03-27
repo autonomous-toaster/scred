@@ -4,7 +4,7 @@
 /// without buffering the entire request body.
 
 use anyhow::{anyhow, Result};
-use scred_redactor::StreamingRedactor;
+use scred_readctor_framering::StreamingRedactor;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::debug;
