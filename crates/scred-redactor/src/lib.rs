@@ -13,7 +13,6 @@ pub mod redactor;
 pub mod streaming;
 pub mod pattern_selector;
 pub mod metadata_cache;
-pub mod frame_ring;
 
 // ============================================================================
 // PUBLIC API - PRIMARY EXPORTS
