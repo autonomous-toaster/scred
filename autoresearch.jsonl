@@ -1,1 +1,2 @@
 {"type":"config","name":"SCRED Speed & Throughput Optimization - Full Stack","metricName":"throughput_mbs","metricUnit":"MB/s","bestDirection":"higher"}
+{"run":1,"commit":"d4edb72","metric":48,"metrics":{"patterns_found":10485760,"chunk_size_kb":64},"status":"keep","description":"Baseline: Streaming redaction throughput (10MB with 64KB chunks)","timestamp":1774626329911,"segment":0,"confidence":null,"iterationTokens":1081,"asi":{"hypothesis":"Establish baseline for full-stack optimization: detector, redactor, CLI, MITM, proxy"}}
