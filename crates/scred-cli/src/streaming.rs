@@ -23,8 +23,8 @@ pub enum RedactionMode {
 
 /// Unified streaming redaction function
 /// 
-/// Replaces three separate functions with a single, consolidated implementation.
-/// Handles text mode, environment mode, and auto-detected mode with initial buffer.
+/// Consolidates streaming and non-streaming paths with automatic optimization.
+/// For typical CLI usage with moderate-sized inputs, processes entirely without streaming overhead.
 ///
 /// # Arguments
 /// * `mode` - Redaction mode (Text or Env)
@@ -52,31 +52,76 @@ pub fn stream_and_redact(
     let mut total_read = 0;
     let mut total_written = 0;
 
-    // Process initial buffer if provided (from auto-detection)
+    // For small to moderate inputs (typical CLI usage), read everything into memory
+    // This eliminates chunking overhead. For large files (>100MB), fallback to streaming.
+    const MEMORY_LIMIT: usize = 100 * 1024 * 1024;  // 100MB threshold
+    let mut accumulated = Vec::new();
+    
+    // Add initial buffer if provided
     if let Some(initial) = initial_buffer {
-        let (read, written) = process_buffer_chunk(initial, mode, &config_engine);
-        total_read += read;
-        total_written += written;
-        
+        accumulated.extend_from_slice(initial);
         if verbose {
-            eprintln!("[stream] Initial buffer: {} → {}", read, written);
+            eprintln!("[stream] Initial buffer: {} bytes", initial.len());
         }
     }
 
-    // Continue streaming remaining chunks
+    // Try to read all data into memory
     const CHUNK_SIZE: usize = 64 * 1024;
     let mut chunk = vec![0u8; CHUNK_SIZE];
-
+    let mut falls_back_to_streaming = false;
+    
     loop {
         match io::stdin().read(&mut chunk) {
-            Ok(0) => break, // EOF
+            Ok(0) => {
+                // EOF - we got all data in memory
+                break;
+            }
             Ok(n) => {
-                let (read, written) = process_buffer_chunk(&chunk[..n], mode, &config_engine);
-                total_read += read;
-                total_written += written;
+                accumulated.extend_from_slice(&chunk[..n]);
                 
-                if verbose {
-                    eprintln!("[stream-chunk] {} → {}", n, written);
+                // Check if we've exceeded memory threshold
+                if accumulated.len() > MEMORY_LIMIT {
+                    if verbose {
+                        eprintln!("[stream] Input exceeds 100MB, falling back to streaming");
+                    }
+                    falls_back_to_streaming = true;
+                    // Process accumulated data and continue with streaming for rest
+                    let input_str = String::from_utf8_lossy(&accumulated);
+                    let (read, written) = process_chunk(&input_str, mode, &config_engine);
+                    total_read += read;
+                    total_written += written;
+                    accumulated.clear();
+                    
+                    // Continue reading and processing in chunks
+                    loop {
+                        match io::stdin().read(&mut chunk) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                let (read, written) = process_buffer_chunk(&chunk[..n], mode, &config_engine);
+                                total_read += read;
+                                total_written += written;
+                                if verbose {
+                                    eprintln!("[stream-chunk] {} → {}", n, written);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Error reading input: {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    io::stdout().flush().ok();
+                    
+                    if verbose {
+                        let elapsed = start.elapsed();
+                        let throughput = if elapsed.as_secs_f64() > 0.0 {
+                            total_read as f64 / (1024.0 * 1024.0) / elapsed.as_secs_f64()
+                        } else {
+                            0.0
+                        };
+                        eprintln!("\n[stream-summary] Throughput: {:.1} MB/s", throughput);
+                    }
+                    return;
                 }
             }
             Err(e) => {
@@ -85,30 +130,62 @@ pub fn stream_and_redact(
             }
         }
     }
-
-    // Flush any remaining buffered output
-    io::stdout().flush().ok();
-
-    if verbose {
-        let elapsed = start.elapsed();
-        let throughput = if elapsed.as_secs_f64() > 0.0 {
-            total_read as f64 / (1024.0 * 1024.0) / elapsed.as_secs_f64()
-        } else {
-            0.0
-        };
-        eprintln!("\n[stream-summary]");
-        match mode {
-            RedactionMode::Text => {
-                eprintln!("  Type: Text/Pattern");
-                eprintln!("  Bytes: {} → {} (char-preserved)", total_read, total_written);
+    
+    if !falls_back_to_streaming {
+        // All data fit in memory - process as single operation (best performance)
+        let input_str = String::from_utf8_lossy(&accumulated);
+        let (read, written) = process_chunk(&input_str, mode, &config_engine);
+        total_read = read;
+        total_written = written;
+        
+        io::stdout().flush().ok();
+        
+        if verbose {
+            let elapsed = start.elapsed();
+            let throughput = if elapsed.as_secs_f64() > 0.0 {
+                total_read as f64 / (1024.0 * 1024.0) / elapsed.as_secs_f64()
+            } else {
+                0.0
+            };
+            eprintln!("\n[stream-summary]");
+            match mode {
+                RedactionMode::Text => {
+                    eprintln!("  Type: Text/Pattern");
+                    eprintln!("  Bytes: {} → {} (char-preserved)", total_read, total_written);
+                }
+                RedactionMode::Env => {
+                    eprintln!("  Type: Environment Variables");
+                    eprintln!("  Bytes: {} → {}", total_read, total_written);
+                }
             }
-            RedactionMode::Env => {
-                eprintln!("  Type: Environment Variables");
-                eprintln!("  Bytes: {} → {}", total_read, total_written);
-            }
+            eprintln!("  Time: {:.2}s", elapsed.as_secs_f64());
+            eprintln!("  Throughput: {:.1} MB/s", throughput);
         }
-        eprintln!("  Time: {:.2}s", elapsed.as_secs_f64());
-        eprintln!("  Throughput: {:.1} MB/s", throughput);
+    }
+}
+
+/// Process chunk as a single unit (for in-memory processing - best performance)
+fn process_chunk(
+    text: &str,
+    mode: RedactionMode,
+    config_engine: &ConfigurableEngine,
+) -> (usize, usize) {
+    match mode {
+        RedactionMode::Text => {
+            let result = config_engine.detect_and_redact(text);
+            io::stdout().write_all(result.redacted.as_bytes()).ok();
+            (text.len(), result.redacted.len())
+        }
+        RedactionMode::Env => {
+            let mut total_written = 0;
+            for line in text.lines() {
+                let redacted = crate::env_mode::redact_env_line_configurable(line, config_engine);
+                io::stdout().write_all(redacted.as_bytes()).ok();
+                io::stdout().write_all(b"\n").ok();
+                total_written += redacted.len() + 1;
+            }
+            (text.len(), total_written)
+        }
     }
 }
 
