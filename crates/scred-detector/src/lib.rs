@@ -48,8 +48,9 @@ mod tests {
         // Added 3 PGP patterns (Private Key Block, Public Key Block, Message) - Phase 4c
         // Added 129 API key patterns from batches 2-7 (Phase B batch integration)
         // Added 14 URI patterns (11 database URIs + 3 webhook URLs) (Phase B URI handler)
-        // Expected: 23 + 349 + 1 + 11 + 18 + 14 = 416 patterns
-        assert_eq!(TOTAL_PATTERNS, 416);
+        // Removed 1 duplicate vault-api-token pattern (Cleanup Phase 1)
+        // Expected: 23 + 348 + 1 + 11 + 18 + 14 = 415 patterns
+        assert_eq!(TOTAL_PATTERNS, 415);
     }
 
     #[test]
