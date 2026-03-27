@@ -430,7 +430,7 @@ pub fn redact_text(text: &[u8], matches: &[Match]) -> Vec<u8> {
         
         // Check if this is an environment variable pattern (contains '=' in the match)
         // Environment variables are a special case where we preserve key=value structure
-        if !is_ssh_key && text[m.start..m.end].iter().any(|&b| b == b'=') {
+        if !is_ssh_key && text[m.start..m.end].contains(&b'=') {
             // This is an environment variable: key=value
             // Keep the key and equals sign, preserve first 4 chars of value, redact the rest
             if let Some(eq_pos) = text[m.start..m.end].iter().position(|&b| b == b'=') {
