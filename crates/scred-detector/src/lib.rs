@@ -11,6 +11,7 @@ pub mod match_result;
 pub mod simd_core;
 pub mod simd_charset;
 pub mod detector;
+pub mod prefix_index;
 pub mod uri_patterns;
 
 pub use match_result::{Match, DetectionResult, RedactionResult};
@@ -19,7 +20,7 @@ pub use patterns::{
     SIMPLE_PREFIX_PATTERNS, PREFIX_VALIDATION_PATTERNS, JWT_PATTERNS,
     PatternTier, Charset,
 };
-pub use detector::{detect_simple_prefix, detect_validation, detect_jwt, detect_all, redact_text};
+pub use detector::{detect_simple_prefix, detect_validation, detect_jwt, detect_all, redact_text, redact_in_place};
 
 // Version matching Zig implementation
 pub const VERSION: &str = "0.1.0";
@@ -31,10 +32,16 @@ mod tests {
 
     #[test]
     fn test_library_loads() {
-        // 23 SIMPLE_PREFIX + 348 PREFIX_VALIDATION + 1 JWT + 11 MULTILINE_MARKER + 18 REGEX + 14 URI = 415
-        // Phase B: Added 129 API key patterns from batches 2-7 (220 → 348 PREFIX_VALIDATION)
-        // Phase B: Added 14 URI patterns (11 database + 3 webhook) with credential extraction
-        // Cleaned: Removed 1 duplicate vault-api-token pattern
+        // 23 SIMPLE_PREFIX + 220 PREFIX_VALIDATION + 1 JWT + 11 MULTILINE_MARKER + 18 REGEX = 273
+        // Removed 12 database/service URI patterns (false positives on non-credential URLs)
+        // Removed 4 overly broad generic patterns (PASSWORD=, secret=, etc.)
+        // Use environment variables instead (DATABASE_URL=, REDIS_URL=, etc.)
+        // Added 4 SSH key patterns (RSA, OpenSSH, generic PKCS8, EC) - Phase 4a
+        // Added 4 certificate patterns (X.509, CSR, Encrypted, Public) - Phase 4b
+        // Added 3 PGP patterns (Private Key Block, Public Key Block, Message) - Phase 4c
+        // Added 129 API key patterns from batches 2-7 (Phase B batch integration)
+        // Added 14 URI patterns (11 database URIs + 3 webhook URLs) (Phase B URI handler)
+        // Removed 1 duplicate vault-api-token pattern (Cleanup Phase 1)
         // Expected: 23 + 348 + 1 + 11 + 18 + 14 = 415 patterns
         assert_eq!(TOTAL_PATTERNS, 415);
     }

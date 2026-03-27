@@ -1,13 +1,11 @@
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::env;
 use std::time::Instant;
-use std::sync::Arc;
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 
-use scred_redactor::{RedactionEngine, RedactionConfig, get_all_patterns};
-use scred_http::{ConfigurableEngine, PatternSelector, env_detection};
-use scred_config::ConfigLoader;
+use scred_redactor::get_all_patterns;
+use scred_http::{PatternSelector, env_detection};
 use tracing::{info, debug};
 
 /// Check if stdin is connected to a terminal (TTY)
@@ -27,6 +25,7 @@ fn stdin_is_tty() -> bool {
 }
 
 mod env_mode;
+mod streaming;
 
 /// Extract flag value from command line arguments
 /// E.g., "--detect CRITICAL" returns Some("CRITICAL")
@@ -210,12 +209,12 @@ fn main() {
     // Piped input hangs on first read() because Unix pipe doesn't send EOF until
     // parent shell closes write-end, but parent waits for child to exit (deadlock).
     // Solution: When stdin is piped, always use text mode (not auto-detect).
-    let use_env_mode = if text_mode_forced {
+    let (mode, initial_buffer) = if text_mode_forced {
         debug!("[cli-mode] Text mode forced");
-        false
+        (streaming::RedactionMode::Text, None)
     } else if env_mode_forced {
         debug!("[cli-mode] Env mode forced");
-        true
+        (streaming::RedactionMode::Env, None)
     } else if auto_detect_enabled && stdin_is_tty() {
         // Only auto-detect if stdin is actually a terminal
         // Skip for piped input to avoid deadlock
@@ -228,14 +227,17 @@ fn main() {
         )
     } else {
         debug!("[cli-mode] Using text mode (stdin is piped)");
-        false
+        (streaming::RedactionMode::Text, None)
     };
     
-    if use_env_mode {
-        run_env_redacting_stream(verbose, &detect_selector, &redact_selector);
-    } else {
-        run_redacting_stream(verbose, &detect_selector, &redact_selector);
-    }
+    // Use unified streaming redaction
+    streaming::stream_and_redact(
+        mode,
+        initial_buffer.as_deref(),
+        &detect_selector,
+        &redact_selector,
+        verbose,
+    );
 }
 
 fn print_help() {
@@ -386,132 +388,57 @@ fn describe_pattern(name: &str) {
 }
 
 fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact_selector: &PatternSelector) {
-    debug!("[redacting-stream] Starting");
-    let start = Instant::now();
-
-    // Create ConfigurableEngine with pattern selectors
-    debug!("[redacting-stream] Creating RedactionEngine");
-    let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
-    debug!("[redacting-stream] RedactionEngine created");
-    
-    debug!("[redacting-stream] Creating ConfigurableEngine");
-    let config_engine = ConfigurableEngine::new(
-        engine,
-        detect_selector.clone(),
-        redact_selector.clone(),
+    // DEPRECATED: Use streaming::stream_and_redact() instead
+    streaming::stream_and_redact(
+        streaming::RedactionMode::Text,
+        None,
+        detect_selector,
+        redact_selector,
+        verbose,
     );
-    debug!("[redacting-stream] ConfigurableEngine created");
-
-    // Stream input in 64KB chunks
-    const CHUNK_SIZE: usize = 64 * 1024;
-    let mut chunk = vec![0u8; CHUNK_SIZE];
-    let mut total_read = 0;
-    let mut total_written = 0;
-
-    debug!("[redacting-stream] Starting read loop");
-    loop {
-        match io::stdin().read(&mut chunk) {
-            Ok(0) => {
-                debug!("[redacting-stream] EOF reached");
-                break;
-            },
-            Ok(n) => {
-                let input_str = String::from_utf8_lossy(&chunk[..n]);
-                let result = config_engine.detect_and_redact(&input_str);
-                
-                io::stdout().write_all(result.redacted.as_bytes()).ok();
-                // Don't flush on every chunk - let OS buffer
-                
-                total_read += n;
-                total_written += result.redacted.len();
-                
-                if verbose {
-                    eprintln!("[redacting-stream-chunk] {} → {}", n, result.redacted.len());
-                }
-            },
-            Err(e) => {
-                eprintln!("Error reading input: {}", e);
-                std::process::exit(1);
-            }
-        }
-    }
-    
-    // Flush at end
-    io::stdout().flush().ok();
-
-    if verbose {
-        let elapsed = start.elapsed();
-        let throughput = if elapsed.as_secs_f64() > 0.0 {
-            total_read as f64 / (1024.0 * 1024.0) / elapsed.as_secs_f64()
-        } else {
-            0.0
-        };
-        eprintln!("\n[redacting-stream]");
-        eprintln!("  Bytes: {} → {} (char-preserved)", total_read, total_written);
-        eprintln!("  Time: {:.2}s", elapsed.as_secs_f64());
-        eprintln!("  Throughput: {:.1} MB/s", throughput);
-    }
 }
 
 fn run_env_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact_selector: &PatternSelector) {
-    let start = Instant::now();
-
-    // Create ConfigurableEngine with pattern selectors
-    let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
-    let config_engine = ConfigurableEngine::new(
-        engine,
-        detect_selector.clone(),
-        redact_selector.clone(),
+    // DEPRECATED: Use streaming::stream_and_redact() instead
+    streaming::stream_and_redact(
+        streaming::RedactionMode::Env,
+        None,
+        detect_selector,
+        redact_selector,
+        verbose,
     );
+}
 
-    // Stream input in 64KB chunks
-    const CHUNK_SIZE: usize = 64 * 1024;
-    let mut chunk = vec![0u8; CHUNK_SIZE];
-    let mut total_read = 0;
-    let mut total_written = 0;
+fn process_text_chunk_and_stream(
+    initial_buffer: &[u8],
+    verbose: bool,
+    detect_selector: &PatternSelector,
+    redact_selector: &PatternSelector,
+) {
+    // DEPRECATED: Use streaming::stream_and_redact() instead
+    streaming::stream_and_redact(
+        streaming::RedactionMode::Text,
+        Some(initial_buffer),
+        detect_selector,
+        redact_selector,
+        verbose,
+    );
+}
 
-    loop {
-        match io::stdin().read(&mut chunk) {
-            Ok(0) => break, // EOF
-            Ok(n) => {
-                let input_str = String::from_utf8_lossy(&chunk[..n]);
-                
-                // Process line by line with env-aware redaction
-                let mut output = String::new();
-                for line in input_str.lines() {
-                    let redacted = env_mode::redact_env_line_configurable(line, &config_engine);
-                    output.push_str(&redacted);
-                    output.push('\n');
-                }
-                
-                io::stdout().write_all(output.as_bytes()).ok();
-                
-                total_read += n;
-                total_written += output.len();
-                
-                if verbose {
-                    eprintln!("[env-chunk: {} bytes → {}", n, output.len());
-                }
-            }
-            Err(e) => {
-                eprintln!("Error reading input: {}", e);
-                std::process::exit(1);
-            }
-        }
-    }
-
-    if verbose {
-        let elapsed = start.elapsed();
-        let throughput = if elapsed.as_secs_f64() > 0.0 {
-            total_read as f64 / (1024.0 * 1024.0) / elapsed.as_secs_f64()
-        } else {
-            0.0
-        };
-        eprintln!("\n[redacting-env-stream]");
-        eprintln!("  Bytes: {} → {}", total_read, total_written);
-        eprintln!("  Time: {:.2}s", elapsed.as_secs_f64());
-        eprintln!("  Throughput: {:.1} MB/s", throughput);
-    }
+fn process_env_chunk_and_stream(
+    initial_buffer: &[u8],
+    verbose: bool,
+    detect_selector: &PatternSelector,
+    redact_selector: &PatternSelector,
+) {
+    // DEPRECATED: Use streaming::stream_and_redact() instead
+    streaming::stream_and_redact(
+        streaming::RedactionMode::Env,
+        Some(initial_buffer),
+        detect_selector,
+        redact_selector,
+        verbose,
+    );
 }
 
 fn run_with_auto_detect(
@@ -519,7 +446,7 @@ fn run_with_auto_detect(
     detect_only_flag: bool,
     detect_selector: &PatternSelector,
     redact_selector: &PatternSelector,
-) -> bool {
+) -> (streaming::RedactionMode, Option<Vec<u8>>) {
     let _start = Instant::now();
     
     // Read first 512 bytes for detection (much faster than 4KB)
@@ -554,144 +481,11 @@ fn run_with_auto_detect(
     }
     
     // Decide which mode based on detection
-    let use_env_mode = detection.mode == env_detection::DetectionMode::EnvFormat;
+    let mode = match detection.mode {
+        env_detection::DetectionMode::EnvFormat => streaming::RedactionMode::Env,
+        env_detection::DetectionMode::TextFormat => streaming::RedactionMode::Text,
+        env_detection::DetectionMode::BinaryDetected => streaming::RedactionMode::Text, // Treat binary as text
+    };
     
-    // Process the detected chunk
-    if use_env_mode {
-        process_env_chunk_and_stream(&buffer, verbose, detect_selector, redact_selector);
-    } else {
-        process_text_chunk_and_stream(&buffer, verbose, detect_selector, redact_selector);
-    }
-    
-    use_env_mode
-}
-
-fn process_env_chunk_and_stream(
-    initial_buffer: &[u8],
-    verbose: bool,
-    detect_selector: &PatternSelector,
-    redact_selector: &PatternSelector,
-) {
-    let start = Instant::now();
-    let mut total_read = initial_buffer.len();
-    let mut total_written = 0;
-
-    // Create ConfigurableEngine
-    let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
-    let config_engine = ConfigurableEngine::new(
-        engine,
-        detect_selector.clone(),
-        redact_selector.clone(),
-    );
-    
-    // Process the initial buffer chunk
-    let input_str = String::from_utf8_lossy(initial_buffer);
-    for line in input_str.lines() {
-        let redacted = env_mode::redact_env_line_configurable(line, &config_engine);
-        io::stdout().write_all(redacted.as_bytes()).ok();
-        io::stdout().write_all(b"\n").ok();
-        total_written += redacted.len() + 1;
-    }
-    io::stdout().flush().ok();
-    
-    // Continue with remaining stream
-    const CHUNK_SIZE: usize = 64 * 1024;
-    let mut chunk = vec![0u8; CHUNK_SIZE];
-    
-    loop {
-        match io::stdin().read(&mut chunk) {
-            Ok(0) => break,
-            Ok(n) => {
-                let input_str = String::from_utf8_lossy(&chunk[..n]);
-                for line in input_str.lines() {
-                    let redacted = env_mode::redact_env_line_configurable(line, &config_engine);
-                    io::stdout().write_all(redacted.as_bytes()).ok();
-                    io::stdout().write_all(b"\n").ok();
-                    total_written += redacted.len() + 1;
-                }
-                io::stdout().flush().ok();
-                total_read += n;
-            }
-            Err(e) => {
-                eprintln!("Error reading input: {}", e);
-                std::process::exit(1);
-            }
-        }
-    }
-    
-    if verbose {
-        let elapsed = start.elapsed();
-        let throughput = if elapsed.as_secs_f64() > 0.0 {
-            total_read as f64 / (1024.0 * 1024.0) / elapsed.as_secs_f64()
-        } else {
-            0.0
-        };
-        eprintln!("\n[redacting-env-stream (auto-detected)]");
-        eprintln!("  Bytes: {} → {}", total_read, total_written);
-        eprintln!("  Time: {:.2}s", elapsed.as_secs_f64());
-        eprintln!("  Throughput: {:.1} MB/s", throughput);
-    }
-}
-
-fn process_text_chunk_and_stream(
-    initial_buffer: &[u8],
-    verbose: bool,
-    detect_selector: &PatternSelector,
-    redact_selector: &PatternSelector,
-) {
-    let start = Instant::now();
-    let mut total_read = initial_buffer.len();
-    let mut total_written = 0;
-    
-    eprintln!("[DEBUG] Starting process_text_chunk_and_stream with initial {} bytes", initial_buffer.len());
-
-    // Create ConfigurableEngine
-    let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
-    let config_engine = ConfigurableEngine::new(
-        engine,
-        detect_selector.clone(),
-        redact_selector.clone(),
-    );
-    
-    // Process the initial buffer chunk
-    let input_str = String::from_utf8_lossy(initial_buffer);
-    let result = config_engine.detect_and_redact(&input_str);
-    io::stdout().write_all(result.redacted.as_bytes()).ok();
-    io::stdout().flush().ok();
-    total_written += result.redacted.len();
-    
-    // Continue with remaining stream
-    const CHUNK_SIZE: usize = 64 * 1024;
-    let mut chunk = vec![0u8; CHUNK_SIZE];
-    
-    loop {
-        match io::stdin().read(&mut chunk) {
-            Ok(0) => break,
-            Ok(n) => {
-                let input_str = String::from_utf8_lossy(&chunk[..n]);
-                let result = config_engine.detect_and_redact(&input_str);
-                io::stdout().write_all(result.redacted.as_bytes()).ok();
-                io::stdout().flush().ok();
-                total_read += n;
-                total_written += result.redacted.len();
-            }
-            Err(e) => {
-                eprintln!("Error reading input: {}", e);
-                std::process::exit(1);
-            }
-        }
-    }
-    
-    if verbose {
-        let elapsed = start.elapsed();
-        let throughput = if elapsed.as_secs_f64() > 0.0 {
-            total_read as f64 / (1024.0 * 1024.0) / elapsed.as_secs_f64()
-        } else {
-            0.0
-        };
-        eprintln!("\n[redacting-stream (auto-detected)]");
-        eprintln!("  Bytes: {} → {} (char-preserved)", total_read, total_written);
-        eprintln!("  Time: {:.2}s", elapsed.as_secs_f64());
-        eprintln!("  Throughput: {:.1} MB/s", throughput);
-    }
+    (mode, Some(buffer))
 }
