@@ -433,7 +433,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
     PrefixValidationPattern { name: "docker-registry-password-env", prefix: "DOCKER_REGISTRY_PASSWORD=", tier: PatternTier::Critical, min_len: 15, max_len: 100, charset: Charset::Any },
     
     // HashiCorp Vault token (auth token enables full vault access)
-    PrefixValidationPattern { name: "vault-token-env", prefix: "VAULT_TOKEN=", tier: PatternTier::Critical, min_len: 20, max_len: 200, charset: Charset::Alphanumeric },
+    PrefixValidationPattern { name: "vault-token-env", prefix: "VAULT_TOKEN=", tier: PatternTier::Critical, min_len: 20, max_len: 200, charset: Charset::Base64Url },
     
     // ===== TIER 2 ENTERPRISE & SPECIALIZED SERVICES (9 patterns) =====
     // LDAP directory service password
