@@ -410,6 +410,8 @@ impl FrameRingRedactor {
     /// 
     /// This eliminates allocation and cloning overhead from the traditional
     /// Vec<u8> lookahead pattern.
+    /// 
+    /// Phase 2.1 Update: Now uses in-place redaction for better performance
     pub fn process_chunk(&mut self, chunk: &[u8], is_eof: bool) -> (String, u64) {
         // Read frame: fill with new chunk data
         let read_frame = self.ring.get_read_frame();
@@ -420,10 +422,15 @@ impl FrameRingRedactor {
         // Process frame: redact the combined data (previous lookahead + new chunk)
         let process_frame = self.ring.get_process_frame();
         
-        let combined_str = String::from_utf8_lossy(process_frame);
-        let redacted_result = self.engine.redact(&combined_str);
-        let mut output = redacted_result.redacted.clone();
-        let patterns_found = redacted_result.matches.len() as u64;
+        // Use in-place redaction (Phase 2.1 optimization)
+        use scred_detector::{detect_all, redact_in_place};
+        let detection = detect_all(process_frame);
+        let patterns_found = detection.matches.len() as u64;
+        
+        // Redact in-place on frame data
+        let mut redacted = process_frame.to_vec();
+        redact_in_place(&mut redacted, &detection.matches);
+        let output = String::from_utf8_lossy(&redacted).into_owned();
 
         self.ring.mark_process_done_and_rotate();
 
