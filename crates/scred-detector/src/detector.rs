@@ -371,6 +371,7 @@ pub fn detect_all(text: &[u8]) -> DetectionResult {
 
 /// Detect database URIs and webhook URLs with embedded credentials
 /// Returns matches for: mongodb, redis, postgres, etc. + Slack/Discord webhooks
+/// Uses Aho-Corasick for O(n) scheme detection
 pub fn detect_uri_patterns(text: &[u8]) -> DetectionResult {
     let mut result = DetectionResult::with_capacity(10);
     
