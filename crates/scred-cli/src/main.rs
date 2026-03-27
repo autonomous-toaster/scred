@@ -387,30 +387,6 @@ fn describe_pattern(name: &str) {
     }
 }
 
-#[allow(dead_code)]
-fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact_selector: &PatternSelector) {
-    // DEPRECATED: Use streaming::stream_and_redact() instead
-    streaming::stream_and_redact(
-        streaming::RedactionMode::Text,
-        None,
-        detect_selector,
-        redact_selector,
-        verbose,
-    );
-}
-
-#[allow(dead_code)]
-fn run_env_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact_selector: &PatternSelector) {
-    // DEPRECATED: Use streaming::stream_and_redact() instead
-    streaming::stream_and_redact(
-        streaming::RedactionMode::Env,
-        None,
-        detect_selector,
-        redact_selector,
-        verbose,
-    );
-}
-
 fn run_with_auto_detect(
     verbose: bool,
     detect_only_flag: bool,
