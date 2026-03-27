@@ -1,4 +1,4 @@
-use scred_readctor_framering::{StreamingRedactor, StreamingConfig, StreamingEvent};
+use scred_redactor::{StreamingRedactor, StreamingConfig, StreamingEvent};
 
 fn main() {
     // Test data with multiple secrets

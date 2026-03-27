@@ -2,7 +2,7 @@ use tracing::info;
 use scred_mitm::mitm::proxy::ProxyServer;
 use scred_mitm::mitm::config::Config;
 use scred_http::logging;
-use scred_readctor_framering::get_all_patterns;
+use scred_redactor::get_all_patterns;
 use scred_config::ConfigLoader;
 use std::env;
 

@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use scred_http::http_proxy_handler::{handle_http_proxy as shared_handle_http_proxy, HttpProxyConfig};
-use scred_readctor_framering::RedactionEngine;
+use scred_redactor::RedactionEngine;
 use std::sync::Arc;
 use tracing::debug;
 

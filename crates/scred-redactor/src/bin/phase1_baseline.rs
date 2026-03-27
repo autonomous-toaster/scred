@@ -1,5 +1,5 @@
 use std::time::Instant;
-use scred_readctor_framering::{RedactionEngine, RedactionConfig, StreamingRedactor};
+use scred_redactor::{RedactionEngine, RedactionConfig, StreamingRedactor};
 use std::sync::Arc;
 
 fn main() {

@@ -5,7 +5,7 @@ use std::sync::Arc;
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 
-use scred_readctor_framering::{RedactionEngine, RedactionConfig, get_all_patterns};
+use scred_redactor::{RedactionEngine, RedactionConfig, get_all_patterns};
 use scred_http::{ConfigurableEngine, PatternSelector, env_detection};
 use scred_config::ConfigLoader;
 use tracing::{info, debug};

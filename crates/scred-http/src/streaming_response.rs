@@ -5,7 +5,7 @@
 /// Now with support for chunked transfer-encoding.
 
 use anyhow::Result;
-use scred_readctor_framering::StreamingRedactor;
+use scred_redactor::StreamingRedactor;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, info};

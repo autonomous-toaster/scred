@@ -5,10 +5,10 @@
 //! - Character-preserving redaction
 //! - Other overhead
 //!
-//! Run with: cargo run --bin profile_components --release -p scred-readctor-framering
+//! Run with: cargo run --bin profile_components --release -p scred-redactor
 
 use scred_detector;
-use scred_readctor_framering::{RedactionConfig, StreamingConfig};
+use scred_redactor::{RedactionConfig, StreamingConfig};
 use std::time::Instant;
 
 fn main() {

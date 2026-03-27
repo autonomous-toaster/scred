@@ -12,7 +12,7 @@
 /// - scred-proxy: Forward proxy with fixed upstream
 
 use anyhow::{anyhow, Result};
-use scred_readctor_framering::{RedactionEngine, StreamingRedactor, StreamingConfig};
+use scred_redactor::{RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, info, warn, error};
@@ -152,7 +152,7 @@ pub async fn handle_http_proxy(
         (redacted, stats.patterns_found)
     };
     
-    let redaction_stats = scred_readctor_framering::streaming::StreamingStats {
+    let redaction_stats = scred_redactor::streaming::StreamingStats {
         bytes_read: full_request.len() as u64,
         bytes_written: redacted_request.len() as u64,
         chunks_processed: 1,
@@ -230,7 +230,7 @@ pub async fn handle_http_proxy(
         (redacted, stats.patterns_found)
     };
     
-    let redaction_stats_response = scred_readctor_framering::streaming::StreamingStats {
+    let redaction_stats_response = scred_redactor::streaming::StreamingStats {
         bytes_read: response_str.len() as u64,
         bytes_written: redacted_response.len() as u64,
         chunks_processed: 1,
@@ -306,7 +306,7 @@ pub async fn handle_http_proxy(
 /// Inject Via and X-SCRED headers into HTTP response
 fn inject_proxy_headers(
     response: &str,
-    redaction_stats: &scred_readctor_framering::StreamingStats,
+    redaction_stats: &scred_redactor::StreamingStats,
     original_response: &str,
     config: &HttpProxyConfig,
 ) -> Result<String> {

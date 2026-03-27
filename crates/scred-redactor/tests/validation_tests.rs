@@ -1,4 +1,4 @@
-use scred_readctor_framering::redact_text;
+use scred_redactor::redact_text;
 
 #[test]
 fn test_validation_charset_rejects_invalid_aws() {

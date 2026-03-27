@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod phase_c_integration_tests {
-    use scred_readctor_framering::PatternSelector;
+    use scred_redactor::PatternSelector;
 
     // =========================================================================
     // 1. BACKWARD COMPATIBILITY TESTS

@@ -8,7 +8,7 @@
 
 use anyhow::{Result, anyhow};
 use std::sync::Arc;
-use scred_readctor_framering::{RedactionEngine, StreamingRedactor, StreamingConfig};
+use scred_redactor::{RedactionEngine, StreamingRedactor, StreamingConfig};
 use bytes::Bytes;
 use http::Request;
 use tokio::io::AsyncReadExt;

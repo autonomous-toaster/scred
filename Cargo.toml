@@ -6,7 +6,7 @@ members = [
     "crates/scred-http",
     "crates/scred-mitm",
     "crates/scred-proxy",
-    "crates/scred-readctor-framering",
+    "crates/scred-redactor",
 ]
 resolver = "2"
 

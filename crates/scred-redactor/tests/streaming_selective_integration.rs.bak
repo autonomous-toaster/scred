@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod streaming_selective_filtering {
-    use scred_readctor_framering::{
+    use scred_redactor::{
         RedactionEngine, RedactionConfig, StreamingRedactor, StreamingConfig,
         PatternSelector, PatternTier,
     };
@@ -295,7 +295,7 @@ mod streaming_selective_filtering {
 
 #[cfg(test)]
 mod all_pattern_types {
-    use scred_readctor_framering::{RedactionEngine, RedactionConfig};
+    use scred_redactor::{RedactionEngine, RedactionConfig};
 
     #[test]
     fn test_all_pattern_categories() {
@@ -333,7 +333,7 @@ mod all_pattern_types {
 
 #[cfg(test)]
 mod performance {
-    use scred_readctor_framering::{RedactionEngine, RedactionConfig, StreamingRedactor};
+    use scred_redactor::{RedactionEngine, RedactionConfig, StreamingRedactor};
     use std::sync::Arc;
 
     #[test]
@@ -361,7 +361,7 @@ mod performance {
     #[test]
     fn test_streaming_small_chunks() {
         let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
-        let mut config = scred_readctor_framering::StreamingConfig::default();
+        let mut config = scred_redactor::StreamingConfig::default();
         config.chunk_size = 16; // Very small chunks
         let redactor = StreamingRedactor::new(engine, config);
 

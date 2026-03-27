@@ -117,14 +117,14 @@ fn benchmark_pattern_detection(data: &[u8]) {
     let text = String::from_utf8_lossy(data).to_string();
 
     // Warm up
-    let _ = scred_readctor_framering::redact(&text);
+    let _ = scred_redactor::redact(&text);
 
     // Benchmark: 5 runs
     let mut times = vec![];
 
     for run in 1..=5 {
         let start = Instant::now();
-        let _result = scred_readctor_framering::redact(&text);
+        let _result = scred_redactor::redact(&text);
         let elapsed = start.elapsed();
         times.push(elapsed);
 
@@ -163,7 +163,7 @@ fn benchmark_redaction(data: &[u8]) {
     let text = String::from_utf8_lossy(data).to_string();
 
     let start = Instant::now();
-    let result = scred_readctor_framering::redact(&text);
+    let result = scred_redactor::redact(&text);
     let total_time = start.elapsed();
 
     let reduction = 100.0 - (result.len() as f64 / data.len() as f64) * 100.0;

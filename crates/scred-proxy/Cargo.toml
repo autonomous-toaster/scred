@@ -9,7 +9,7 @@ description = "Reverse proxy with selective secret redaction"
 [dependencies]
 scred-config = { path = "../scred-config" }
 scred-http = { path = "../scred-http" }
-scred-readctor-framering = { path = "../scred-readctor-framering" }
+scred-redactor = { path = "../scred-redactor" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

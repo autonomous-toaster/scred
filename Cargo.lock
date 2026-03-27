@@ -1450,7 +1450,7 @@ dependencies = [
  "libc",
  "scred-config",
  "scred-http",
- "scred-readctor-framering",
+ "scred-redactor",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1496,7 +1496,7 @@ dependencies = [
  "rayon",
  "regex",
  "rustls",
- "scred-readctor-framering",
+ "scred-redactor",
  "serde",
  "serde_yaml",
  "tempfile",
@@ -1526,7 +1526,7 @@ dependencies = [
  "rustls-pki-types",
  "scred-config",
  "scred-http",
- "scred-readctor-framering",
+ "scred-redactor",
  "serde",
  "serde_yaml",
  "tokio",
@@ -1548,7 +1548,7 @@ dependencies = [
  "rustls",
  "scred-config",
  "scred-http",
- "scred-readctor-framering",
+ "scred-redactor",
  "tokio",
  "tokio-rustls",
  "tracing",
@@ -1557,7 +1557,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scred-readctor-framering"
+name = "scred-redactor"
 version = "0.1.0"
 dependencies = [
  "aho-corasick",

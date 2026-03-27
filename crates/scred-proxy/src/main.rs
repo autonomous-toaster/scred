@@ -6,7 +6,7 @@ use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequest
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
 use scred_http::{dns_resolver::DnsResolver, http_line_reader::read_response_line};
 use scred_http::{PatternSelector, ConfigurableEngine};
-use scred_readctor_framering::{RedactionConfig, RedactionEngine, StreamingRedactor, StreamingConfig};
+use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::env;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

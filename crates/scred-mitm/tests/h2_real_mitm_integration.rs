@@ -13,7 +13,7 @@ use h2::RecvStream;
 use bytes::Bytes;
 use http::{Request, Response};
 
-use scred_readctor_framering::{RedactionEngine, RedactionConfig};
+use scred_redactor::{RedactionEngine, RedactionConfig};
 use scred_mitm::mitm::h2_mitm_handler::H2MitmHandler;
 
 /// Test 1: Simple request/response through H2 MITM
