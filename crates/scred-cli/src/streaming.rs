@@ -177,14 +177,14 @@ fn process_chunk(
             (text.len(), result.redacted.len())
         }
         RedactionMode::Env => {
-            let mut total_written = 0;
-            for line in text.lines() {
-                let redacted = crate::env_mode::redact_env_line_configurable(line, config_engine);
-                io::stdout().write_all(redacted.as_bytes()).ok();
-                io::stdout().write_all(b"\n").ok();
-                total_written += redacted.len() + 1;
-            }
-            (text.len(), total_written)
+            // Batch process env-mode lines for better performance
+            // Instead of detecting/redacting each line individually,
+            // we can redact the entire block and then split on newlines
+            let result = config_engine.detect_and_redact(text);
+            io::stdout().write_all(result.redacted.as_bytes()).ok();
+            
+            // Return byte counts (input might have been modified by redaction)
+            (text.len(), result.redacted.len())
         }
     }
 }
