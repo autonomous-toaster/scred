@@ -397,6 +397,49 @@ pub fn detect_uri_patterns(text: &[u8]) -> DetectionResult {
     result
 }
 
+/// Apply redaction rules to a single match within a buffer
+/// 
+/// Handles:
+/// - SSH keys (pattern_type >= 300): fully redacted
+/// - Environment variables (contain '='): keep key=value structure
+/// - Regular patterns: keep first 4 chars, redact rest
+fn apply_redaction_rule(buffer: &mut [u8], match_: &Match, original: &[u8]) {
+    let is_ssh_key = match_.pattern_type >= 300;
+    
+    // Env var detection: contains '=' in the original match
+    if !is_ssh_key && original[match_.start..match_.end].contains(&b'=') {
+        // Environment variable: key=value structure
+        // Keep the key and equals sign, preserve first 4 chars of value, redact rest
+        if let Some(eq_pos) = original[match_.start..match_.end].iter().position(|&b| b == b'=') {
+            let value_start = match_.start + eq_pos + 1;
+            let preserve_len = 4.min(match_.end - value_start);
+            let redact_start = value_start + preserve_len;
+            
+            for i in redact_start..match_.end {
+                if i < buffer.len() {
+                    buffer[i] = b'x';
+                }
+            }
+        }
+    } else if is_ssh_key {
+        // SSH keys and certificates: fully redacted with 'x'
+        for i in match_.start..match_.end {
+            if i < buffer.len() {
+                buffer[i] = b'x';
+            }
+        }
+    } else {
+        // Regular patterns (API keys, tokens, etc.)
+        // Keep first 4 characters (the prefix), replace rest with 'x'
+        let preserve_len = 4.min(match_.end - match_.start);
+        for i in (match_.start + preserve_len)..match_.end {
+            if i < buffer.len() {
+                buffer[i] = b'x';
+            }
+        }
+    }
+}
+
 /// Redact matched regions in text by replacing with 'x'
 /// Preserves character length (redacted output same length as input)
 /// Keeps first 4 characters of matched region (the prefix is visible for context)
@@ -408,45 +451,7 @@ pub fn redact_text(text: &[u8], matches: &[Match]) -> Vec<u8> {
     let mut result = text.to_vec();
 
     for m in matches {
-        // All redaction uses consistent 'x' character for character-preservation
-        // Redaction pattern: keep first 4 chars (for identification), replace rest with 'x'
-        // SSH keys (300+): fully redacted (no first 4 preserved)
-        let is_ssh_key = m.pattern_type >= 300;
-        
-        // Check if this is an environment variable pattern (contains '=' in the match)
-        // Environment variables are a special case where we preserve key=value structure
-        if !is_ssh_key && text[m.start..m.end].contains(&b'=') {
-            // This is an environment variable: key=value
-            // Keep the key and equals sign, preserve first 4 chars of value, redact the rest with 'x'
-            if let Some(eq_pos) = text[m.start..m.end].iter().position(|&b| b == b'=') {
-                let value_start = m.start + eq_pos + 1;
-                let preserve_len = 4.min(m.end - value_start);
-                let redact_start = value_start + preserve_len;
-                
-                for i in redact_start..m.end {
-                    if i < result.len() {
-                        result[i] = b'x';
-                    }
-                }
-            }
-        } else if is_ssh_key {
-            // SSH keys: fully redacted with 'x' character (consistent with all other patterns)
-            for i in m.start..m.end {
-                if i < result.len() {
-                    result[i] = b'x';  // Changed from b'*' to b'x' for consistency
-                }
-            }
-        } else {
-            // Regular pattern (API keys, tokens, etc.)
-            // Keep first 4 characters (the prefix), replace rest with 'x'
-            // This helps identify the type of secret while protecting the sensitive part
-            let preserve_len = 4.min(m.end - m.start);
-            for i in (m.start + preserve_len)..m.end {
-                if i < result.len() {
-                    result[i] = b'x';
-                }
-            }
-        }
+        apply_redaction_rule(&mut result, m, text);
     }
 
     result
@@ -493,48 +498,12 @@ pub fn redact_in_place(buffer: &mut [u8], matches: &[Match]) -> usize {
     let original = buffer.to_vec();
 
     for m in matches {
-        // All patterns: use consistent 'x' character for redaction
-        let is_ssh_key = m.pattern_type >= 300;
-        
-        // Check if this is an environment variable pattern (contains '=' in the match)
-        // Environment variables are a special case where we preserve key=value structure
-        if !is_ssh_key && original[m.start..m.end].contains(&b'=') {
-            // This is an environment variable: key=value
-            // Keep the key and equals sign, preserve first 4 chars of value, redact the rest with 'x'
-            if let Some(eq_pos) = original[m.start..m.end].iter().position(|&b| b == b'=') {
-                let value_start = m.start + eq_pos + 1;
-                let preserve_len = 4.min(m.end - value_start);
-                let redact_start = value_start + preserve_len;
-                
-                for i in redact_start..m.end {
-                    if i < buffer.len() {
-                        buffer[i] = b'x';
-                    }
-                }
-            }
-        } else if is_ssh_key {
-            // SSH keys: fully redacted with 'x' character (consistent with all other patterns)
-            for i in m.start..m.end {
-                if i < buffer.len() {
-                    buffer[i] = b'x';  // Changed from b'*' to b'x' for consistency
-                }
-            }
-        } else {
-            // Regular pattern (API keys, tokens, etc.)
-            // Keep first 4 characters (the prefix), replace rest with 'x'
-            // This helps identify the type of secret while protecting the sensitive part
-            let preserve_len = 4.min(m.end - m.start);
-            for i in (m.start + preserve_len)..m.end {
-                if i < buffer.len() {
-                    buffer[i] = b'x';
-                }
-            }
-
-        }
+        apply_redaction_rule(buffer, m, &original);
     }
 
     count
 }
+
 
 #[cfg(test)]
 mod tests {
