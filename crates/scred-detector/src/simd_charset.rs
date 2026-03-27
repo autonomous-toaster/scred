@@ -76,6 +76,11 @@ fn scan_token_end_scalar(data: &[u8], charset: &CharsetLut) -> usize {
 
 /// SIMD version: process 16 bytes at a time (when available)
 /// This is only compiled with --features simd-accel on nightly
+/// 
+/// OPTIMIZED FOR SIMD:
+/// - Loads 16 bytes into SIMD vector
+/// - Uses direct LUT lookup (not function call overhead)
+/// - Tail bytes use 8x scalar unroll for efficiency
 #[cfg(feature = "simd-accel")]
 #[inline]
 fn scan_token_end_simd(data: &[u8], charset: &CharsetLut) -> usize {
@@ -84,37 +89,46 @@ fn scan_token_end_simd(data: &[u8], charset: &CharsetLut) -> usize {
     {
         use std::simd::u8x16;
         
+        // Get direct reference to LUT to avoid function call overhead
+        let table = &charset.table;
+        
         let mut pos = 0;
         
         // Process 16 bytes at a time
+        // KEY OPTIMIZATION: Direct table access instead of contains() method
         while pos + 16 <= data.len() {
             let chunk = u8x16::from_slice(&data[pos..pos + 16]);
             
-            // Check each byte: 0 if in charset, 1 if not
-            let mut found_boundary = false;
-            let mut boundary_pos = 0;
-            
+            // Check all 16 bytes quickly with direct LUT
             for i in 0..16 {
-                if !charset.contains(chunk[i]) {
-                    found_boundary = true;
-                    boundary_pos = i;
-                    break;
+                if !table[chunk[i] as usize] {
+                    return pos + i;
                 }
-            }
-            
-            if found_boundary {
-                return pos + boundary_pos;
             }
             
             pos += 16;
         }
         
-        // Scalar fallback for tail bytes
-        while pos < data.len() && charset.contains(data[pos]) {
+        // Scalar 8x unrolled for tail (more efficient than scalar 1x)
+        while pos + 8 <= data.len() {
+            if !table[data[pos] as usize] { return pos; }
+            if !table[data[pos + 1] as usize] { return pos + 1; }
+            if !table[data[pos + 2] as usize] { return pos + 2; }
+            if !table[data[pos + 3] as usize] { return pos + 3; }
+            if !table[data[pos + 4] as usize] { return pos + 4; }
+            if !table[data[pos + 5] as usize] { return pos + 5; }
+            if !table[data[pos + 6] as usize] { return pos + 6; }
+            if !table[data[pos + 7] as usize] { return pos + 7; }
+            pos += 8;
+        }
+        
+        // Final bytes
+        while pos < data.len() {
+            if !table[data[pos] as usize] { return pos; }
             pos += 1;
         }
         
-        pos
+        data.len()
     }
     
     // Fallback for unsupported platforms
