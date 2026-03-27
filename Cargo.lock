@@ -1479,6 +1479,7 @@ dependencies = [
  "memchr",
  "num_cpus",
  "rayon",
+ "regex",
 ]
 
 [[package]]
