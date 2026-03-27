@@ -1,0 +1,1 @@
+{"type":"config","name":"Optimize scred-cli stdin performance and throughput","metricName":"stdin_throughput_mbs","metricUnit":"MB/s","bestDirection":"higher"}
