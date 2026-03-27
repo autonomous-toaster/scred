@@ -387,6 +387,7 @@ fn describe_pattern(name: &str) {
     }
 }
 
+#[allow(dead_code)]
 fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact_selector: &PatternSelector) {
     // DEPRECATED: Use streaming::stream_and_redact() instead
     streaming::stream_and_redact(
@@ -398,43 +399,12 @@ fn run_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact
     );
 }
 
+#[allow(dead_code)]
 fn run_env_redacting_stream(verbose: bool, detect_selector: &PatternSelector, redact_selector: &PatternSelector) {
     // DEPRECATED: Use streaming::stream_and_redact() instead
     streaming::stream_and_redact(
         streaming::RedactionMode::Env,
         None,
-        detect_selector,
-        redact_selector,
-        verbose,
-    );
-}
-
-fn process_text_chunk_and_stream(
-    initial_buffer: &[u8],
-    verbose: bool,
-    detect_selector: &PatternSelector,
-    redact_selector: &PatternSelector,
-) {
-    // DEPRECATED: Use streaming::stream_and_redact() instead
-    streaming::stream_and_redact(
-        streaming::RedactionMode::Text,
-        Some(initial_buffer),
-        detect_selector,
-        redact_selector,
-        verbose,
-    );
-}
-
-fn process_env_chunk_and_stream(
-    initial_buffer: &[u8],
-    verbose: bool,
-    detect_selector: &PatternSelector,
-    redact_selector: &PatternSelector,
-) {
-    // DEPRECATED: Use streaming::stream_and_redact() instead
-    streaming::stream_and_redact(
-        streaming::RedactionMode::Env,
-        Some(initial_buffer),
         detect_selector,
         redact_selector,
         verbose,

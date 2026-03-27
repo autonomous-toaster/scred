@@ -539,6 +539,7 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn handle_h2c_connection(
     client_read: tokio::net::tcp::OwnedReadHalf,
     mut client_write: tokio::net::tcp::OwnedWriteHalf,
@@ -636,6 +637,7 @@ async fn handle_h2c_connection(
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn handle_h2c_stream(
     request: http::Request<h2::RecvStream>,
     mut respond: h2::server::SendResponse<Bytes>,

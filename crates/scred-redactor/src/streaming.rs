@@ -330,20 +330,10 @@ impl StreamingRedactor {
             0
         };
 
-        // Apply selective filtering if selector exists
-        let mut output = redacted_str.clone();
-        if let Some(selector) = &self.selector {
-            // For each match, check if it should be un-redacted
-            for m in &detection.matches {
-                if m.start >= output_end {
-                    continue; // In lookahead, will be processed next iteration
-                }
-                
-                // Check if this pattern should be redacted based on selector
-                // For now: assume all patterns match (can be refined later)
-                // TODO: Implement proper selector checking for pattern types
-            }
-        }
+        // Note: Selector is for filtering DETECTION, not UN-redaction
+        // All detected patterns are fully redacted for security
+        // Selector filtering happens at detection time, not redaction time
+        let output = redacted_str.clone();
 
         // Prepare final output
         let output_text = if output_end > 0 {

@@ -533,8 +533,10 @@ where
 /// 4. TODO: Forward requests to upstream
 /// 5. TODO: Apply redaction to responses
 
-// === DEPRECATED HTTP/2 FUNCTIONS - TO BE REPLACED BY H2MITMHANDLER (PHASE 1.2) ===
+// === DEPRECATED HTTP/2 FUNCTIONS - REPLACED BY H2MITMHANDLER ===
+// Kept for reference but not used. H2MitmHandler provides the full implementation.
 
+#[allow(dead_code)]
 /// DEPRECATED: HTTP/2 bidirectional handler
 async fn handle_h2_connection_bidirectional<S>(
     _conn: S,
@@ -544,9 +546,10 @@ async fn handle_h2_connection_bidirectional<S>(
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    Err(anyhow!("Phase 1.2: HTTP/2 bidirectional handler to be implemented"))
+    Err(anyhow!("Replaced by H2MitmHandler"))
 }
 
+#[allow(dead_code)]
 /// DEPRECATED: HTTP/2 upstream handler
 async fn handle_h2_with_upstream<S, U>(
     _client_conn: S,
@@ -559,9 +562,10 @@ where
     S: tokio::io::AsyncReadExt + tokio::io::AsyncWriteExt + Unpin,
     U: tokio::io::AsyncReadExt + tokio::io::AsyncWriteExt + Unpin,
 {
-    Err(anyhow!("Phase 1.2: HTTP/2 upstream handler to be implemented"))
+    Err(anyhow!("Replaced by H2MitmHandler"))
 }
 
+#[allow(dead_code)]
 /// DEPRECATED: HTTP/2 frame forwarding
 async fn handle_h2_with_frame_forwarding<S, U>(
     _client_conn: S,
@@ -574,9 +578,10 @@ where
     S: tokio::io::AsyncReadExt + tokio::io::AsyncWriteExt + Unpin,
     U: tokio::io::AsyncReadExt + tokio::io::AsyncWriteExt + Unpin,
 {
-    Err(anyhow!("Phase 1.2: HTTP/2 frame forwarding to be implemented"))
+    Err(anyhow!("Replaced by H2MitmHandler"))
 }
 
+#[allow(dead_code)]
 /// DEPRECATED: Send HTTP/2 error response
 async fn send_h2_error_response<S>(
     _conn: &mut S,
@@ -586,14 +591,16 @@ async fn send_h2_error_response<S>(
 where
     S: tokio::io::AsyncWrite + Unpin,
 {
-    Err(anyhow!("Phase 1.2: HTTP/2 error response to be implemented"))
+    Err(anyhow!("Replaced by H2MitmHandler"))
 }
 
+#[allow(dead_code)]
 /// DEPRECATED: Encode HTTP/2 HEADERS frame
 fn encode_h2_headers_frame(_hpack_payload: &[u8], _stream_id: u32, _end_stream: bool) -> Vec<u8> {
     vec![]
 }
 
+#[allow(dead_code)]
 /// DEPRECATED: Encode HTTP/2 DATA frame
 fn encode_h2_data_frame(_data: &[u8], _stream_id: u32, _end_stream: bool) -> Vec<u8> {
     vec![]

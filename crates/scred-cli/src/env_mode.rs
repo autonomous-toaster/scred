@@ -14,28 +14,6 @@
 
 use scred_http::ConfigurableEngine;
 
-const SECRET_KEYWORDS: &[&str] = &[
-    "KEY",
-    "SECRET",
-    "TOKEN",
-    "PASSWORD",
-    "CREDENTIAL",
-    "API",
-    "ACCESS",
-    "PRIVATE",
-    "PASSPHRASE",
-    "AWS",
-    "AZURE",
-    "GCP",
-];
-
-/// Check if a variable name contains secret keywords
-/// (Now mostly informational - all values are redacted by the engine)
-pub fn is_secret_variable(name: &str) -> bool {
-    let name_upper = name.to_uppercase();
-    SECRET_KEYWORDS.iter().any(|keyword| name_upper.contains(keyword))
-}
-
 /// Generic environment line parser
 /// 
 /// Parses KEY=VALUE format and delegates redaction to provided function.
@@ -87,21 +65,6 @@ fn redact_env_line_generic<F: Fn(&str) -> String>(line: &str, redact_fn: F) -> S
             result
         }
     }
-}
-
-/// Redact a single environment variable line with generic redaction function
-/// 
-/// Handles formats like:
-///   KEY=VALUE
-///   KEY = VALUE (AWS config style)
-///   key: value (YAML style)
-///
-/// # Example
-/// ```ignore
-/// let result = redact_env_line("API_KEY=sk-abc123...", |v| redactor.redact(v));
-/// ```
-pub fn redact_env_line(line: &str, redact_fn: impl Fn(&str) -> String) -> String {
-    redact_env_line_generic(line, redact_fn)
 }
 
 /// Redact an environment variable line using ConfigurableEngine
