@@ -128,12 +128,17 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
     let charset = get_alphanumeric_lut();
 
     // Single-pass matching: find all 26 patterns simultaneously
+    // Typical API keys are 20-200 bytes, so cap scan at 256 for performance
+    const MAX_SIMPLE_TOKEN_LEN: usize = 256;
+    
     for m in automaton.find_iter(text) {
         let pattern_idx = m.pattern().as_usize();
         let pos = m.start();
         
         // Token is everything from start to end of alphanumeric run
+        // Limit scan to MAX_SIMPLE_TOKEN_LEN to avoid scanning too far
         let token_len = charset.scan_token_end(text, pos);
+        let token_len = token_len.min(MAX_SIMPLE_TOKEN_LEN);
         let end_pos = (pos + token_len).min(text.len());
         
         result.add(Match::new(pos, end_pos, pattern_idx as u16));
