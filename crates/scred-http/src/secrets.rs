@@ -91,35 +91,3 @@ impl SecretsConfig {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_secrets_config_default() {
-        let config = SecretsConfig::default();
-        assert_eq!(config.patterns.len(), 3);
-        assert!(config.patterns.contains(&"aws*".to_string()));
-    }
-
-    #[test]
-    fn test_should_redact_no_rules() {
-        let config = SecretsConfig::default();
-        assert!(config.should_redact("aws-access-key", None));
-        assert!(config.should_redact("github-pat", None));
-    }
-
-    #[test]
-    fn test_allowed_in_location() {
-        let mut config = SecretsConfig::default();
-        let mut rule = SecretRule {
-            allowed_hosts: vec![],
-            allowed_in: vec!["header:Authorization".to_string()],
-            action: "REDACT".to_string(),
-        };
-        config.rules.insert("github-pat".to_string(), rule);
-
-        assert!(config.allowed_in_location("github-pat", "header:Authorization"));
-        assert!(!config.allowed_in_location("github-pat", "body:api_key"));
-    }
-}

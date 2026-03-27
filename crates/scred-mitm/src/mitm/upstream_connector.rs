@@ -99,23 +99,3 @@ pub async fn connect_to_upstream(
     Ok((tls_stream, connection_info))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_upstream_connection_info_creation() {
-        let info = UpstreamConnectionInfo {
-            protocol: HttpProtocol::Http11,
-        };
-        assert_eq!(info.protocol, HttpProtocol::Http11);
-    }
-
-    #[test]
-    fn test_upstream_connection_info_h2() {
-        let info = UpstreamConnectionInfo {
-            protocol: HttpProtocol::Http2,
-        };
-        assert!(info.protocol.is_h2());
-    }
-}

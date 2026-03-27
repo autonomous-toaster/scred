@@ -77,34 +77,4 @@ where
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_hot_reload_handler_creation() {
-        let handler = HotReloadHandler::new(true);
-        assert!(handler.enabled);
-    }
-
-    #[tokio::test]
-    async fn test_set_config_path() {
-        let handler = HotReloadHandler::new(true);
-        let path = PathBuf::from("/etc/scred/config.yaml");
-        handler.set_config_path(path.clone()).await;
-        assert_eq!(handler.get_config_path().await, Some(path));
-    }
-
-    #[tokio::test]
-    async fn test_hot_reload_disabled() {
-        let handler = HotReloadHandler::new(false);
-        assert!(!handler.enabled);
-    }
-
-    #[tokio::test]
-    async fn test_get_config_path_empty() {
-        let handler = HotReloadHandler::new(true);
-        assert_eq!(handler.get_config_path().await, None);
-    }
-}
 

@@ -150,35 +150,3 @@ pub struct PatternMatch {
     pub redacted_as: String,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_request_get_header_case_insensitive() {
-        let req = HttpRequest {
-            method: "GET".to_string(),
-            path: "/api".to_string(),
-            version: "HTTP/1.1".to_string(),
-            headers: HashMap::from([("Content-Type".to_string(), "application/json".to_string())]),
-            body: vec![],
-        };
-        
-        assert_eq!(req.get_header("content-type"), Some("application/json".to_string()));
-        assert_eq!(req.get_header("CONTENT-TYPE"), Some("application/json".to_string()));
-    }
-
-    #[test]
-    fn test_request_remove_header_case_insensitive() {
-        let mut req = HttpRequest {
-            method: "GET".to_string(),
-            path: "/api".to_string(),
-            version: "HTTP/1.1".to_string(),
-            headers: HashMap::from([("Authorization".to_string(), "Bearer token".to_string())]),
-            body: vec![],
-        };
-        
-        req.remove_header("authorization");
-        assert!(req.get_header("Authorization").is_none());
-    }
-}

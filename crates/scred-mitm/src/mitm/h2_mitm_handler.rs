@@ -227,29 +227,3 @@ impl H2MitmHandler {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use scred_redactor::RedactionConfig;
-
-    #[test]
-    fn test_handler_creation() {
-        let config = RedactionConfig { enabled: true };
-        let engine = Arc::new(RedactionEngine::new(config));
-        let handler = H2MitmHandler::new(
-            engine,
-            "127.0.0.1:443".to_string(),
-            H2MitmConfig::default(),
-        );
-
-        assert_eq!(handler.config.max_concurrent_streams, 100);
-    }
-
-    #[test]
-    fn test_config_defaults() {
-        let config = H2MitmConfig::default();
-        assert_eq!(config.max_concurrent_streams, 100);
-        assert_eq!(config.initial_connection_window_size, 65535);
-        assert_eq!(config.initial_stream_window_size, 65535);
-    }
-}

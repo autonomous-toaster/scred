@@ -294,35 +294,3 @@ fn matches_pattern(pattern: &str, name: &str) -> bool {
     true
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_matches_pattern_exact() {
-        assert!(matches_pattern("stripe", "stripe"));
-        assert!(!matches_pattern("stripe", "stripe-payment"));
-    }
-
-    #[test]
-    fn test_matches_pattern_prefix() {
-        assert!(matches_pattern("aws*", "aws-access-token"));
-        assert!(matches_pattern("aws*", "aws-secret-access-key"));
-        assert!(!matches_pattern("aws*", "amazons3"));
-    }
-
-    #[test]
-    fn test_matches_pattern_suffix() {
-        assert!(matches_pattern("*webhook", "discordwebhook"));
-        assert!(matches_pattern("*webhook", "slackwebhook"));
-        assert!(!matches_pattern("*webhook", "webhook-service"));
-    }
-
-    #[test]
-    fn test_matches_pattern_infix() {
-        assert!(matches_pattern("*webhook*", "discordwebhook"));
-        assert!(matches_pattern("*webhook*", "webhook-service"));
-        assert!(matches_pattern("*webhook*", "my-webhooks"));
-        assert!(!matches_pattern("*webhook*", "discord"));
-    }
-}

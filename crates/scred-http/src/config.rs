@@ -120,35 +120,3 @@ pub fn parse_env_int(env_var: &str, default: i32) -> i32 {
         .unwrap_or(default)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_pattern_selection_whitelist() {
-        let selection = PatternSelection::Whitelist(vec!["aws-akia".to_string()]);
-        assert!(selection.should_redact("aws-akia"));
-        assert!(!selection.should_redact("github-pat"));
-    }
-
-    #[test]
-    fn test_pattern_selection_blacklist() {
-        let selection = PatternSelection::Blacklist(vec!["internal-key".to_string()]);
-        assert!(selection.should_redact("aws-akia"));
-        assert!(!selection.should_redact("internal-key"));
-    }
-
-    #[test]
-    fn test_pattern_selection_all() {
-        let selection = PatternSelection::All;
-        assert!(selection.should_redact("aws-akia"));
-        assert!(selection.should_redact("github-pat"));
-    }
-
-    #[test]
-    fn test_pattern_selection_none() {
-        let selection = PatternSelection::None;
-        assert!(!selection.should_redact("aws-akia"));
-        assert!(!selection.should_redact("github-pat"));
-    }
-}

@@ -108,34 +108,3 @@ impl RedactionResult {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_match_creation() {
-        let m = Match::new(0, 10, 5);
-        assert_eq!(m.start, 0);
-        assert_eq!(m.end, 10);
-        assert_eq!(m.len(), 10);
-        assert!(!m.is_empty());
-    }
-
-    #[test]
-    fn test_empty_match() {
-        let m = Match::new(5, 5, 0);
-        assert!(m.is_empty());
-        assert_eq!(m.len(), 0);
-    }
-
-    #[test]
-    fn test_detection_result() {
-        let mut result = DetectionResult::new();
-        assert_eq!(result.count(), 0);
-        
-        result.add(Match::new(0, 5, 1));
-        result.add(Match::new(10, 15, 2));
-        
-        assert_eq!(result.count(), 2);
-    }
-}

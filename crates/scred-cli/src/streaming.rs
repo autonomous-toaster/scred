@@ -151,15 +151,3 @@ fn process_buffer_chunk(
     (bytes_read, bytes_written)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_redaction_mode_copy() {
-        // Ensure RedactionMode can be copied (used in match statements)
-        let mode = RedactionMode::Text;
-        let _mode2 = mode; // Copy
-        let _mode3 = mode; // Copy
-    }
-}

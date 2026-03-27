@@ -327,23 +327,3 @@ fn response_is_head_or_bodyless(response_line: &str, headers: &crate::http_heade
     )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_streaming_stats() {
-        let mut stats = StreamingStats::default();
-        stats.bytes_read = 200;
-        stats.patterns_found = 3;
-        assert_eq!(stats.bytes_read, 200);
-        assert_eq!(stats.patterns_found, 3);
-    }
-
-    #[test]
-    fn test_config_default() {
-        let config = StreamingResponseConfig::default();
-        assert!(config.add_scred_header);
-        assert!(!config.debug);
-    }
-}

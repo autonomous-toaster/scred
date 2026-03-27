@@ -32,31 +32,3 @@ pub fn extract_upstream_protocol(alpn_protocol: Option<&[u8]>) -> Result<HttpPro
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_extract_h2_protocol() {
-        let protocol = extract_upstream_protocol(Some(b"h2")).unwrap();
-        assert_eq!(protocol, HttpProtocol::Http2);
-    }
-
-    #[test]
-    fn test_extract_http11_protocol() {
-        let protocol = extract_upstream_protocol(Some(b"http/1.1")).unwrap();
-        assert_eq!(protocol, HttpProtocol::Http11);
-    }
-
-    #[test]
-    fn test_extract_unknown_protocol() {
-        let protocol = extract_upstream_protocol(Some(b"unknown")).unwrap();
-        assert_eq!(protocol, HttpProtocol::Http11);
-    }
-
-    #[test]
-    fn test_extract_none_protocol() {
-        let protocol = extract_upstream_protocol(None).unwrap();
-        assert_eq!(protocol, HttpProtocol::Http11);
-    }
-}

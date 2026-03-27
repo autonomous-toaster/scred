@@ -212,13 +212,3 @@ async fn send_error_response(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_proxy_server_structure() {
-        let size = std::mem::size_of::<ProxyServer>();
-        assert!(size > 0, "ProxyServer should have non-zero size");
-    }
-}

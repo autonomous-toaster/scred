@@ -186,23 +186,3 @@ pub struct StreamingStats {
     pub patterns_found: u64,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_streaming_stats() {
-        let mut stats = StreamingStats::default();
-        stats.bytes_read = 100;
-        stats.patterns_found = 5;
-        assert_eq!(stats.bytes_read, 100);
-        assert_eq!(stats.patterns_found, 5);
-    }
-
-    #[test]
-    fn test_config_default() {
-        let config = StreamingRequestConfig::default();
-        assert_eq!(config.max_headers_size, 64 * 1024);
-        assert!(!config.debug);
-    }
-}

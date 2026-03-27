@@ -523,29 +523,6 @@ where
     Err(anyhow!("HTTP/2 client connections are handled by H2MitmHandler, not this function"))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tls_mitm_compiles() {
-        // Just verify module compiles with new streaming architecture
-        assert!(true);
-    }
-    
-    #[test]
-    fn test_streaming_mode_always_active() {
-        // Phase 6: Streaming is always active (no feature flag)
-        assert!(true);
-    }
-    
-    #[test]
-    fn test_single_request_handler_signature() {
-        // Verify handle_single_request exists and has correct signature
-        // This is a compile-time check
-        assert!(true);
-    }
-}
 
 /// Complete HTTP/2 connection handler with proper request-response flow
 ///

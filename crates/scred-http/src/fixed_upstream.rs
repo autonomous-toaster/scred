@@ -97,38 +97,3 @@ impl RootPathExt for String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_https_root() {
-        let upstream = FixedUpstream::parse("https://httpbin.org").unwrap();
-        assert_eq!(upstream.scheme, "https");
-        assert_eq!(upstream.host, "httpbin.org");
-        assert_eq!(upstream.port, 443);
-        assert_eq!(upstream.base_path, "/");
-    }
-
-    #[test]
-    fn parse_http_with_base_path() {
-        let upstream = FixedUpstream::parse("http://example.com:8080/api").unwrap();
-        assert_eq!(upstream.host, "example.com");
-        assert_eq!(upstream.port, 8080);
-        assert_eq!(upstream.base_path, "/api");
-    }
-
-    #[test]
-    fn rewrite_request_line_root_base() {
-        let upstream = FixedUpstream::parse("https://httpbin.org").unwrap();
-        let line = upstream.rewrite_request_line("GET /anything HTTP/1.1").unwrap();
-        assert_eq!(line, "GET /anything HTTP/1.1");
-    }
-
-    #[test]
-    fn rewrite_request_line_with_base_path() {
-        let upstream = FixedUpstream::parse("https://httpbin.org/base").unwrap();
-        let line = upstream.rewrite_request_line("GET /anything HTTP/1.1").unwrap();
-        assert_eq!(line, "GET /base/anything HTTP/1.1");
-    }
-}

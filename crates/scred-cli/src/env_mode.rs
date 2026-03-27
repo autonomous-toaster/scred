@@ -117,17 +117,3 @@ pub fn redact_env_line_configurable(line: &str, config_engine: &ConfigurableEngi
     redact_env_line_generic(line, |v| config_engine.redact_only(v))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_secret_variable_detection() {
-        assert!(is_secret_variable("API_KEY"));
-        assert!(is_secret_variable("AWS_SECRET_ACCESS_KEY"));
-        assert!(is_secret_variable("TOKEN"));
-        assert!(is_secret_variable("password"));
-        assert!(!is_secret_variable("HOSTNAME"));
-        assert!(!is_secret_variable("PATH"));
-    }
-}

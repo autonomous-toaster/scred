@@ -720,10 +720,3 @@ async fn establish_tls_upstream(
         .map_err(|e| anyhow!("TLS handshake failed: {}", e))
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_streaming_passthrough() {
-        // Passthrough with streaming redaction tested via integration
-    }
-}

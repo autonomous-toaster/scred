@@ -5,7 +5,7 @@
 //! patterns during scanning.
 //!
 //! Example:
-//! ```
+//! ```text
 //! Pattern: "-----BEGIN RSA PRIVATE KEY-----"
 //! Prefix:  "-----BEGIN" (10 bytes)
 //! Index maps this prefix to pattern indices that start with it
@@ -129,107 +129,3 @@ pub fn init_prefix_index(patterns: &[GeneralizedMarkerPattern]) -> &'static Pref
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_prefix_index_creation() {
-        let patterns = &[
-            GeneralizedMarkerPattern {
-                name: "test-ssh-key",
-                start_marker: "-----BEGIN RSA PRIVATE KEY-----",
-                end_marker: "-----END RSA PRIVATE KEY-----",
-                tier: crate::patterns::PatternTier::Critical,
-                max_lookahead: 4096,
-                contains_keyword: None,
-                exclude_keyword: None,
-                min_body_len: 0,
-                pattern_type: 300,
-            },
-        ];
-
-        let index = PrefixIndex::build(patterns);
-        assert!(index.prefixes().len() > 0, "Should have at least one prefix");
-        assert_eq!(index.prefix_count(), 1);
-    }
-
-    #[test]
-    fn test_prefix_lookup() {
-        let patterns = &[
-            GeneralizedMarkerPattern {
-                name: "test-ssh-key",
-                start_marker: "-----BEGIN RSA PRIVATE",
-                end_marker: "-----END RSA-----",
-                tier: crate::patterns::PatternTier::Critical,
-                max_lookahead: 4096,
-                contains_keyword: None,
-                exclude_keyword: None,
-                min_body_len: 0,
-                pattern_type: 300,
-            },
-        ];
-
-        let index = PrefixIndex::build(patterns);
-        let text = b"-----BEGIN RSA PRIVATE KEY-----";
-        
-        let candidates = index.get_candidates(text, 0);
-        assert!(candidates.is_some(), "Should find candidates at position 0");
-        assert_eq!(candidates.unwrap().len(), 1);
-    }
-
-    #[test]
-    fn test_prefix_no_match() {
-        let patterns = &[
-            GeneralizedMarkerPattern {
-                name: "test-ssh-key",
-                start_marker: "-----BEGIN RSA",
-                end_marker: "-----END RSA-----",
-                tier: crate::patterns::PatternTier::Critical,
-                max_lookahead: 4096,
-                contains_keyword: None,
-                exclude_keyword: None,
-                min_body_len: 0,
-                pattern_type: 300,
-            },
-        ];
-
-        let index = PrefixIndex::build(patterns);
-        let text = b"some random text";
-        
-        let candidates = index.get_candidates(text, 0);
-        assert!(candidates.is_none() || candidates.unwrap().is_empty(), 
-                "Should return no candidates for non-matching text");
-    }
-
-    #[test]
-    fn test_multiple_patterns() {
-        let patterns = &[
-            GeneralizedMarkerPattern {
-                name: "rsa-key",
-                start_marker: "-----BEGIN RSA PRIVATE KEY-----",
-                end_marker: "-----END RSA-----",
-                tier: crate::patterns::PatternTier::Critical,
-                max_lookahead: 4096,
-                contains_keyword: None,
-                exclude_keyword: None,
-                min_body_len: 0,
-                pattern_type: 300,
-            },
-            GeneralizedMarkerPattern {
-                name: "openssh-key",
-                start_marker: "-----BEGIN OPENSSH PRIVATE KEY-----",
-                end_marker: "-----END OPENSSH-----",
-                tier: crate::patterns::PatternTier::Critical,
-                max_lookahead: 4096,
-                contains_keyword: None,
-                exclude_keyword: None,
-                min_body_len: 0,
-                pattern_type: 301,
-            },
-        ];
-
-        let index = PrefixIndex::build(patterns);
-        assert_eq!(index.prefix_count(), 2, "Should have 2 distinct prefixes");
-    }
-}

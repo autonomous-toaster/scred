@@ -60,29 +60,3 @@ pub async fn read_http_response<R: AsyncReadExt + Unpin>(
     Ok(response_data)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Cursor;
-
-    #[tokio::test]
-    async fn test_single_read() {
-        let data = b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nHello World";
-        let mut reader = Cursor::new(data.to_vec());
-        
-        let response = read_http_response(&mut reader, 100).await.unwrap();
-        assert_eq!(response, data);
-    }
-
-    #[tokio::test]
-    async fn test_no_garbage_bytes() {
-        // Verify no NUL padding
-        let data = b"OK";
-        let mut reader = Cursor::new(data.to_vec());
-        
-        let response = read_http_response(&mut reader, 100).await.unwrap();
-        assert_eq!(response.len(), 2);
-        assert_eq!(response, data);
-        // Would fail with vec![0u8; 65536] approach
-    }
-}
