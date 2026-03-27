@@ -38,11 +38,12 @@ mod tests {
 
     #[test]
     fn test_library_loads() {
-        // 23 SIMPLE_PREFIX + 349 PREFIX_VALIDATION + 1 JWT + 11 MULTILINE_MARKER + 18 REGEX + 14 URI = 416
-        // Phase B: Added 129 API key patterns from batches 2-7 (220 → 349 PREFIX_VALIDATION)
+        // 23 SIMPLE_PREFIX + 348 PREFIX_VALIDATION + 1 JWT + 11 MULTILINE_MARKER + 18 REGEX + 14 URI = 415
+        // Phase B: Added 129 API key patterns from batches 2-7 (220 → 348 PREFIX_VALIDATION)
         // Phase B: Added 14 URI patterns (11 database + 3 webhook) with credential extraction
-        // Expected: 23 + 349 + 1 + 11 + 18 + 14 = 416 patterns
-        assert_eq!(TOTAL_PATTERNS, 416);
+        // Cleaned: Removed 1 duplicate vault-api-token pattern
+        // Expected: 23 + 348 + 1 + 11 + 18 + 14 = 415 patterns
+        assert_eq!(TOTAL_PATTERNS, 415);
     }
 
     #[test]

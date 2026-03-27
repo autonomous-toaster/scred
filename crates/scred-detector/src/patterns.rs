@@ -126,7 +126,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
     PrefixValidationPattern { name: "supabase-api-key", prefix: "eyJhbGciOiJIUzI1N", tier: PatternTier::Infrastructure, min_len: 40, max_len: 200, charset: Charset::Base64 },
     PrefixValidationPattern { name: "twilio-api-key", prefix: "AC", tier: PatternTier::Critical, min_len: 32, max_len: 34, charset: Charset::Alphanumeric },
     PrefixValidationPattern { name: "telegram-bot-token", prefix: "bot", tier: PatternTier::Services, min_len: 24, max_len: 200, charset: Charset::Alphanumeric },
-    PrefixValidationPattern { name: "vault-api-token", prefix: "hvs.", tier: PatternTier::Infrastructure, min_len: 40, max_len: 200, charset: Charset::Base64Url },
     
     // ============================================================================
     // BATCH 1: TDD Implementation - 25 Core Patterns from test_cases.csv
@@ -1622,7 +1621,7 @@ pub const URI_PATTERNS_COUNT: usize = 14; // Database URIs (11) + Webhook URLs (
 // ============================================================================
 
 pub const SIMPLE_PREFIX_COUNT: usize = 23; // Removed 4 overly broad patterns (generic-password, etc.)
-pub const PREFIX_VALIDATION_COUNT: usize = 349; // Removed 12 database/service URI patterns to eliminate false positives
+pub const PREFIX_VALIDATION_COUNT: usize = 348; // 349 patterns - 1 duplicate vault-api-token removed
 pub const JWT_COUNT: usize = 1;
 pub const MULTILINE_MARKER_COUNT: usize = 11; // SSH keys + certificate + PGP patterns (Phase 4a-4c)
 
