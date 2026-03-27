@@ -13,9 +13,101 @@ use crate::patterns::{
 };
 use crate::prefix_index::{self, PrefixIndex};
 use crate::uri_patterns;
-use crate::simd_core::{self, CharsetLut};
 use std::sync::OnceLock;
 use aho_corasick::AhoCorasick;
+use memchr::memchr;
+
+/// Charset lookup table for fast token scanning
+#[derive(Clone, Copy)]
+pub struct CharsetLut {
+    table: [bool; 256],
+}
+
+impl CharsetLut {
+    fn new(charset: &[u8]) -> Self {
+        let mut table = [false; 256];
+        for &byte in charset {
+            table[byte as usize] = true;
+        }
+        CharsetLut { table }
+    }
+
+    #[inline]
+    fn contains(&self, byte: u8) -> bool {
+        self.table[byte as usize]
+    }
+
+    /// Scan data for end of token (first byte NOT in charset)
+    #[inline]
+    fn scan_token_end(&self, data: &[u8], start: usize) -> usize {
+        if start >= data.len() {
+            return 0;
+        }
+        
+        // Scalar implementation: process 8 bytes at a time
+        let mut i = start;
+        let len = data.len();
+        
+        while i + 8 <= len {
+            if !self.contains(data[i]) { return i - start; }
+            if !self.contains(data[i + 1]) { return i + 1 - start; }
+            if !self.contains(data[i + 2]) { return i + 2 - start; }
+            if !self.contains(data[i + 3]) { return i + 3 - start; }
+            if !self.contains(data[i + 4]) { return i + 4 - start; }
+            if !self.contains(data[i + 5]) { return i + 5 - start; }
+            if !self.contains(data[i + 6]) { return i + 6 - start; }
+            if !self.contains(data[i + 7]) { return i + 7 - start; }
+            i += 8;
+        }
+        
+        while i < len {
+            if !self.contains(data[i]) { return i - start; }
+            i += 1;
+        }
+        
+        len - start
+    }
+}
+
+/// Find first occurrence of prefix in data
+/// Uses memchr for first byte, then validates full prefix
+#[inline]
+fn find_first_prefix(data: &[u8], prefix: &[u8]) -> Option<usize> {
+    if data.is_empty() || prefix.is_empty() {
+        return if prefix.is_empty() { Some(0) } else { None };
+    }
+
+    if prefix.len() > data.len() {
+        return None;
+    }
+
+    let first_byte = prefix[0];
+
+    // Fast path: single-byte prefix
+    if prefix.len() == 1 {
+        return memchr(first_byte, data);
+    }
+
+    // Multi-byte prefix: use memchr to find candidates, then validate
+    let mut search_start = 0;
+    while let Some(pos) = memchr(first_byte, &data[search_start..]) {
+        let absolute_pos = search_start + pos;
+        
+        // Check if we have enough bytes for full prefix
+        if absolute_pos + prefix.len() <= data.len() {
+            // Validate full prefix at this position
+            if &data[absolute_pos..absolute_pos + prefix.len()] == prefix {
+                return Some(absolute_pos);
+            }
+        }
+        
+        // Move search forward
+        search_start = absolute_pos + 1;
+    }
+
+    None
+}
+
 static ALPHANUMERIC_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
 static BASE64_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
 static BASE64URL_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
@@ -279,7 +371,7 @@ pub fn detect_jwt(text: &[u8]) -> DetectionResult {
     
     let mut search_pos = 0;
 
-    while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix) {
+    while let Some(pos) = find_first_prefix(&text[search_pos..], prefix) {
         let start = search_pos + pos;
         let mut end = start + prefix.len();
         let mut dot_count = 0;
@@ -369,7 +461,7 @@ pub fn detect_ssh_keys(text: &[u8]) -> DetectionResult {
                     let lookahead = &text[pos..lookahead_end];
                     
                     // Search for end marker within lookahead window
-                    if let Some(end_offset) = simd_core::find_first_prefix(lookahead, end_bytes) {
+                    if let Some(end_offset) = find_first_prefix(lookahead, end_bytes) {
                         // Found complete pattern
                         let end_marker_pos = pos + end_offset;
                         let end = end_marker_pos + end_bytes.len();
