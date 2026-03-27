@@ -380,3 +380,85 @@ This demonstrates that complex pattern matching can be accomplished more efficie
 and reliably with specialized algorithms (Aho-Corasick) than with general-purpose
 regex engines, especially for security-critical applications.
 
+
+---
+
+## UPDATE: Consistent Redaction Character Fix
+
+**Date**: March 27, 2026 (Final Update)
+
+### The Fix
+
+All redaction now uses a **single consistent character: 'x'**
+
+Before this fix:
+- ❌ SSH Keys: Used '*' (inconsistent)
+- ✅ API Keys: Used 'x'
+- ❌ Certificates: Used '*' (inconsistent)
+- ✅ Other patterns: Used 'x'
+
+After the fix:
+- ✅ **ALL patterns use 'x'** (consistent!)
+
+### Redaction Pattern (Unified)
+
+**SSH/Certificate/PGP Keys**:
+```
+Input:  "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+Output: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+Length: PRESERVED ✅
+Char:   'x' (consistent)
+```
+
+**API Keys**:
+```
+Input:  "sk_live_abcd1234efgh5678"
+Output: "sk_lixxxxxxxxxxxxxxxxxxxxxx"
+Length: PRESERVED ✅
+Char:   'x' (consistent, keep first 4)
+```
+
+**Environment Variables**:
+```
+Input:  "PASSWORD=MySecretPassword123"
+Output: "PASSWORD=Myxxxxxxxxxxxx123"
+Length: PRESERVED ✅
+Char:   'x' (consistent, keep value prefix)
+```
+
+**URI Patterns**:
+```
+Input:  "mongodb://user:password@localhost:27017/db"
+Output: "mongodb://user:xxxxxxxxxxxxxxxxxxxxxxxx"
+Length: PRESERVED ✅
+Char:   'x' (consistent, keep scheme)
+```
+
+### Benefits of Consistency
+
+1. **User Experience**: Same character everywhere → predictable
+2. **Debugging**: Easier to understand redaction patterns
+3. **Compatibility**: Works with downstream tools consistently
+4. **Simplicity**: No need to track multiple redaction characters
+5. **Maintainability**: Simpler code, fewer special cases
+
+### Test Coverage
+
+All tests updated and passing:
+- ✅ test_redact_ssh_key_full (now expects 'x')
+- ✅ test_redact_certificates_full (now expects 'x')
+- ✅ test_redact_pgp_key_full (now expects 'x')
+- ✅ test_consistent_x_redaction_pattern (new)
+- ✅ All 33+ existing tests still passing
+
+### Performance
+
+Zero impact:
+- Character 'x' vs '*' makes no difference
+- Single consistent character might be slightly simpler (cache-friendly)
+- No allocation or algorithmic changes
+
+### Commit
+
+ff01995d: Consistent redaction character - all patterns use 'x'
+
