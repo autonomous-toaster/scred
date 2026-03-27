@@ -433,7 +433,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
     PrefixValidationPattern { name: "docker-registry-password-env", prefix: "DOCKER_REGISTRY_PASSWORD=", tier: PatternTier::Critical, min_len: 15, max_len: 100, charset: Charset::Any },
     
     // HashiCorp Vault token (auth token enables full vault access)
-    PrefixValidationPattern { name: "vault-token-env", prefix: "VAULT_TOKEN=", tier: PatternTier::Critical, min_len: 20, max_len: 200, charset: Charset::Alphanumeric },
+    PrefixValidationPattern { name: "vault-token-env", prefix: "VAULT_TOKEN=", tier: PatternTier::Critical, min_len: 20, max_len: 200, charset: Charset::Base64Url },
     
     // ===== TIER 2 ENTERPRISE & SPECIALIZED SERVICES (9 patterns) =====
     // LDAP directory service password
@@ -1615,6 +1615,7 @@ pub const MULTILINE_MARKER_PATTERNS: &[MultilineMarkerPattern] = &[
 // ============================================================================
 
 pub const REGEX_PATTERN_COUNT: usize = 18; // Implemented in regex_patterns.rs
+pub const URI_PATTERNS_COUNT: usize = 14; // Database URIs (11) + Webhook URLs (3) with credential extraction
 
 // ============================================================================
 // SUMMARY & COUNTS
@@ -1625,7 +1626,7 @@ pub const PREFIX_VALIDATION_COUNT: usize = 349; // Removed 12 database/service U
 pub const JWT_COUNT: usize = 1;
 pub const MULTILINE_MARKER_COUNT: usize = 11; // SSH keys + certificate + PGP patterns (Phase 4a-4c)
 
-pub const TOTAL_PATTERNS: usize = SIMPLE_PREFIX_COUNT + PREFIX_VALIDATION_COUNT + JWT_COUNT + MULTILINE_MARKER_COUNT + REGEX_PATTERN_COUNT;
+pub const TOTAL_PATTERNS: usize = SIMPLE_PREFIX_COUNT + PREFIX_VALIDATION_COUNT + JWT_COUNT + MULTILINE_MARKER_COUNT + REGEX_PATTERN_COUNT + URI_PATTERNS_COUNT;
 #[cfg(test)]
 mod tests {
     use super::*;

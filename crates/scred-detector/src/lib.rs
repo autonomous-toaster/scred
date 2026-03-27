@@ -38,14 +38,11 @@ mod tests {
 
     #[test]
     fn test_library_loads() {
-        // 23 SIMPLE_PREFIX + 220 PREFIX_VALIDATION + 1 JWT + 11 MULTILINE_MARKER + 18 REGEX = 273
-        // Removed 12 database/service URI patterns (false positives on non-credential URLs)
-        // Removed 4 overly broad generic patterns (PASSWORD=, secret=, etc.)
-        // Use environment variables instead (DATABASE_URL=, REDIS_URL=, etc.)
-        // Added 4 SSH key patterns (RSA, OpenSSH, generic PKCS8, EC) - Phase 4a
-        // Added 4 certificate patterns (X.509, CSR, Encrypted, Public) - Phase 4b
-        // Added 3 PGP patterns (Private Key Block, Public Key Block, Message) - Phase 4c
-        assert_eq!(TOTAL_PATTERNS, 273);
+        // 23 SIMPLE_PREFIX + 349 PREFIX_VALIDATION + 1 JWT + 11 MULTILINE_MARKER + 18 REGEX + 14 URI = 416
+        // Phase B: Added 129 API key patterns from batches 2-7 (220 → 349 PREFIX_VALIDATION)
+        // Phase B: Added 14 URI patterns (11 database + 3 webhook) with credential extraction
+        // Expected: 23 + 349 + 1 + 11 + 18 + 14 = 416 patterns
+        assert_eq!(TOTAL_PATTERNS, 416);
     }
 
     #[test]
