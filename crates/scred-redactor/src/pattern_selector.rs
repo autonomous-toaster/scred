@@ -417,10 +417,20 @@ impl PatternSelector {
     }
     
     /// Check if a pattern string matches this selector (for testing)
-    pub fn matches_pattern(&self, _pattern: &str, _tier: RiskTier) -> bool {
-        // Simplified: always true for now
-        // Real implementation would check actual pattern matching
-        true
+    pub fn matches_pattern(&self, _pattern: &str, tier: RiskTier) -> bool {
+        // Check if this tier matches the selector
+        match self {
+            PatternSelector::All => true,
+            PatternSelector::None => false,
+            
+            PatternSelector::Tiers(tiers) => {
+                tiers.iter().any(|t| *t == tier)
+            },
+            
+            // For other selectors, we can't easily match by tier alone
+            // Would need full PatternMetadata
+            _ => true, // Conservative: match if we don't have enough info
+        }
     }
     
     /// Get description of selector

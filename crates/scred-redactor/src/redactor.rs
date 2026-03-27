@@ -129,13 +129,22 @@ impl RedactionEngine {
             .collect();
 
         // Create match information for each detected pattern
+        // Use tier name as pattern_type for proper selector matching
         let matches = detection_result.matches.iter().map(|m| {
             let original = &text_bytes[m.start..m.end];
             let redacted = &redacted_bytes[m.start..m.end];
             
+            // Map pattern type number to tier name (CRITICAL, API_KEYS, PATTERNS)
+            let tier_name = match m.pattern_type {
+                0..=25 => "CRITICAL",
+                100..=144 => "API_KEYS",
+                200 => "API_KEYS",
+                _ => "PATTERNS",
+            };
+            
             PatternMatch {
                 position: m.start,
-                pattern_type: format!("pattern-{}", m.pattern_type),
+                pattern_type: tier_name.to_string(),
                 original_text: String::from_utf8_lossy(original).into_owned(),
                 redacted_text: String::from_utf8_lossy(redacted).into_owned(),
                 match_len: m.end - m.start,

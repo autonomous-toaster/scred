@@ -27,7 +27,7 @@
 //! let result = config_engine.detect_and_redact("some secret text");
 //! ```
 
-use scred_redactor::{RedactionEngine, RedactionWarning};
+use scred_redactor::{RedactionEngine, RedactionWarning, PatternMatch};
 use std::sync::Arc;
 
 use crate::{PatternSelector, get_pattern_tier};
@@ -126,8 +126,8 @@ impl ConfigurableEngine {
 
     /// Redact text, removing only patterns that match redact_selector
     ///
-    /// This always detects ALL patterns but only redacts those matching the selector.
-    /// The redact_selector controls which patterns actually get removed.
+    /// This detects all patterns but only redacts those matching the selector.
+    /// Uses position-based matching for safe, selective redaction.
     ///
     /// # Arguments
     /// * `text` - Input text to redact
@@ -137,20 +137,21 @@ impl ConfigurableEngine {
     pub fn redact_only(&self, text: &str) -> String {
         let result = self.engine.redact(text);
         // Apply redact_selector to filter which patterns stay redacted
-        self.apply_redact_selector(text, &result.redacted, &result.warnings)
+        self.apply_redact_selector(text, &result.matches)
     }
 
     /// Detect and redact with filtering
     ///
-    /// This is the primary operation: detects all patterns, filters detection
-    /// warnings by `detect_selector`, AND filters redacted output by `redact_selector`.
+    /// This detects all patterns and applies selectors:
+    /// - `detect_selector`: Controls which patterns appear in warnings (logging)
+    /// - `redact_selector`: Controls which patterns are actually redacted
     ///
     /// The algorithm:
-    /// 1. Run full redaction (all patterns redacted)
-    /// 2. Get detection warnings (all patterns detected)
-    /// 3. Filter detection warnings by detect_selector (for logging)
-    /// 4. Filter redactions by redact_selector (by comparing original vs redacted)
-    /// 5. Return filtered redacted text + filtered warnings
+    /// 1. Run full detection (all patterns)
+    /// 2. Get all matches with position information
+    /// 3. Filter warnings by detect_selector (for logging visibility)
+    /// 4. Filter redactions by redact_selector (selective redaction at match positions)
+    /// 5. Return selectively redacted text + filtered warnings
     ///
     /// # Arguments
     /// * `text` - Input text to analyze and redact
@@ -160,21 +161,20 @@ impl ConfigurableEngine {
     pub fn detect_and_redact(&self, text: &str) -> FilteredRedactionResult {
         let result = self.engine.redact(text);
 
-        // Clone warnings for filtering
-        let all_warnings = result.warnings.clone();
-        let all_warnings_for_redact = result.warnings.clone();
-
         // Filter warnings by detect_selector (for logging)
-        let filtered_warnings: Vec<RedactionWarning> = all_warnings
-            .into_iter()
+        let filtered_warnings: Vec<RedactionWarning> = result
+            .warnings
+            .iter()
             .filter(|warning| {
                 let tier = get_pattern_tier(&warning.pattern_type);
                 self.detect_selector.matches_pattern(&warning.pattern_type, tier)
             })
+            .cloned()
             .collect();
 
         // Apply redact_selector to filter which patterns actually get redacted
-        let filtered_redacted = self.apply_redact_selector(text, &result.redacted, &all_warnings_for_redact);
+        // Uses match position information for safe, selective redaction
+        let filtered_redacted = self.apply_redact_selector(text, &result.matches);
 
         FilteredRedactionResult {
             redacted: filtered_redacted,
@@ -182,140 +182,75 @@ impl ConfigurableEngine {
         }
     }
 
-    /// Apply redact_selector to filter redactions
+    /// Apply redact_selector to filter redactions using position-based matching
     ///
-    /// This compares the original text with the redacted text to identify
-    /// which patterns were redacted, then selectively restores patterns
-    /// that don't match the redact_selector.
+    /// This uses the PatternMatch position information to selectively redact only
+    /// patterns matching the redact_selector, without un-redacting any patterns.
     ///
     /// Algorithm:
-    /// 1. Iterate through all detected warnings
-    /// 2. For each pattern NOT matching redact_selector, mark it for restoration
-    /// 3. Build a filtered redacted version by restoring non-matching patterns
+    /// 1. Filter matches by redact_selector
+    /// 2. Build output by replacing only selected pattern positions with their redacted text
+    /// 3. Leave all other text unchanged (original)
     ///
     /// # Arguments
     /// * `original` - Original unredacted text
-    /// * `fully_redacted` - Text with all patterns redacted
-    /// * `warnings` - Detection results with pattern names and counts
+    /// * `matches` - All detected pattern matches with position info
     ///
     /// # Returns
     /// Text with only redact_selector-matching patterns redacted
     fn apply_redact_selector(
         &self,
         original: &str,
-        fully_redacted: &str,
-        warnings: &[RedactionWarning],
+        matches: &[PatternMatch],
     ) -> String {
-        
-        // If all patterns should be redacted, return fully_redacted as-is
-        if self.redact_selector.description().contains("ALL") {
-            return fully_redacted.to_string();
-        }
-
-        // If no patterns should be redacted, return original as-is
-        if self.redact_selector.description().contains("NONE") {
-            return original.to_string();
-        }
-
-        // Check if any patterns should be redacted
-        let should_redact_any = warnings.iter().any(|warning| {
-            let tier = get_pattern_tier(&warning.pattern_type);
-            
-            self.redact_selector.matches_pattern(&warning.pattern_type, tier)
-        });
-
-
-        // If no patterns match redact_selector, return original
-        if !should_redact_any {
-            return original.to_string();
-        }
-
-        // Otherwise, selectively un-redact patterns not in redact_selector
-        let patterns_to_keep_redacted: Vec<String> = warnings
+        // Filter matches: keep only those matching redact_selector
+        let selected_matches: Vec<&PatternMatch> = matches
             .iter()
-            .filter(|warning| {
-                let tier = get_pattern_tier(&warning.pattern_type);
-                self.redact_selector.matches_pattern(&warning.pattern_type, tier)
+            .filter(|m| {
+                let tier = get_pattern_tier(&m.pattern_type);
+                self.redact_selector.matches_pattern(&m.pattern_type, tier)
             })
-            .map(|w| w.pattern_type.clone())
             .collect();
 
-
-        // If all detected patterns should be redacted, return fully_redacted
-        if patterns_to_keep_redacted.len() == warnings.len() {
-            return fully_redacted.to_string();
+        // If no patterns match selector, return original unchanged
+        if selected_matches.is_empty() {
+            return original.to_string();
         }
 
-        // Otherwise, selectively un-redact unwanted patterns
-        self.selective_unredate(original, fully_redacted, &patterns_to_keep_redacted)
-    }
-
-    /// Selectively un-redact patterns by position matching
-    ///
-    /// Start with fully redacted text and restore un-wanted patterns back to original
-    fn selective_unredate(
-        &self,
-        original: &str,
-        fully_redacted: &str,
-        _patterns_to_keep_redacted: &[String],
-    ) -> String {
-        // This is a best-effort approach since we don't have position data per-pattern
-        // Strategy: If MOST patterns are being un-redacted, assume all x's should be restored
-        // This handles the common case of "--redact CRITICAL" where API_KEYS need restoration
-        
-        let original_len = original.len();
-        let redacted_len = fully_redacted.len();
-
-        if original_len != redacted_len {
-            // Character-preserving guarantee: lengths must be same
-            return fully_redacted.to_string();
+        // If all patterns match selector, return fully redacted
+        if selected_matches.len() == matches.len() {
+            // Rebuild from redacted_text at each match position
+            let mut result = original.to_string();
+            for m in selected_matches.iter().rev() {
+                // Work backwards to avoid position shifts
+                let start = m.position;
+                let end = m.position + m.match_len;
+                result.replace_range(start..end, &m.redacted_text);
+            }
+            return result;
         }
 
+        // Partial selection: build output by selectively replacing
         let original_bytes = original.as_bytes();
-        let fully_redacted_bytes = fully_redacted.as_bytes();
-        let mut result_bytes = Vec::with_capacity(fully_redacted.len());
+        let mut result_bytes = Vec::with_capacity(original.len());
+        let mut last_end = 0;
 
-        let mut in_redaction = false;
-        let mut redaction_start = 0;
+        // Sort matches by position for correct iteration
+        let mut sorted_matches = selected_matches.clone();
+        sorted_matches.sort_by_key(|m| m.position);
 
-        // Scan for redaction sequences and decide whether to restore each one
-        for i in 0..fully_redacted_bytes.len() {
-            let byte = fully_redacted_bytes[i];
-            
-            if byte == b'x' || byte == b'X' {
-                if !in_redaction {
-                    in_redaction = true;
-                    redaction_start = i;
-                }
-                // Continue collecting redaction sequence
-            } else {
-                if in_redaction {
-                    // End of redaction sequence at position redaction_start..i
-                    // Decide: should we keep this redacted or restore it?
-                    // Since we don't know which pattern this belongs to,
-                    // we restore if ANY pattern is being un-redacted
-                    // (i.e., if patterns_to_keep_redacted.len() < total warnings)
-                    // For now: restore all redacted sequences
-                    
-                    // Copy from original instead of redacted
-                    for j in redaction_start..i {
-                        result_bytes.push(original_bytes[j]);
-                    }
-                    in_redaction = false;
-                }
-                // Copy non-redacted character as-is
-                result_bytes.push(byte);
-            }
+        for m in sorted_matches {
+            // Copy unmatched text before this match
+            result_bytes.extend_from_slice(&original_bytes[last_end..m.position]);
+            // Copy redacted text for this match
+            result_bytes.extend_from_slice(m.redacted_text.as_bytes());
+            last_end = m.position + m.match_len;
         }
 
-        // Handle trailing redaction if input ends with x's
-        if in_redaction {
-            for j in redaction_start..fully_redacted_bytes.len() {
-                result_bytes.push(original_bytes[j]);
-            }
-        }
+        // Copy remaining text after last match
+        result_bytes.extend_from_slice(&original_bytes[last_end..]);
 
-        String::from_utf8_lossy(&result_bytes).to_string()
+        String::from_utf8_lossy(&result_bytes).into_owned()
     }
 
     /// Get a description of the detect and redact selectors
