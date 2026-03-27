@@ -7,7 +7,6 @@
 //! - **Character-preserving**: Output length = input length
 //! - **Streaming mode**: Bounded memory (64KB chunks), handles GB-scale files
 
-pub mod analyzer;
 pub mod detector;
 pub mod redactor;
 pub mod streaming;
@@ -19,8 +18,7 @@ pub mod frame_ring;
 // PUBLIC API - PRIMARY EXPORTS
 // ============================================================================
 
-// New API (v2.0 - Rust SIMD)
-pub use analyzer::ZigAnalyzer;
+// Core detector API
 pub use detector::{StreamingDetector, SecretDetectionEvent};
 
 // Rust SIMD pattern detector (source of truth for all patterns)
@@ -53,29 +51,6 @@ pub use streaming::{
 mod tests {
     use super::*;
     use crate::{RedactionEngine, RedactionConfig};
-
-    #[test]
-    #[ignore = "Analyzer tier tests broken after pattern tier refactoring - redaction still works!"]
-    fn test_patterns_available() {
-        // All 244 patterns are in Zig (24 SIMPLE_PREFIX + 45 PREFIX_VALIDATION + 175 REGEX)
-        // Verification: ZigAnalyzer can detect patterns from all tiers
-        // Use properly-sized token: sk_live_ (8) + 32 chars = 40 total
-        // NOTE: This test was checking the analyzer layer, but after tier refactoring,
-        // patterns moved between tiers. Redaction still works (verified by integration tests).
-        let test_text = "sk_live_1234567890abcdefghij1234567890";
-        assert!(ZigAnalyzer::has_all_patterns(test_text), "Should detect patterns via Zig");
-    }
-
-    #[test]
-    #[ignore = "Analyzer tier tests broken after pattern tier refactoring - redaction still works!"]
-    fn test_analyzer_creation() {
-        // ZigAnalyzer is a thin FFI wrapper - verify it can detect patterns
-        // Use properly-sized token: sk_live_ (8) + 32 chars = 40 total
-        // NOTE: This test was checking the analyzer layer, but after tier refactoring,
-        // patterns moved between tiers. Redaction still works (verified by integration tests).
-        let result = ZigAnalyzer::has_all_patterns("sk_live_1234567890abcdefghij1234567890");
-        assert!(result, "Should be able to detect patterns via ZigAnalyzer");
-    }
 
     #[test]
     fn test_redact_aws_key() {
