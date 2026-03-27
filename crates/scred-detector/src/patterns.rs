@@ -1777,6 +1777,7 @@ pub const GENERALIZED_MARKER_PATTERNS: &[GeneralizedMarkerPattern] = &[
 // ============================================================================
 
 pub const REGEX_PATTERN_COUNT: usize = 18; // Implemented in regex_patterns.rs
+pub const URI_PATTERNS_COUNT: usize = 14; // Database URIs (11) + Webhook URLs (3) - Phase B (URI handler)
 
 // ============================================================================
 // SUMMARY & COUNTS
@@ -1787,7 +1788,7 @@ pub const PREFIX_VALIDATION_COUNT: usize = 349; // Removed 12 database/service U
 pub const JWT_COUNT: usize = 1;
 pub const MULTILINE_MARKER_COUNT: usize = 11; // SSH keys + certificate + PGP patterns (Phase 4a-4c)
 
-pub const TOTAL_PATTERNS: usize = SIMPLE_PREFIX_COUNT + PREFIX_VALIDATION_COUNT + JWT_COUNT + MULTILINE_MARKER_COUNT + REGEX_PATTERN_COUNT;
+pub const TOTAL_PATTERNS: usize = SIMPLE_PREFIX_COUNT + PREFIX_VALIDATION_COUNT + JWT_COUNT + MULTILINE_MARKER_COUNT + REGEX_PATTERN_COUNT + URI_PATTERNS_COUNT;
 #[cfg(test)]
 mod tests {
     use super::*;

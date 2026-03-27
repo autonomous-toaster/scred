@@ -46,7 +46,10 @@ mod tests {
         // Added 4 SSH key patterns (RSA, OpenSSH, generic PKCS8, EC) - Phase 4a
         // Added 4 certificate patterns (X.509, CSR, Encrypted, Public) - Phase 4b
         // Added 3 PGP patterns (Private Key Block, Public Key Block, Message) - Phase 4c
-        assert_eq!(TOTAL_PATTERNS, 273);
+        // Added 129 API key patterns from batches 2-7 (Phase B batch integration)
+        // Added 14 URI patterns (11 database URIs + 3 webhook URLs) (Phase B URI handler)
+        // Expected: 23 + 349 + 1 + 11 + 18 + 14 = 416 patterns
+        assert_eq!(TOTAL_PATTERNS, 416);
     }
 
     #[test]
