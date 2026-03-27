@@ -408,14 +408,16 @@ pub fn redact_text(text: &[u8], matches: &[Match]) -> Vec<u8> {
     let mut result = text.to_vec();
 
     for m in matches {
-        // SSH keys (pattern type 300+) are fully redacted, not prefix-preserved
+        // All redaction uses consistent 'x' character for character-preservation
+        // Redaction pattern: keep first 4 chars (for identification), replace rest with 'x'
+        // SSH keys (300+): fully redacted (no first 4 preserved)
         let is_ssh_key = m.pattern_type >= 300;
         
         // Check if this is an environment variable pattern (contains '=' in the match)
         // Environment variables are a special case where we preserve key=value structure
         if !is_ssh_key && text[m.start..m.end].contains(&b'=') {
             // This is an environment variable: key=value
-            // Keep the key and equals sign, preserve first 4 chars of value, redact the rest
+            // Keep the key and equals sign, preserve first 4 chars of value, redact the rest with 'x'
             if let Some(eq_pos) = text[m.start..m.end].iter().position(|&b| b == b'=') {
                 let value_start = m.start + eq_pos + 1;
                 let preserve_len = 4.min(m.end - value_start);
@@ -428,10 +430,10 @@ pub fn redact_text(text: &[u8], matches: &[Match]) -> Vec<u8> {
                 }
             }
         } else if is_ssh_key {
-            // SSH keys: fully redacted with '*' character
+            // SSH keys: fully redacted with 'x' character (consistent with all other patterns)
             for i in m.start..m.end {
                 if i < result.len() {
-                    result[i] = b'*';
+                    result[i] = b'x';  // Changed from b'*' to b'x' for consistency
                 }
             }
         } else {
@@ -455,13 +457,14 @@ pub fn redact_text(text: &[u8], matches: &[Match]) -> Vec<u8> {
 /// # Phase 1B.2: Zero-Copy In-Place Redaction
 /// 
 /// This function modifies the input buffer directly, replacing detected patterns
-/// with redaction characters ('x' or '*'). No separate output buffer allocated.
+/// with redaction character 'x'. No separate output buffer allocated.
 /// 
 /// # Character Preservation
 /// 
 /// Critical constraint: output length MUST equal input length
-/// - SSH keys: Replace ALL chars with '*' (full redaction)
-/// - Environment variables: Keep key=value structure, redact only value
+/// All redaction uses consistent 'x' character:
+/// - SSH keys: Replace ALL chars with 'x' (full redaction)
+/// - Environment variables: Keep key=value structure, redact only value with 'x'
 /// - API keys: Keep first 4 chars (prefix), replace rest with 'x'
 /// 
 /// # Arguments
@@ -490,14 +493,14 @@ pub fn redact_in_place(buffer: &mut [u8], matches: &[Match]) -> usize {
     let original = buffer.to_vec();
 
     for m in matches {
-        // SSH keys (pattern type 300+) are fully redacted, not prefix-preserved
+        // All patterns: use consistent 'x' character for redaction
         let is_ssh_key = m.pattern_type >= 300;
         
         // Check if this is an environment variable pattern (contains '=' in the match)
         // Environment variables are a special case where we preserve key=value structure
         if !is_ssh_key && original[m.start..m.end].contains(&b'=') {
             // This is an environment variable: key=value
-            // Keep the key and equals sign, preserve first 4 chars of value, redact the rest
+            // Keep the key and equals sign, preserve first 4 chars of value, redact the rest with 'x'
             if let Some(eq_pos) = original[m.start..m.end].iter().position(|&b| b == b'=') {
                 let value_start = m.start + eq_pos + 1;
                 let preserve_len = 4.min(m.end - value_start);
@@ -510,10 +513,10 @@ pub fn redact_in_place(buffer: &mut [u8], matches: &[Match]) -> usize {
                 }
             }
         } else if is_ssh_key {
-            // SSH keys: fully redacted with '*' character
+            // SSH keys: fully redacted with 'x' character (consistent with all other patterns)
             for i in m.start..m.end {
                 if i < buffer.len() {
-                    buffer[i] = b'*';
+                    buffer[i] = b'x';  // Changed from b'*' to b'x' for consistency
                 }
             }
         } else {
@@ -526,6 +529,7 @@ pub fn redact_in_place(buffer: &mut [u8], matches: &[Match]) -> usize {
                     buffer[i] = b'x';
                 }
             }
+
         }
     }
 
@@ -985,10 +989,10 @@ mod tests {
         let matches = vec![Match::new(0, text.len(), 300)];  // Pattern type 300 = SSH key
         let redacted = redact_text(text, &matches);
         
-        // SSH keys should be fully redacted with '*'
+        // SSH keys should be fully redacted with 'x' (consistent with all redaction)
         for (i, &byte) in redacted.iter().enumerate() {
             if i < text.len() {
-                assert_eq!(byte, b'*', "SSH key bytes should be redacted with '*' at position {}", i);
+                assert_eq!(byte, b'x', "SSH key bytes should be redacted with 'x' at position {}", i);
             }
         }
         assert_eq!(text.len(), redacted.len(), "Redaction must preserve length");
@@ -1067,10 +1071,10 @@ mod tests {
         let matches = vec![Match::new(0, text.len(), 304)];  // Pattern type 304 = certificate
         let redacted = redact_text(text, &matches);
         
-        // Certificates should be fully redacted with '*'
+        // Certificates should be fully redacted with 'x' (consistent with all redaction)
         for (i, &byte) in redacted.iter().enumerate() {
             if i < text.len() {
-                assert_eq!(byte, b'*', "Certificate bytes should be redacted with '*' at position {}", i);
+                assert_eq!(byte, b'x', "Certificate bytes should be redacted with 'x' at position {}", i);
             }
         }
         assert_eq!(text.len(), redacted.len(), "Redaction must preserve length");
@@ -1126,10 +1130,10 @@ mod tests {
         let matches = vec![Match::new(0, text.len(), 308)];  // Pattern type 308 = PGP private key
         let redacted = redact_text(text, &matches);
         
-        // PGP keys should be fully redacted with '*'
+        // PGP keys should be fully redacted with 'x' (consistent with all redaction)
         for (i, &byte) in redacted.iter().enumerate() {
             if i < text.len() {
-                assert_eq!(byte, b'*', "PGP key bytes should be redacted with '*' at position {}", i);
+                assert_eq!(byte, b'x', "PGP key bytes should be redacted with 'x' at position {}", i);
             }
         }
         assert_eq!(text.len(), redacted.len(), "Redaction must preserve length");
