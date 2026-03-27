@@ -25,6 +25,7 @@ static BASE64URL_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
 static HEX_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
 static ANY_CHARSET: OnceLock<CharsetLut> = OnceLock::new();
 static VALIDATION_AUTOMATON: OnceLock<AhoCorasick> = OnceLock::new();
+static SIMPLE_PREFIX_AUTOMATON: OnceLock<AhoCorasick> = OnceLock::new();
 
 fn get_alphanumeric_lut() -> &'static CharsetLut {
     ALPHANUMERIC_CHARSET.get_or_init(|| {
@@ -105,64 +106,40 @@ fn get_simple_prefix_threshold() -> usize {
     }
 }
 
+/// Build Aho-Corasick automaton from SIMPLE_PREFIX_PATTERNS prefixes
+fn get_simple_prefix_automaton() -> &'static AhoCorasick {
+    SIMPLE_PREFIX_AUTOMATON.get_or_init(|| {
+        // Build automaton from all SIMPLE_PREFIX_PATTERNS prefixes
+        let prefixes: Vec<&str> = SIMPLE_PREFIX_PATTERNS
+            .iter()
+            .map(|p| p.prefix)
+            .collect();
+        
+        AhoCorasick::new(&prefixes).expect("Valid Aho-Corasick automaton")
+    })
+}
+
 /// Detect all simple prefix patterns (fast path, no validation)
 /// Parallelized version
 pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
-    use rayon::prelude::*;
+    // Phase 3: Aho-Corasick Multi-Pattern Matching
+    // Replaces old 26-pass algorithm with single-pass automaton
+    // Similar improvement to detect_validation()
     
-    // For small inputs, sequential is faster
-    let threshold = get_simple_prefix_threshold();
-    if text.len() < threshold {
-        return detect_simple_prefix_sequential(text);
-    }
-    
-    // Use reduce to minimize allocations
-    SIMPLE_PREFIX_PATTERNS
-        .par_iter()
-        .enumerate()
-        .map(|(idx, pattern)| {
-            let mut result = DetectionResult::with_capacity(10);
-            let prefix_bytes = pattern.prefix.as_bytes();
-            let charset = get_alphanumeric_lut();
-            let mut search_pos = 0;
-
-            while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
-                let absolute_pos = search_pos + pos;
-                let token_len = charset.scan_token_end(text, absolute_pos);
-                let end_pos = (absolute_pos + token_len).min(text.len());
-                result.add(Match::new(absolute_pos, end_pos, idx as u16));
-                search_pos = absolute_pos + pattern.prefix.len();
-            }
-            result
-        })
-        .reduce(
-            || DetectionResult::with_capacity(100),
-            |mut acc, item| {
-                acc.extend(item);
-                acc
-            },
-        )
-}
-
-/// Sequential version for small inputs
-fn detect_simple_prefix_sequential(text: &[u8]) -> DetectionResult {
+    let automaton = get_simple_prefix_automaton();
     let mut result = DetectionResult::with_capacity(100);
+    let charset = get_alphanumeric_lut();
 
-    for (idx, pattern) in SIMPLE_PREFIX_PATTERNS.iter().enumerate() {
-        let prefix_bytes = pattern.prefix.as_bytes();
-        let mut search_pos = 0;
-
-        while let Some(pos) = simd_core::find_first_prefix(&text[search_pos..], prefix_bytes) {
-            let absolute_pos = search_pos + pos;
-            
-            let charset = get_alphanumeric_lut();
-            let token_len = charset.scan_token_end(text, absolute_pos);
-            let end_pos = (absolute_pos + token_len).min(text.len());
-            
-            result.add(Match::new(absolute_pos, end_pos, idx as u16));
-            
-            search_pos = absolute_pos + pattern.prefix.len();
-        }
+    // Single-pass matching: find all 26 patterns simultaneously
+    for m in automaton.find_iter(text) {
+        let pattern_idx = m.pattern().as_usize();
+        let pos = m.start();
+        
+        // Token is everything from start to end of alphanumeric run
+        let token_len = charset.scan_token_end(text, pos);
+        let end_pos = (pos + token_len).min(text.len());
+        
+        result.add(Match::new(pos, end_pos, pattern_idx as u16));
     }
 
     result
