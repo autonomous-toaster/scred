@@ -122,8 +122,8 @@ impl StreamingRedactor {
         lookahead: &mut Vec<u8>,
         is_eof: bool,
     ) -> (String, u64, u64) {
-        // Combine lookahead + new chunk
-        let mut combined = lookahead.clone();
+        // Combine lookahead + new chunk (reuse buffer to avoid clone)
+        let mut combined = std::mem::take(lookahead);
         combined.extend_from_slice(chunk);
 
         // Redact combined data and get ALL match metadata
@@ -305,8 +305,8 @@ impl StreamingRedactor {
         lookahead: &mut Vec<u8>,
         is_eof: bool,
     ) -> (String, u64, u64) {
-        // Combine lookahead + new chunk
-        let mut combined = lookahead.clone();
+        // Combine lookahead + new chunk (reuse buffer to avoid clone)
+        let mut combined = std::mem::take(lookahead);
         combined.extend_from_slice(chunk);
 
         // Use in-place detection for efficiency
@@ -315,7 +315,7 @@ impl StreamingRedactor {
         let patterns_found = detection.matches.len() as u64;
 
         // Apply in-place redaction
-        let mut redacted = combined.clone();
+        let mut redacted = combined;
         scred_detector::redact_in_place(&mut redacted, &detection.matches);
 
         // Convert to string for output
