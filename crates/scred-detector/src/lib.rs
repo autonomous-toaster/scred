@@ -20,7 +20,7 @@ pub use patterns::{
     SIMPLE_PREFIX_PATTERNS, PREFIX_VALIDATION_PATTERNS, JWT_PATTERNS,
     PatternTier, Charset,
 };
-pub use detector::{detect_simple_prefix, detect_validation, detect_jwt, detect_all, detect_ssh_keys, detect_uri_patterns, redact_text, redact_in_place};
+pub use detector::{detect_simple_prefix, detect_validation, detect_jwt, detect_all, detect_ssh_keys, detect_uri_patterns, redact_text, redact_in_place, redact_in_place_with_original};
 
 // Version matching Zig implementation
 pub const VERSION: &str = "0.1.0";

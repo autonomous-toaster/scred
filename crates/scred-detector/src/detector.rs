@@ -501,18 +501,31 @@ pub fn redact_text(text: &[u8], matches: &[Match]) -> Vec<u8> {
 /// assert_eq!(count, 1);
 /// assert_eq!(buffer, b"AKIAxxxxxxxxxxxxxxxx");
 /// ```
+/// Redact matched regions in-place by replacing with 'x'
+/// Preserves character length (output same length as input)
+/// Creates an internal clone of buffer for env var detection
+/// For best performance when you already have original: use redact_in_place_with_original()
 pub fn redact_in_place(buffer: &mut [u8], matches: &[Match]) -> usize {
+    if matches.is_empty() {
+        return 0;
+    }
+    
+    let original = buffer.to_vec();
+    redact_in_place_with_original(buffer, matches, &original)
+}
+
+/// Redact matched regions in-place without cloning
+/// Pass the original buffer separately to avoid allocation
+#[inline]
+pub fn redact_in_place_with_original(buffer: &mut [u8], matches: &[Match], original: &[u8]) -> usize {
     if matches.is_empty() {
         return 0;
     }
 
     let count = matches.len();
-    
-    // Get original bytes for reference (needed for env var detection)
-    let original = buffer.to_vec();
 
     for m in matches {
-        apply_redaction_rule(buffer, m, &original);
+        apply_redaction_rule(buffer, m, original);
     }
 
     count
