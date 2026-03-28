@@ -200,6 +200,7 @@ async fn handle_client(
                 redaction_engine.clone(),
                 upstream_resolver.clone(),
                 Some(config.proxy.redact_patterns.clone()),
+                resolver.clone(),
             ).await {
                 warn!("HTTP proxy handler error: {}", e);
             }

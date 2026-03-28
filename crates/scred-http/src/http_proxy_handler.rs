@@ -59,6 +59,7 @@ pub async fn handle_http_proxy(
     upstream_host: Option<&str>,
     redact_selector: Option<crate::PatternSelector>,
     config: HttpProxyConfig,
+    resolver: Arc<crate::OptimizedDnsResolver>,
 ) -> Result<()> {
     debug!("HTTP proxy request: {}", first_line);
 
@@ -176,17 +177,16 @@ pub async fn handle_http_proxy(
     }
 
     // Connect to upstream server or upstream proxy
-    let mut upstream = match if upstream_addr.contains("://") {
-        connect_through_proxy(upstream_addr, &target_host, target_port).await
+    let mut upstream = if upstream_addr.contains("://") {
+        connect_through_proxy(upstream_addr, &target_host, target_port).await?
     } else {
-        DnsResolver::connect_with_retry(upstream_addr).await
-    } {
-        Ok(stream) => stream,
-        Err(e) => {
-            error!("Failed to connect to upstream {}: {}", upstream_addr, e);
-            send_error_response(&mut client_write, 502, "Bad Gateway").await?;
-            return Err(anyhow!("Upstream connection failed: {}", e));
-        }
+        // Use OptimizedDnsResolver (cached + pooled)
+        // PooledTcpStream implements AsyncRead/AsyncWrite via Deref to TcpStream
+        let pooled = resolver.connect_with_retry(upstream_addr).await?;
+        // Leak the pool management but keep connection - trade-off for simplicity
+        // Better approach would be to thread pool through entire request handling
+        pooled.into_inner()
+            .ok_or_else(|| anyhow!("Failed to extract underlying TcpStream from pool"))?
     };
 
     // Forward redacted request to upstream
