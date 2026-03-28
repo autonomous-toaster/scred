@@ -293,6 +293,173 @@ impl Default for PatternSelector {
     }
 }
 
+// ============================================================================
+// CompositePatternSelector: Handle mixed filters (tiers + globs + exclusions)
+// ============================================================================
+
+/// Individual filter in a composite selector
+#[derive(Debug, Clone, PartialEq)]
+pub enum PatternFilter {
+    /// Match by tier: CRITICAL, API_KEYS, INFRASTRUCTURE, SERVICES, PATTERNS
+    Tier(RiskTier),
+    
+    /// Match by glob pattern name: mysql*, aws-*, github-*
+    GlobName(String),
+    
+    /// Exclude pattern by glob: !test-*, !mock-*
+    Exclude(String),
+}
+
+impl PatternFilter {
+    /// Check if this filter matches a pattern name and tier
+    pub fn matches(&self, pattern_name: &str, pattern_tier: RiskTier) -> bool {
+        match self {
+            PatternFilter::Tier(tier) => *tier == pattern_tier,
+            PatternFilter::GlobName(glob) => {
+                let matcher = GlobMatcher::new(glob);
+                matcher.matches(pattern_name)
+            }
+            PatternFilter::Exclude(_) => {
+                // Exclusions are handled separately
+                false
+            }
+        }
+    }
+    
+    /// Check if this exclusion filter should block a pattern
+    pub fn should_exclude(&self, pattern_name: &str) -> bool {
+        if let PatternFilter::Exclude(glob) = self {
+            let matcher = GlobMatcher::new(glob);
+            matcher.matches(pattern_name)
+        } else {
+            false
+        }
+    }
+    
+    /// Parse a single filter from string
+    /// Examples: "CRITICAL", "mysql*", "!test-*", "exclude:dummy-*"
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        let s = s.trim();
+        
+        // Handle exclusion patterns
+        if s.starts_with('!') {
+            return Ok(PatternFilter::Exclude(s[1..].to_string()));
+        }
+        
+        if s.starts_with("exclude:") {
+            return Ok(PatternFilter::Exclude(s[8..].to_string()));
+        }
+        
+        // Handle tier names (case-insensitive)
+        match s.to_uppercase().as_str() {
+            "CRITICAL" => return Ok(PatternFilter::Tier(RiskTier::Critical)),
+            "API_KEYS" => return Ok(PatternFilter::Tier(RiskTier::ApiKeys)),
+            "INFRASTRUCTURE" => return Ok(PatternFilter::Tier(RiskTier::Infrastructure)),
+            "SERVICES" => return Ok(PatternFilter::Tier(RiskTier::Services)),
+            "PATTERNS" => return Ok(PatternFilter::Tier(RiskTier::Patterns)),
+            "ALL" => return Ok(PatternFilter::Tier(RiskTier::Critical)), // Special case: ALL means all tiers
+            _ => {}
+        }
+        
+        // Otherwise treat as glob pattern name
+        Ok(PatternFilter::GlobName(s.to_string()))
+    }
+}
+
+/// Composite pattern selector combining multiple filters
+/// Supports: tiers, glob patterns, and exclusions
+/// Example: "CRITICAL,mysql*,postgresql*,!test-*"
+#[derive(Debug, Clone)]
+pub struct CompositePatternSelector {
+    inclusions: Vec<PatternFilter>,
+    exclusions: Vec<PatternFilter>,
+}
+
+impl CompositePatternSelector {
+    /// Create from comma-separated filters
+    /// Examples:
+    ///   "CRITICAL"                              // Single tier
+    ///   "CRITICAL,API_KEYS"                     // Multiple tiers
+    ///   "mysql*,postgresql*"                    // Glob patterns only
+    ///   "CRITICAL,mysql*"                       // Tier + glob
+    ///   "CRITICAL,mysql*,!test-*"               // Tier + glob + exclusion
+    ///   "CRITICAL,API_KEYS,aws-*,!dummy-*"     // Complex
+    pub fn from_string(spec: &str) -> Result<Self, String> {
+        let mut inclusions = Vec::new();
+        let mut exclusions = Vec::new();
+        
+        for filter_str in spec.split(',') {
+            let filter = PatternFilter::from_str(filter_str)?;
+            
+            match &filter {
+                PatternFilter::Exclude(_) => exclusions.push(filter),
+                _ => inclusions.push(filter),
+            }
+        }
+        
+        if inclusions.is_empty() {
+            return Err("No inclusion filters specified".to_string());
+        }
+        
+        Ok(Self {
+            inclusions,
+            exclusions,
+        })
+    }
+    
+    /// Check if a pattern should be selected
+    /// Returns true if:
+    /// 1. Pattern matches at least one inclusion filter, AND
+    /// 2. Pattern does NOT match any exclusion filter
+    pub fn matches(&self, pattern_name: &str, pattern_tier: RiskTier) -> bool {
+        // Check exclusions first (fail fast)
+        for exclusion in &self.exclusions {
+            if exclusion.should_exclude(pattern_name) {
+                return false;
+            }
+        }
+        
+        // Check inclusions (at least one must match)
+        for inclusion in &self.inclusions {
+            if inclusion.matches(pattern_name, pattern_tier) {
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    /// Get description of this selector
+    pub fn description(&self) -> String {
+        let inclusion_strs: Vec<String> = self.inclusions.iter().map(|f| {
+            match f {
+                PatternFilter::Tier(t) => format!("tier:{:?}", t),
+                PatternFilter::GlobName(g) => format!("glob:{}", g),
+                PatternFilter::Exclude(_) => unreachable!(),
+            }
+        }).collect();
+        
+        let mut desc = inclusion_strs.join(", ");
+        
+        if !self.exclusions.is_empty() {
+            let exclude_strs: Vec<String> = self.exclusions.iter().map(|f| {
+                if let PatternFilter::Exclude(g) = f {
+                    format!("!{}", g)
+                } else {
+                    unreachable!()
+                }
+            }).collect();
+            desc.push_str(&format!(", excluding: {}", exclude_strs.join(", ")));
+        }
+        
+        desc
+    }
+}
+
+// ============================================================================
+// PatternSelector - Original Implementation (Updated)
+// ============================================================================
+
 impl PatternSelector {
     /// Check if a pattern matches this selector
     pub fn matches(&self, metadata: &PatternMetadata) -> bool {
@@ -847,5 +1014,200 @@ mod pattern_selector_glob_tests {
         // Note: Currently supports "patterns:mysql*,postgres*" syntax
         let selector = PatternSelector::from_string("patterns:mysql-password,postgres-dsn").unwrap();
         assert!(matches!(selector, PatternSelector::Patterns(_)));
+    }
+}
+
+#[cfg(test)]
+mod composite_selector_tests {
+    use super::*;
+
+    #[test]
+    fn test_single_tier_filter() {
+        let selector = CompositePatternSelector::from_string("CRITICAL").unwrap();
+        assert!(selector.matches("aws-akia", RiskTier::Critical));
+        assert!(!selector.matches("mysql-password", RiskTier::ApiKeys));
+    }
+
+    #[test]
+    fn test_multiple_tiers() {
+        let selector = CompositePatternSelector::from_string("CRITICAL,API_KEYS").unwrap();
+        assert!(selector.matches("aws-akia", RiskTier::Critical));
+        assert!(selector.matches("mysql-password", RiskTier::ApiKeys));
+        assert!(!selector.matches("ssh-key", RiskTier::Infrastructure));
+    }
+
+    #[test]
+    fn test_glob_pattern_only() {
+        let selector = CompositePatternSelector::from_string("mysql*").unwrap();
+        assert!(selector.matches("mysql-password", RiskTier::Critical));
+        assert!(selector.matches("mysql-url", RiskTier::Critical));
+        assert!(!selector.matches("postgres-dsn", RiskTier::Critical));
+    }
+
+    #[test]
+    fn test_multiple_glob_patterns() {
+        let selector = CompositePatternSelector::from_string("mysql*,postgresql*,redis*").unwrap();
+        assert!(selector.matches("mysql-password", RiskTier::Critical));
+        assert!(selector.matches("postgresql-dsn", RiskTier::Critical));
+        assert!(selector.matches("redis-password", RiskTier::Critical));
+        assert!(!selector.matches("mongodb-uri", RiskTier::Critical));
+    }
+
+    #[test]
+    fn test_tier_and_glob_combined() {
+        let selector = CompositePatternSelector::from_string("CRITICAL,mysql*,postgres*").unwrap();
+        // Matches CRITICAL tier
+        assert!(selector.matches("aws-akia", RiskTier::Critical));
+        // Matches glob patterns
+        assert!(selector.matches("mysql-password", RiskTier::ApiKeys));
+        assert!(selector.matches("postgresql-dsn", RiskTier::ApiKeys));
+        // Doesn't match anything
+        assert!(!selector.matches("heroku-api-key", RiskTier::ApiKeys));
+    }
+
+    #[test]
+    fn test_simple_exclusion() {
+        let selector = CompositePatternSelector::from_string("CRITICAL,!test-*").unwrap();
+        assert!(selector.matches("aws-akia", RiskTier::Critical));
+        assert!(!selector.matches("test-secret", RiskTier::Critical));
+        assert!(!selector.matches("test-password", RiskTier::Critical));
+    }
+
+    #[test]
+    fn test_exclude_syntax_variations() {
+        let selector1 = CompositePatternSelector::from_string("CRITICAL,!test-*").unwrap();
+        let selector2 = CompositePatternSelector::from_string("CRITICAL,exclude:test-*").unwrap();
+        
+        // Both should behave identically
+        assert!(selector1.matches("aws-akia", RiskTier::Critical));
+        assert!(selector2.matches("aws-akia", RiskTier::Critical));
+        
+        assert!(!selector1.matches("test-secret", RiskTier::Critical));
+        assert!(!selector2.matches("test-secret", RiskTier::Critical));
+    }
+
+    #[test]
+    fn test_multiple_exclusions() {
+        let selector = CompositePatternSelector::from_string("CRITICAL,!test-*,!mock-*,!dummy-*").unwrap();
+        assert!(selector.matches("aws-akia", RiskTier::Critical));
+        assert!(!selector.matches("test-secret", RiskTier::Critical));
+        assert!(!selector.matches("mock-password", RiskTier::Critical));
+        assert!(!selector.matches("dummy-key", RiskTier::Critical));
+    }
+
+    #[test]
+    fn test_complex_real_world_scenario() {
+        // Detect CRITICAL tier + AWS/GitHub/OpenAI patterns, excluding test patterns
+        let selector = CompositePatternSelector::from_string(
+            "CRITICAL,aws-*,github-*,openai-*,!test-*,!example-*"
+        ).unwrap();
+        
+        // Should match
+        assert!(selector.matches("aws-akia", RiskTier::Critical));
+        assert!(selector.matches("aws-access-key", RiskTier::Critical));
+        assert!(selector.matches("github-ghp", RiskTier::Critical));
+        assert!(selector.matches("openai-sk-proj", RiskTier::Critical));
+        
+        // Should NOT match (exclusions)
+        assert!(!selector.matches("test-secret", RiskTier::Critical));
+        assert!(!selector.matches("example-password", RiskTier::Critical));
+        
+        // Should NOT match (not included - different pattern type)
+        assert!(!selector.matches("mysql-password", RiskTier::ApiKeys));
+    }
+
+    #[test]
+    fn test_database_pattern_selection() {
+        // Select only database patterns
+        let selector = CompositePatternSelector::from_string(
+            "mysql*,postgresql*,mongodb*,redis*"
+        ).unwrap();
+        
+        assert!(selector.matches("mysql-password", RiskTier::Critical));
+        assert!(selector.matches("postgresql-dsn", RiskTier::Critical));
+        assert!(selector.matches("mongodb-uri", RiskTier::Critical));
+        assert!(selector.matches("redis-password", RiskTier::Critical));
+        
+        assert!(!selector.matches("aws-akia", RiskTier::Critical));
+        assert!(!selector.matches("github-ghp", RiskTier::Critical));
+    }
+
+    #[test]
+    fn test_api_provider_selection() {
+        // Select OpenAI, Anthropic, HuggingFace
+        let selector = CompositePatternSelector::from_string(
+            "openai*,anthropic*,huggingface*"
+        ).unwrap();
+        
+        assert!(selector.matches("openai-api-key", RiskTier::Critical));
+        assert!(selector.matches("openai-sk-proj", RiskTier::Critical));
+        assert!(selector.matches("anthropic-api-key", RiskTier::Critical));
+        assert!(selector.matches("huggingface-token", RiskTier::ApiKeys));
+        
+        assert!(!selector.matches("aws-akia", RiskTier::Critical));
+    }
+
+    #[test]
+    fn test_tier_with_specific_glob_and_exclusion() {
+        let selector = CompositePatternSelector::from_string(
+            "CRITICAL,API_KEYS,mysql*,!test-*"
+        ).unwrap();
+        
+        // CRITICAL tier
+        assert!(selector.matches("aws-akia", RiskTier::Critical));
+        // API_KEYS tier
+        assert!(selector.matches("heroku-api-key", RiskTier::ApiKeys));
+        // Glob pattern
+        assert!(selector.matches("mysql-password", RiskTier::Critical));
+        // Excluded
+        assert!(!selector.matches("test-password", RiskTier::Critical));
+    }
+
+    #[test]
+    fn test_invalid_no_inclusions() {
+        // Only exclusions should fail
+        let result = CompositePatternSelector::from_string("!test-*,!mock-*");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pattern_filter_parsing() {
+        let tier_filter = PatternFilter::from_str("CRITICAL").unwrap();
+        assert!(matches!(tier_filter, PatternFilter::Tier(RiskTier::Critical)));
+        
+        let glob_filter = PatternFilter::from_str("mysql*").unwrap();
+        assert!(matches!(glob_filter, PatternFilter::GlobName(_)));
+        
+        let exclude_filter1 = PatternFilter::from_str("!test-*").unwrap();
+        assert!(matches!(exclude_filter1, PatternFilter::Exclude(_)));
+        
+        let exclude_filter2 = PatternFilter::from_str("exclude:dummy-*").unwrap();
+        assert!(matches!(exclude_filter2, PatternFilter::Exclude(_)));
+    }
+
+    #[test]
+    fn test_description() {
+        let selector = CompositePatternSelector::from_string("CRITICAL,mysql*,!test-*").unwrap();
+        let desc = selector.description();
+        assert!(desc.contains("Critical")); // Debug format
+        assert!(desc.contains("mysql"));
+        assert!(desc.contains("test"));
+    }
+
+    #[test]
+    fn test_performance_composite_matching() {
+        let selector = CompositePatternSelector::from_string(
+            "CRITICAL,API_KEYS,mysql*,postgresql*,redis*,mongodb*,!test-*,!mock-*"
+        ).unwrap();
+        
+        // Verify it's fast (should be <1ms for 1000 matches)
+        let start = std::time::Instant::now();
+        for _ in 0..1000 {
+            let _ = selector.matches("mysql-password", RiskTier::Critical);
+            let _ = selector.matches("aws-akia", RiskTier::Critical);
+            let _ = selector.matches("test-secret", RiskTier::Critical);
+        }
+        let elapsed = start.elapsed();
+        assert!(elapsed.as_millis() < 10, "Performance regression: {}ms for 3000 matches", elapsed.as_millis());
     }
 }
