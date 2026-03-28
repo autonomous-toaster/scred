@@ -29,6 +29,8 @@
 pub mod config;
 pub mod configurable_engine;
 pub mod connect;
+pub mod connection_pool;
+pub mod dns_cache;
 pub mod dns_resolver;
 pub mod duplex;
 pub mod fixed_upstream;
@@ -58,5 +60,7 @@ pub use scred_redactor::{PatternSelector, CompositePatternSelector, PatternFilte
 pub use scred_redactor::pattern_selector::{Severity, ServiceCategory, PatternKind, Origin};
 pub use pattern_metadata::get_pattern_tier;
 pub use configurable_engine::{ConfigurableEngine, FilteredRedactionResult};
+pub use connection_pool::ConnectionPool;
+pub use dns_cache::DnsCache;
 
 pub const VERSION: &str = "0.1.0";
