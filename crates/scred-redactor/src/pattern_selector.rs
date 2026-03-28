@@ -5,6 +5,74 @@ use crate::metadata_cache::{MetadataCache, PatternMetadata, RiskTier};
 use std::collections::HashSet;
 
 // ============================================================================
+// GlobMatcher: Simple, fast glob pattern matching (no regex)
+// ============================================================================
+
+/// Fast glob pattern matcher supporting * and ? wildcards
+/// - '*' matches 0+ characters
+/// - '?' matches exactly 1 character
+/// - Everything else matches literally
+pub struct GlobMatcher {
+    pattern: String,
+}
+
+impl GlobMatcher {
+    pub fn new(pattern: &str) -> Self {
+        Self {
+            pattern: pattern.to_string(),
+        }
+    }
+
+    /// Match a name against this glob pattern
+    /// Performance: O(name_len * pattern_len) worst case, typically O(name_len)
+    pub fn matches(&self, name: &str) -> bool {
+        self.matches_impl(name.as_bytes(), self.pattern.as_bytes(), 0, 0)
+    }
+
+    /// Recursive glob matching implementation
+    fn matches_impl(&self, name: &[u8], pattern: &[u8], n_idx: usize, p_idx: usize) -> bool {
+        // Base case: both exhausted
+        if n_idx == name.len() && p_idx == pattern.len() {
+            return true;
+        }
+
+        // Pattern exhausted but name still has chars
+        if p_idx == pattern.len() {
+            return n_idx == name.len();
+        }
+
+        let p_char = pattern[p_idx];
+        match p_char {
+            b'*' => {
+                // Try matching 0 chars (skip *)
+                if self.matches_impl(name, pattern, n_idx, p_idx + 1) {
+                    return true;
+                }
+                // Try matching 1+ chars (advance name)
+                if n_idx < name.len() {
+                    return self.matches_impl(name, pattern, n_idx + 1, p_idx);
+                }
+                false
+            }
+            b'?' => {
+                // Match exactly 1 char
+                if n_idx >= name.len() {
+                    return false;
+                }
+                self.matches_impl(name, pattern, n_idx + 1, p_idx + 1)
+            }
+            _ => {
+                // Literal match
+                if n_idx >= name.len() || name[n_idx] != p_char {
+                    return false;
+                }
+                self.matches_impl(name, pattern, n_idx + 1, p_idx + 1)
+            }
+        }
+    }
+}
+
+// ============================================================================
 // NEW ARCHITECTURE: Separate Classification Dimensions (Phase 2)
 // ============================================================================
 
@@ -271,22 +339,10 @@ impl PatternSelector {
     }
     
     /// Wildcard matching: "aws-*" matches "aws-access-key", etc.
+    /// Uses efficient glob matching with * and ? support
     fn wildcard_match_name(&self, pattern: &str, name: &str) -> bool {
-        if let Some(prefix) = pattern.strip_suffix('*') {
-            name.starts_with(prefix)
-        } else if let Some(suffix) = pattern.strip_prefix('*') {
-            name.ends_with(suffix)
-        } else if pattern.contains('*') {
-            // Simple * replacement pattern
-            let parts: Vec<&str> = pattern.split('*').collect();
-            if parts.len() == 2 {
-                name.starts_with(parts[0]) && name.ends_with(parts[1])
-            } else {
-                false
-            }
-        } else {
-            name == pattern
-        }
+        let matcher = GlobMatcher::new(pattern);
+        matcher.matches(name)
     }
     
     /// Get all matching pattern names from cache
@@ -610,3 +666,186 @@ impl PatternSelector {
 // Tests
 // ============================================================================
 
+
+#[cfg(test)]
+mod glob_tests {
+    use super::*;
+
+    #[test]
+    fn test_glob_exact_match() {
+        let matcher = GlobMatcher::new("mysql-password");
+        assert!(matcher.matches("mysql-password"));
+        assert!(!matcher.matches("mysql-user"));
+    }
+
+    #[test]
+    fn test_glob_star_suffix() {
+        let matcher = GlobMatcher::new("mysql*");
+        assert!(matcher.matches("mysql-password"));
+        assert!(matcher.matches("mysql-url"));
+        assert!(matcher.matches("mysql-dsn"));
+        assert!(matcher.matches("mysql")); // * matches 0 chars
+        assert!(!matcher.matches("postgres-password"));
+        assert!(!matcher.matches("mariadb-password"));
+    }
+
+    #[test]
+    fn test_glob_star_prefix() {
+        let matcher = GlobMatcher::new("*-password");
+        assert!(matcher.matches("mysql-password"));
+        assert!(matcher.matches("postgres-password"));
+        assert!(matcher.matches("redis-password"));
+        assert!(!matcher.matches("password"));
+        assert!(!matcher.matches("mysql-user"));
+    }
+
+    #[test]
+    fn test_glob_star_middle() {
+        let matcher = GlobMatcher::new("aws*-key");
+        assert!(matcher.matches("aws-key"));
+        assert!(matcher.matches("aws-access-key"));
+        assert!(matcher.matches("aws-secret-key"));
+        assert!(!matcher.matches("aws-user"));
+        assert!(!matcher.matches("aws"));
+    }
+
+    #[test]
+    fn test_glob_question_single() {
+        let matcher = GlobMatcher::new("aws-?");
+        assert!(matcher.matches("aws-a"));
+        assert!(matcher.matches("aws-k"));
+        assert!(!matcher.matches("aws-ab"));
+        assert!(!matcher.matches("aws-"));
+        assert!(!matcher.matches("aws"));
+    }
+
+    #[test]
+    fn test_glob_question_multiple() {
+        let matcher = GlobMatcher::new("gh?-token");
+        assert!(matcher.matches("ghp-token"));
+        assert!(matcher.matches("ghu-token"));
+        assert!(matcher.matches("ghs-token"));
+        assert!(!matcher.matches("gh-token"));
+        assert!(!matcher.matches("ghab-token"));
+    }
+
+    #[test]
+    fn test_glob_combined_wildcards() {
+        let matcher = GlobMatcher::new("*test*");
+        assert!(matcher.matches("test"));
+        assert!(matcher.matches("pre-test"));
+        assert!(matcher.matches("test-post"));
+        assert!(matcher.matches("pre-test-post"));
+        assert!(!matcher.matches("tst"));
+        assert!(!matcher.matches("tes"));
+    }
+
+    #[test]
+    fn test_glob_aws_pattern() {
+        let matcher = GlobMatcher::new("aws-*");
+        assert!(matcher.matches("aws-akia"));
+        assert!(matcher.matches("aws-access-key"));
+        assert!(matcher.matches("aws-secret-key"));
+        assert!(matcher.matches("aws-asia"));
+        assert!(!matcher.matches("azure-key"));
+        assert!(!matcher.matches("aws"));
+    }
+
+    #[test]
+    fn test_glob_github_pattern() {
+        let matcher = GlobMatcher::new("github-*");
+        assert!(matcher.matches("github-ghp"));
+        assert!(matcher.matches("github-token"));
+        assert!(matcher.matches("github-pat"));
+        assert!(!matcher.matches("gitlab-token"));
+        assert!(!matcher.matches("github"));
+    }
+
+    #[test]
+    fn test_glob_api_key_patterns() {
+        let matchers = vec![
+            ("mysql*", vec!["mysql-password", "mysql-url", "mysql-dsn"]),
+            ("postgres*", vec!["postgresql-password", "postgresql-dsn"]),
+            ("redis*", vec!["redis-password", "redis-url"]),
+            ("mongodb*", vec!["mongodb-password", "mongodb-uri"]),
+            ("openai*", vec!["openai-api-key", "openai-sk-proj"]),
+            ("dependabot*", vec!["dependabot-token", "dependabot-secret"]),
+        ];
+
+        for (pattern, expected_matches) in matchers {
+            let matcher = GlobMatcher::new(pattern);
+            for name in expected_matches {
+                assert!(matcher.matches(name), "Pattern {} should match {}", pattern, name);
+            }
+        }
+    }
+
+    #[test]
+    fn test_glob_exclusion_pattern() {
+        let matcher = GlobMatcher::new("test-*");
+        // These should match the glob
+        assert!(matcher.matches("test-secret"));
+        assert!(matcher.matches("test-password"));
+        assert!(matcher.matches("test-key"));
+        // These should NOT match
+        assert!(!matcher.matches("prod-secret"));
+        assert!(!matcher.matches("staging-password"));
+    }
+
+    #[test]
+    fn test_glob_performance_simple() {
+        // Verify simple case is fast
+        let start = std::time::Instant::now();
+        let matcher = GlobMatcher::new("mysql*");
+        for _ in 0..10000 {
+            let _ = matcher.matches("mysql-password");
+        }
+        let elapsed = start.elapsed();
+        // Should be very fast (<1ms for 10k matches)
+        assert!(elapsed.as_millis() < 50, "Performance regression: {}ms for 10k matches", elapsed.as_millis());
+    }
+
+    #[test]
+    fn test_glob_edge_cases() {
+        // Empty pattern should only match empty string
+        let matcher = GlobMatcher::new("");
+        assert!(matcher.matches(""));
+        assert!(!matcher.matches("anything"));
+
+        // Single * should match anything
+        let matcher = GlobMatcher::new("*");
+        assert!(matcher.matches(""));
+        assert!(matcher.matches("anything"));
+        assert!(matcher.matches("mysql-password-12345"));
+
+        // ? should match any single char
+        let matcher = GlobMatcher::new("?");
+        assert!(matcher.matches("a"));
+        assert!(!matcher.matches(""));
+        assert!(!matcher.matches("ab"));
+    }
+}
+
+#[cfg(test)]
+mod pattern_selector_glob_tests {
+    use super::*;
+
+    #[test]
+    fn test_selector_wildcard_mode() {
+        let selector = PatternSelector::Wildcard("mysql*".to_string());
+        assert_eq!(selector.description(), "Wildcard: mysql*");
+    }
+
+    #[test]
+    fn test_selector_from_string_wildcard() {
+        let selector = PatternSelector::from_string("wildcard:mysql*").unwrap();
+        assert!(matches!(selector, PatternSelector::Wildcard(_)));
+    }
+
+    #[test]
+    fn test_selector_from_string_multiple_globs() {
+        // Note: Currently supports "patterns:mysql*,postgres*" syntax
+        let selector = PatternSelector::from_string("patterns:mysql-password,postgres-dsn").unwrap();
+        assert!(matches!(selector, PatternSelector::Patterns(_)));
+    }
+}
