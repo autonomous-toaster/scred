@@ -57,6 +57,7 @@ pub mod streaming_response;
 pub mod chunked_parser;
 pub mod upstream_h2_client;
 pub mod env_detection;
+pub mod multi_upstream_pool;
 
 // Re-export pattern selector from scred_redactor (single source of truth)
 pub use scred_redactor::{PatternSelector, CompositePatternSelector, PatternFilter, PatternTier};
@@ -68,5 +69,6 @@ pub use dns_cache::DnsCache;
 pub use cached_dns_resolver::{CachedDnsResolver, CachedDnsConfig};
 pub use optimized_dns_resolver::{OptimizedDnsResolver, OptimizedDnsResolverBuilder};
 pub use pooled_dns_resolver::{PooledDnsResolver, PoolConfig, PooledTcpStream};
+pub use multi_upstream_pool::MultiUpstreamPool;
 
 pub const VERSION: &str = "0.1.0";
