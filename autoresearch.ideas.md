@@ -1,21 +1,22 @@
 # scred-proxy Optimization Ideas
 
-## Baseline Performance
-- Current: 0.017 MB/s (34.3 RPS, 200 sequential requests)
-- Response size: ~500 bytes
-- Bottleneck: Logging overhead, sequential processing, DNS resolution per request
+## BOTTLENECK IDENTIFIED (Session 1)
 
-## Potential Optimizations
+**Root Cause**: DNS resolution + no connection pooling to upstream
+- Location: `crates/scred-http/src/dns_resolver.rs`
+- Issue 1: Fresh DNS lookup for every request (no caching)
+- Issue 2: Exponential backoff delays (100ms, 200ms, 400ms) on failures
+- Issue 3: No TCP connection pooling/Keep-Alive
+- Evidence: Concurrent requests 53% SLOWER than sequential
 
-### 1. Reduce Logging Overhead ⭐ HIGH PRIORITY
-- **Current**: Every connection logs multiple lines (connection, request, selector, location rewriting)
-- **Problem**: Logging I/O expensive in loop
-- **Solution**: 
-  - Add RUST_LOG filtering (use error/warn only)
-  - Batch logging statements
-  - Use ring buffer for connection logs
-  - Lazy formatting of log messages
-- **Expected gain**: 2-3x throughput
+## Potential Optimizations (Ranked by Impact)
+
+### 1. Reduce Logging Overhead ❌ TRIED - MADE WORSE
+- **Status**: DISCARD (Run #12)
+- **Test**: RUST_LOG=off - disabled all logging
+- **Result**: SLOWER (0.013 vs 0.017 MB/s, -23%)
+- **Conclusion**: Logging is NOT the bottleneck
+- **Reason discard**: Optimization made performance worse, suggests logging has minimal overhead
 
 ### 2. Connection Pooling to Upstream ⭐ HIGH PRIORITY
 - **Current**: New TCP connection per request + DNS resolution
@@ -52,13 +53,17 @@
   - Pre-filter by content-type
 - **Expected gain**: 0.5-1x
 
-### 6. Concurrent Request Handling
-- **Current**: Likely sequential per-connection, but can have multiple simultaneous connections
-- **Problem**: Test uses sequential curl, not representing real workload
-- **Solution**:
-  - Benchmark with concurrent connections (wrk, Apache Bench)
-  - Verify tokio handles concurrent connections efficiently
-- **Expected gain**: Reveals true bottleneck
+### 6. Concurrent Request Handling ⚠️ REVEALS BOTTLENECK
+- **Status**: TESTED (Run #13)
+- **Test**: 20 parallel concurrent requests
+- **Result**: MUCH SLOWER (0.008 vs 0.017 MB/s, -53%)
+- **Key Finding**: Proxy gets SLOWER with concurrent requests, not faster
+- **Root Cause Identified**: 
+  - No connection pooling/Keep-Alive to upstream
+  - No DNS caching (fresh DNS lookup per request)
+  - DNS resolver has 100ms+ backoff delays
+  - Likely resource contention or blocking I/O
+- **Next Step**: Implement DNS caching + connection pooling
 
 ### 7. Remove Unnecessary Allocations
 - **Current**: String parsing, header cloning, pattern compilation
