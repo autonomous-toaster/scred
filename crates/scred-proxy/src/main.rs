@@ -350,13 +350,16 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
     let mut client_reader = BufReader::new(client_read);
 
     // HTTP/1.1 Keep-Alive: Handle multiple requests on same connection
+    let mut request_count = 0;
     loop {
+        request_count += 1;
+        
         // Read first line
         let mut first_line = String::new();
         client_reader.read_line(&mut first_line).await?;
 
         if first_line.is_empty() {
-            debug!("[{}] Client closed connection (empty request line)", peer_addr);
+            info!("[{}] Connection closed after {} requests", peer_addr, request_count - 1);
             break;  // Client closed connection gracefully
         }
 
