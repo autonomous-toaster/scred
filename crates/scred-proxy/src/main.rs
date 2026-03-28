@@ -346,7 +346,7 @@ async fn handle_connection(
     resolver: Arc<OptimizedDnsResolver>,
 ) -> Result<()> {
     let peer_addr = stream.peer_addr()?;
-    info!("New connection from {}", peer_addr);
+    debug!("New connection from {}", peer_addr);
 
     // Extract path from request line for per-path rule checking
     // Request line format: "GET /path HTTP/1.1"
@@ -385,9 +385,9 @@ async fn handle_connection(
     let should_redact = config.should_redact_path(&request_path);
     
     if !should_redact {
-        info!("[{}] Per-path rule: SKIPPING redaction for path: {}", peer_addr, request_path);
+        debug!("[{}] Per-path rule: SKIPPING redaction for path: {}", peer_addr, request_path);
     } else if !config.per_path_rules.is_empty() {
-        info!("[{}] Per-path rule: APPLYING redaction for path: {}", peer_addr, request_path);
+        debug!("[{}] Per-path rule: APPLYING redaction for path: {}", peer_addr, request_path);
     }
 
     // Create redaction engine based on mode AND per-path rules
@@ -425,8 +425,8 @@ async fn handle_connection(
 
     let redaction_engine = Arc::new(RedactionEngine::new(redaction_config));
     
-    info!("[{}] Detect selector: {}", peer_addr, config.detect_selector.description());
-    info!("[{}] Redact selector: {}", peer_addr, config.redact_selector.description());
+    debug!("[{}] Detect selector: {}", peer_addr, config.detect_selector.description());
+    debug!("[{}] Redact selector: {}", peer_addr, config.redact_selector.description());
     
     // In Detect mode, create ConfigurableEngine for detection logging
     let _detection_engine = if config.redaction_mode == RedactionMode::Detect {
@@ -436,9 +436,9 @@ async fn handle_connection(
         // Log detected secrets in request line
         let detected_in_line = engine.detect_only(&first_line);
         if !detected_in_line.is_empty() {
-            info!("[{}] [DETECT] {} secrets found in request line:", peer_addr, detected_in_line.len());
+            debug!("[{}] [DETECT] {} secrets found in request line:", peer_addr, detected_in_line.len());
             for warning in &detected_in_line {
-                info!("[{}]   - {} (count: {})", peer_addr, warning.pattern_type, warning.count);
+                debug!("[{}]   - {} (count: {})", peer_addr, warning.pattern_type, warning.count);
             }
         }
         
@@ -467,7 +467,7 @@ async fn handle_connection(
     // Current workaround: Use peer's IP as fallback with proxy_host for rewrites
     // Enhancement: Could implement header peeking or extract from request line
     
-    info!("[{}] Using proxy_host for Location rewriting: {}", peer_addr, proxy_host);
+    debug!("[{}] Using proxy_host for Location rewriting: {}", peer_addr, proxy_host);
 
     let tcp_stream = resolver.connect_with_retry(&upstream_addr).await?;
 

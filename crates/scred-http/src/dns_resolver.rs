@@ -75,7 +75,7 @@ impl DnsResolver {
             // Attempt to resolve and connect
             match Self::try_connect(addr_without_scheme).await {
                 Ok(stream) => {
-                    info!("DNS: Connected to {} on attempt {}", addr_without_scheme, attempt);
+                    debug!("DNS: Connected to {} on attempt {}", addr_without_scheme, attempt);
                     return Ok(stream);
                 }
                 Err(e) => {
@@ -131,7 +131,7 @@ impl DnsResolver {
 
             match TcpStream::connect(*socket_addr).await {
                 Ok(stream) => {
-                    info!("DNS: Successfully connected to {} ({})", addr, socket_addr);
+                    debug!("DNS: Successfully connected to {} ({})", addr, socket_addr);
                     return Ok(stream);
                 }
                 Err(e) => {

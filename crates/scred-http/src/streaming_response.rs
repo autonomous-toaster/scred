@@ -102,17 +102,17 @@ where
     // This should run regardless of whether we're rewriting for proxy transparency
     if let Some(location_pos) = forwarded_headers.iter().position(|(k, _)| k.eq_ignore_ascii_case("Location")) {
         let mut location = forwarded_headers[location_pos].1.clone();
-        info!("[Location] Found Location header: {}", location);
+        debug!("[Location] Found Location header: {}", location);
         
         // Remove :443 from https:// URLs and :80 from http:// URLs
         if location.contains("https://") && location.contains(":443/") {
             location = location.replace(":443/", "/");
-            info!("[Location] Normalized (removed default HTTPS port): {}", location);
+            debug!("[Location] Normalized (removed default HTTPS port): {}", location);
         } else if location.contains("http://") && location.contains(":80/") {
             location = location.replace(":80/", "/");
-            info!("[Location] Normalized (removed default HTTP port): {}", location);
+            debug!("[Location] Normalized (removed default HTTP port): {}", location);
         } else {
-            info!("[Location] No normalization needed (https={}, :443/={})", 
+            debug!("[Location] No normalization needed (https={}, :443/={})", 
                 location.contains("https://"), location.contains(":443/"));
         }
         
@@ -131,19 +131,19 @@ where
                     );
                     
                     forwarded_headers[location_pos].1 = rewritten_location.clone();
-                    info!("[Location] Rewriting absolute-URI to proxy: {} → {}", location, rewritten_location);
+                    debug!("[Location] Rewriting absolute-URI to proxy: {} → {}", location, rewritten_location);
                 } else {
-                    info!("[Location] NOT rewriting (relative URI): {}", location);
+                    debug!("[Location] NOT rewriting (relative URI): {}", location);
                     forwarded_headers[location_pos].1 = location;
                 }
             } else {
                 // upstream_hostname provided but not proxy_hostname - just use normalized
-                info!("[Location] No proxy_hostname, using normalized: {}", location);
+                debug!("[Location] No proxy_hostname, using normalized: {}", location);
                 forwarded_headers[location_pos].1 = location;
             }
         } else {
             // No upstream hostname - just use normalized version
-            info!("[Location] No upstream_hostname, using normalized: {}", location);
+            debug!("[Location] No upstream_hostname, using normalized: {}", location);
             forwarded_headers[location_pos].1 = location;
         }
     }
@@ -170,7 +170,7 @@ where
     
     // Report header redaction
     if header_stats.patterns_found > 0 {
-        info!("[REDACTION] Headers: {} patterns found and redacted", header_stats.patterns_found);
+        debug!("[REDACTION] Headers: {} patterns found and redacted", header_stats.patterns_found);
     }
 
     // 4. Stream body through redactor
@@ -206,7 +206,7 @@ where
 
     // Report redaction stats at WARNING level if anything was redacted
     if stats.patterns_found > 0 {
-        info!("[REDACTION] Body: {} patterns found and redacted", stats.patterns_found);
+        debug!("[REDACTION] Body: {} patterns found and redacted", stats.patterns_found);
     }
 
     if config.debug {

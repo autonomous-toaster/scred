@@ -62,12 +62,12 @@ where
 {
     use tracing::info;
     
-    info!("[stream_request_to_upstream] ENTRY: request_line={}", request_line);
+    debug!("[stream_request_to_upstream] ENTRY: request_line={}", request_line);
 
     // 1. Parse headers (non-streaming)
-    info!("[stream_request_to_upstream] STEP 1: Parsing headers from client...");
+    debug!("[stream_request_to_upstream] STEP 1: Parsing headers from client...");
     let headers = parse_http_headers(client_reader).await?;
-    info!("[stream_request_to_upstream] STEP 1 DONE: Parsed {} header lines, content_length={:?}, is_chunked={}", 
+    debug!("[stream_request_to_upstream] STEP 1 DONE: Parsed {} header lines, content_length={:?}, is_chunked={}", 
         headers.headers.len(), headers.content_length, headers.is_chunked());
 
     if config.debug {
@@ -75,28 +75,28 @@ where
     }
 
     // 2. Forward request line to upstream
-    info!("[stream_request_to_upstream] STEP 2: Writing request line to upstream...");
+    debug!("[stream_request_to_upstream] STEP 2: Writing request line to upstream...");
     upstream_writer
         .write_all(format!("{}\r\n", request_line).as_bytes())
         .await?;
-    info!("[stream_request_to_upstream] STEP 2 DONE: Request line sent");
+    debug!("[stream_request_to_upstream] STEP 2 DONE: Request line sent");
 
     // 3. Forward headers to upstream (no redaction needed - headers don't contain secrets in body)
     // Actually, headers might contain Authorization, so we should redact them too
-    info!("[stream_request_to_upstream] STEP 3: Redacting and writing headers to upstream...");
+    debug!("[stream_request_to_upstream] STEP 3: Redacting and writing headers to upstream...");
     let (redacted_headers, _) = redactor.redact_buffer(headers.raw_headers.as_bytes());
     // NOTE: raw_headers already includes the final \r\n blank line, don't add another!
     let headers_len = redacted_headers.len();
     upstream_writer.write_all(redacted_headers.as_bytes()).await?;
-    info!("[stream_request_to_upstream] STEP 3 DONE: Headers sent ({} bytes)", headers_len);
+    debug!("[stream_request_to_upstream] STEP 3 DONE: Headers sent ({} bytes)", headers_len);
 
     // 4. Stream body through redactor
-    info!("[stream_request_to_upstream] STEP 4: Processing request body...");
+    debug!("[stream_request_to_upstream] STEP 4: Processing request body...");
     let mut stats = StreamingStats::default();
 
     if let Some(content_length) = headers.content_length {
         // Content-Length: stream exactly N bytes
-        info!("[stream_request_to_upstream] STEP 4a: Streaming body with content-length={}", content_length);
+        debug!("[stream_request_to_upstream] STEP 4a: Streaming body with content-length={}", content_length);
         stats = stream_request_body_content_length(
             client_reader,
             &mut upstream_writer,
@@ -105,24 +105,24 @@ where
             &config,
         )
         .await?;
-        info!("[stream_request_to_upstream] STEP 4a DONE: Body streamed (bytes_read={}, bytes_written={})", stats.bytes_read, stats.bytes_written);
+        debug!("[stream_request_to_upstream] STEP 4a DONE: Body streamed (bytes_read={}, bytes_written={})", stats.bytes_read, stats.bytes_written);
     } else if headers.is_chunked() {
         // Transfer-Encoding: chunked
-        info!("[stream_request_to_upstream] STEP 4b: ERROR - Chunked requests not supported");
+        debug!("[stream_request_to_upstream] STEP 4b: ERROR - Chunked requests not supported");
         return Err(anyhow!("Chunked requests not yet supported in Phase 3b"));
     } else {
         // No body
-        info!("[stream_request_to_upstream] STEP 4c: No body");
+        debug!("[stream_request_to_upstream] STEP 4c: No body");
         stats = StreamingStats::default();
     }
 
-    info!("[stream_request_to_upstream] STEP 5: Flushing upstream writer...");
+    debug!("[stream_request_to_upstream] STEP 5: Flushing upstream writer...");
     upstream_writer.flush().await?;
-    info!("[stream_request_to_upstream] STEP 5 DONE: Upstream flushed");
+    debug!("[stream_request_to_upstream] STEP 5 DONE: Upstream flushed");
 
     // Report redaction stats at INFO level if anything was redacted
     if stats.patterns_found > 0 {
-        info!("[REDACTION] Request body: {} patterns found and redacted", stats.patterns_found);
+        debug!("[REDACTION] Request body: {} patterns found and redacted", stats.patterns_found);
     }
 
     if config.debug {
@@ -132,7 +132,7 @@ where
         );
     }
 
-    info!("[stream_request_to_upstream] EXIT: SUCCESS (bytes_read={}, bytes_written={})", stats.bytes_read, stats.bytes_written);
+    debug!("[stream_request_to_upstream] EXIT: SUCCESS (bytes_read={}, bytes_written={})", stats.bytes_read, stats.bytes_written);
     Ok(stats)
 }
 
