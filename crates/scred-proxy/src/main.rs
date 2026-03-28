@@ -6,7 +6,7 @@ use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequest
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
 use scred_http::http_line_reader::read_response_line;
 use scred_http::{PatternSelector, ConfigurableEngine};
-use scred_http::{PooledDnsResolver, PoolConfig};
+use scred_http::{OptimizedDnsResolver, OptimizedDnsResolverBuilder};
 use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::env;
 use std::sync::Arc;
@@ -343,7 +343,7 @@ impl ProxyConfig {
 async fn handle_connection(
     stream: TcpStream,
     config: Arc<ProxyConfig>,
-    pool: Arc<PooledDnsResolver>,
+    resolver: Arc<OptimizedDnsResolver>,
 ) -> Result<()> {
     let peer_addr = stream.peer_addr()?;
     info!("New connection from {}", peer_addr);
@@ -469,7 +469,7 @@ async fn handle_connection(
     
     info!("[{}] Using proxy_host for Location rewriting: {}", peer_addr, proxy_host);
 
-    let tcp_stream = pool.connect_with_retry(&upstream_addr).await?;
+    let tcp_stream = resolver.connect_with_retry(&upstream_addr).await?;
 
     if config.upstream.scheme == "https" {
         let tls_stream = connect_tls_upstream(tcp_stream, &config.upstream.host).await?;
@@ -643,26 +643,31 @@ async fn main() -> Result<()> {
     info!("Proxy listening on {}", listen_addr);
     info!("Upstream: {}://{}{}", config.upstream.scheme, config.upstream.authority(), config.upstream.base_path);
 
-    // Create connection pool for upstream
-    // Performance: Reuse connections to avoid TCP handshake overhead (5-10ms per connection)
-    let pool_config = PoolConfig {
-        max_connections: 10,
-        idle_timeout_secs: 30,
-        enabled: true,
-    };
-    let max_connections = pool_config.max_connections;
-    let pool = Arc::new(PooledDnsResolver::new(pool_config));
-    info!("Connection pool enabled: max {} connections per upstream", max_connections);
+    // Create optimized DNS resolver with connection pooling and caching
+    // Performance optimizations:
+    // - DNS cache: Avoids repeated lookups (saves 1-5ms per cached hit)
+    // - Connection pool: Reuses TCP connections (saves 5-10ms per pooled reuse)
+    // - Combined: Expected 3-5 MB/s throughput (vs 0.90 baseline)
+    let resolver = Arc::new(
+        OptimizedDnsResolverBuilder::new()
+            .dns_ttl(60)
+            .dns_enabled(true)
+            .pool_size(10)
+            .pool_timeout(30)
+            .pool_enabled(true)
+            .build()
+    );
+    info!("Optimized DNS resolver enabled: pooling (10 conns) + caching (60s TTL)");
 
     let listener = TcpListener::bind(&listen_addr).await?;
 
     loop {
         let (stream, peer_addr) = listener.accept().await?;
         let config = Arc::clone(&config);
-        let pool = Arc::clone(&pool);
+        let resolver = Arc::clone(&resolver);
 
         tokio::spawn(async move {
-            match handle_connection(stream, config, pool).await {
+            match handle_connection(stream, config, resolver).await {
                 Ok(_) => info!("Connection from {} handled successfully", peer_addr),
                 Err(e) => tracing::error!("Error handling connection from {}: {}", peer_addr, e),
             }

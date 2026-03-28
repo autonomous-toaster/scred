@@ -32,6 +32,8 @@ pub mod connect;
 pub mod connection_pool;
 pub mod dns_cache;
 pub mod dns_resolver;
+pub mod cached_dns_resolver;
+pub mod optimized_dns_resolver;
 pub mod pooled_dns_resolver;
 pub mod duplex;
 pub mod fixed_upstream;
@@ -63,6 +65,8 @@ pub use pattern_metadata::get_pattern_tier;
 pub use configurable_engine::{ConfigurableEngine, FilteredRedactionResult};
 pub use connection_pool::ConnectionPool;
 pub use dns_cache::DnsCache;
+pub use cached_dns_resolver::{CachedDnsResolver, CachedDnsConfig};
+pub use optimized_dns_resolver::{OptimizedDnsResolver, OptimizedDnsResolverBuilder};
 pub use pooled_dns_resolver::{PooledDnsResolver, PoolConfig, PooledTcpStream};
 
 pub const VERSION: &str = "0.1.0";
