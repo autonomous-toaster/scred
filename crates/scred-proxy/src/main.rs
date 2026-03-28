@@ -349,19 +349,21 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
     let (client_read, mut client_write) = stream.into_split();
     let mut client_reader = BufReader::new(client_read);
 
-    // Read first line
-    let mut first_line = String::new();
-    client_reader.read_line(&mut first_line).await?;
+    // HTTP/1.1 Keep-Alive: Handle multiple requests on same connection
+    loop {
+        // Read first line
+        let mut first_line = String::new();
+        client_reader.read_line(&mut first_line).await?;
 
-    if first_line.is_empty() {
-        info!("[{}] Empty request", peer_addr);
-        return Ok(());
-    }
+        if first_line.is_empty() {
+            debug!("[{}] Client closed connection (empty request line)", peer_addr);
+            break;  // Client closed connection gracefully
+        }
 
-    let first_line = first_line.trim().to_string();
-    info!("[{}] Request line: {}", peer_addr, first_line);
+        let first_line = first_line.trim().to_string();
+        debug!("[{}] Request line: {}", peer_addr, first_line);
 
-    // Extract path from request line
+        // Extract path from request line
     let request_path = if let Some(path_start) = first_line.find(' ') {
         if let Some(path_end) = first_line[path_start + 1..].find(' ') {
             first_line[path_start + 1..path_start + 1 + path_end].to_string()
@@ -535,7 +537,9 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
         .await?;
     }
 
-    client_write.flush().await?;
+        client_write.flush().await?;
+    }  // End of Keep-Alive loop
+
     Ok(())
 }
 async fn connect_tls_upstream(
