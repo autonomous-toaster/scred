@@ -80,16 +80,19 @@ impl StreamingRedactor {
     }
 
     /// Check if this redactor has a selector configured
+    #[inline]
     pub fn has_selector(&self) -> bool {
         self.selector.is_some()
     }
 
     /// Get reference to the selector if configured
+    #[inline]
     pub fn get_selector(&self) -> Option<&crate::pattern_selector::PatternSelector> {
         self.selector.as_ref()
     }
 
     /// Get reference to the underlying redaction engine
+    #[inline]
     pub fn engine(&self) -> &Arc<RedactionEngine> {
         &self.engine
     }
@@ -244,6 +247,7 @@ impl StreamingRedactor {
         (output, stats)
     }
 
+    #[inline]
     pub fn config(&self) -> &StreamingConfig {
         &self.config
     }
