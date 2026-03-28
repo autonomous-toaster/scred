@@ -11,6 +11,7 @@ pub struct ProxyServer {
     config: Config,
     cert_generator: Arc<CertificateGenerator>,
     redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    pool: Arc<scred_http::MultiUpstreamPool>,
 }
 
 impl ProxyServer {
@@ -31,6 +32,7 @@ impl ProxyServer {
             config: config.clone(),
             cert_generator: Arc::new(cert_generator),
             redaction_engine: Arc::new(redaction_engine),
+            pool: Arc::new(scred_http::MultiUpstreamPool::new()),
         })
     }
 
@@ -45,11 +47,12 @@ impl ProxyServer {
             let config = self.config.clone();
             let cert_gen = self.cert_generator.clone();
             let redaction = self.redaction_engine.clone();
+            let pool = self.pool.clone();
 
             let upstream_resolver = Arc::new(scred_http::proxy_resolver::MitmConfig::from_env());
 
             tokio::spawn(async move {
-                if let Err(e) = handle_client(socket, peer_addr, upstream_resolver, cert_gen, redaction, config).await {
+                if let Err(e) = handle_client(socket, peer_addr, upstream_resolver, cert_gen, redaction, config, pool).await {
                     warn!("Error handling client {}: {}", peer_addr, e);
                 }
             });
@@ -64,6 +67,7 @@ async fn handle_client(
     cert_generator: Arc<CertificateGenerator>,
     redaction_engine: Arc<scred_redactor::RedactionEngine>,
     config: Config,
+    pool: Arc<scred_http::MultiUpstreamPool>,
 ) -> Result<()> {
     let (mut socket_read, mut socket_write) = socket.into_split();
     
