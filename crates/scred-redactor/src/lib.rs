@@ -38,7 +38,7 @@ pub fn redact_text(text: &str) -> String {
 }
 
 // Pattern selector for filtering patterns
-pub use pattern_selector::PatternSelector;
+pub use pattern_selector::{PatternSelector, CompositePatternSelector, PatternFilter};
 pub use metadata_cache::RiskTier as PatternTier;
 
 // NOTE: Pattern info function removed - now using Rust SIMD, not Zig FFI

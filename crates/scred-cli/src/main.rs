@@ -5,7 +5,7 @@ use std::time::Instant;
 use std::os::unix::io::AsRawFd;
 
 use scred_redactor::get_all_patterns;
-use scred_http::{PatternSelector, env_detection};
+use scred_http::{PatternSelector, CompositePatternSelector, env_detection};
 use tracing::{info, debug};
 
 /// Check if stdin is connected to a terminal (TTY)
@@ -79,6 +79,7 @@ fn parse_pattern_selectors(
             eprintln!("  scred --detect CRITICAL");
             eprintln!("  scred --detect CRITICAL,API_KEYS");
             eprintln!("  scred --detect 'regex:^sk-'");
+            eprintln!("  scred --detect mysql*,postgresql*,redis*");
             std::process::exit(1);
         }
     };
@@ -89,11 +90,12 @@ fn parse_pattern_selectors(
             eprintln!("ERROR: Invalid SCRED_REDACT_PATTERNS value: '{}'", redact_str);
             eprintln!("Reason: {}", e);
             eprintln!("\nValid tier names: CRITICAL, API_KEYS, INFRASTRUCTURE, SERVICES, PATTERNS");
-            eprintln!("Valid patterns: aws-*, github-*, sk-*, etc.");
+            eprintln!("Valid glob patterns: mysql*, aws-*, github-*, openai-*, etc.");
             eprintln!("Valid regex: regex:^(aws|github)");
             eprintln!("Examples:");
             eprintln!("  scred --redact CRITICAL");
             eprintln!("  scred --redact CRITICAL,API_KEYS");
+            eprintln!("  scred --redact CRITICAL,mysql*,postgres*");
             eprintln!("  scred --redact 'regex:^sk-'");
             std::process::exit(1);
         }
@@ -250,8 +252,9 @@ fn print_help() {
     println!("                          (default: fast) - Controls performance");
     println!("  --redact <TYPES>        Which patterns to redact: same as --detect");
     println!("                          (default: fast) - Conservative by default");
-    println!();
-    println!("Mode Options:");
+    println!("                          Supports: CRITICAL, API_KEYS, mysql*, aws-*, etc.");
+    println!("                          Can combine: CRITICAL,mysql*,!test-*");
+    println!();    println!("Mode Options:");
     println!("  -v, --verbose           Show statistics and detected patterns");
     println!("  --env-mode, --env       Force environment variable mode");
     println!("  --text-mode             Force text/pattern mode");

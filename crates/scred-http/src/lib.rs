@@ -54,7 +54,7 @@ pub mod upstream_h2_client;
 pub mod env_detection;
 
 // Re-export pattern selector from scred_redactor (single source of truth)
-pub use scred_redactor::{PatternSelector, PatternTier};
+pub use scred_redactor::{PatternSelector, CompositePatternSelector, PatternFilter, PatternTier};
 pub use scred_redactor::pattern_selector::{Severity, ServiceCategory, PatternKind, Origin};
 pub use pattern_metadata::get_pattern_tier;
 pub use configurable_engine::{ConfigurableEngine, FilteredRedactionResult};
