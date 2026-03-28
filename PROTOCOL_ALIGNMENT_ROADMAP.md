@@ -196,35 +196,43 @@ fn handle_http2() {
 
 ---
 
-#### P2-2: Add Upstream Proxy Support to scred-mitm (2-3 weeks, parallel)
-**What**: Enable MITM proxy to forward to upstream proxy
-**Why**: Feature parity with scred-proxy
+#### P2-2: Enable Pooling + DNS Cache in scred-mitm (2-3 weeks, parallel)
+**What**: Enable MITM to efficiently proxy requests to ANY upstream via connection pooling
+**Why**: MITM is a generic HTTP proxy that can route to different upstreams per request
+
+**CRITICAL CLARIFICATION**:
+MITM already supports upstream routing via MitmConfig (HTTP_PROXY, HTTPS_PROXY, NO_PROXY).
+This is NOT "add upstream support" - it already has it!
+This IS "optimize MITM for efficient multi-upstream proxying"
 
 **Current state**:
-- scred-proxy has FixedUpstream configuration
-- scred-mitm has NO upstream support
-- Code patterns exist in proxy_resolver.rs
+- scred-proxy has single FixedUpstream + pooling/caching (Phase 1 just added)
+- scred-mitm is generic proxy with multi-upstream routing (MitmConfig) but NO pooling/caching
+- OptimizedDnsResolver exists in scred-http (Phase 1 deliverable)
 
 **How**:
-1. Add UpstreamConfig to MITM configuration
-2. Modify HTTP/1.1 handler to support upstream forwarding
-3. Modify H2MitmHandler to support upstream forwarding
-4. Implement CONNECT tunneling with upstream
-5. Add Via header support
+1. Integrate OptimizedDnsResolver into scred-mitm (same as scred-proxy)
+2. Add multi-key connection pool (keyed by upstream address)
+3. Dynamically create pools for new upstreams
+4. Apply logging reduction (same pattern as P1-3)
 
 **Files to modify**:
-- crates/scred-mitm/src/config.rs (add UpstreamConfig)
-- crates/scred-mitm/src/mitm/http_handler.rs (use upstream)
-- crates/scred-mitm/src/mitm/h2_mitm_handler.rs (use upstream)
+- crates/scred-mitm/src/main.rs (initialize OptimizedDnsResolver)
+- crates/scred-mitm/src/mitm/http_handler.rs (use resolver + pool)
+- crates/scred-mitm/src/mitm/h2_mitm_handler.rs (use resolver + pool)
+- crates/scred-mitm/src/mitm/*.rs (logging reduction)
 
-**Expected**: MITM can forward to upstream
-**Risk**: MEDIUM (CONNECT with upstream requires careful handling)
+**Expected**: Efficient multi-upstream proxying, same perf as Phase 1
+**Risk**: MEDIUM (multi-key pool requires careful design)
+
+**Code Reuse**: 90% from Phase 1 (OptimizedDnsResolver, patterns)
 
 **Tests**:
-- MITM → upstream (HTTP/1.1)
-- MITM → upstream (HTTPS with CONNECT)
-- MITM → upstream (HTTP/2)
-- Multiple hops
+- Concurrent requests to single upstream (same as proxy)
+- Concurrent requests to multiple different upstreams (new, MITM-specific)
+- Connection reuse verification per upstream
+- Dynamic pool creation for new upstreams
+- Idle timeout cleanup per pool
 
 ---
 
