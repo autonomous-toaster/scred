@@ -177,33 +177,47 @@ pub async fn handle_http_proxy(
     }
 
     // Connect to upstream server or upstream proxy
-    let mut upstream = if upstream_addr.contains("://") {
-        connect_through_proxy(upstream_addr, &target_host, target_port).await?
+    // Use union type to handle both TcpStream and PooledTcpStream
+    enum UpstreamConnection {
+        Direct(crate::pooled_dns_resolver::PooledTcpStream),
+        Proxy(tokio::net::TcpStream),
+    }
+    
+    let conn = if upstream_addr.contains("://") {
+        UpstreamConnection::Proxy(connect_through_proxy(upstream_addr, &target_host, target_port).await?)
     } else {
-        // Use OptimizedDnsResolver (cached + pooled)
-        // PooledTcpStream implements AsyncRead/AsyncWrite via Deref to TcpStream
-        let pooled = resolver.connect_with_retry(upstream_addr).await?;
-        // Leak the pool management but keep connection - trade-off for simplicity
-        // Better approach would be to thread pool through entire request handling
-        pooled.into_inner()
-            .ok_or_else(|| anyhow!("Failed to extract underlying TcpStream from pool"))?
+        UpstreamConnection::Direct(resolver.connect_with_retry(upstream_addr).await?)
     };
 
+    // Helper macro to call method on either variant
+    macro_rules! call_upstream {
+        ($conn:expr, $method:ident($($arg:expr),*)) => {
+            match $conn {
+                UpstreamConnection::Direct(ref mut s) => s.$method($($arg),*).await?,
+                UpstreamConnection::Proxy(ref mut s) => s.$method($($arg),*).await?,
+            }
+        };
+    }
+
+    let mut upstream = conn;
+
     // Forward redacted request to upstream
-    // When routing through an upstream proxy via CONNECT tunnel, we still send the
-    // origin-form HTTP request through the established tunnel.
-    upstream.write_all(redacted_request.as_bytes()).await?;
-    upstream.flush().await?;
+    call_upstream!(upstream, write_all(redacted_request.as_bytes()));
+    call_upstream!(upstream, flush());
 
     // Read response from upstream
     let mut response_buf = Vec::new();
     let mut buf = [0u8; 4096];
 
     loop {
-        match upstream.read(&mut buf).await? {
-            0 => break, // EOF
-            n => response_buf.extend_from_slice(&buf[..n]),
+        let n = match &mut upstream {
+            UpstreamConnection::Direct(s) => s.read(&mut buf).await?,
+            UpstreamConnection::Proxy(s) => s.read(&mut buf).await?,
+        };
+        if n == 0 {
+            break;
         }
+        response_buf.extend_from_slice(&buf[..n]);
     }
 
     let response_str = String::from_utf8_lossy(&response_buf).to_string();
