@@ -77,14 +77,32 @@ scred --redact CRITICAL,API_KEYS input.txt
 scred --detect ALL --redact CRITICAL input.txt
 ```
 
-**Pattern information**:
+**Pattern selection with glob patterns** (NEW):
 ```bash
-# List all 273+ patterns
-scred --list-patterns
+# Redact specific provider patterns using wildcards
+scred --redact "mysql*,postgresql*,mongodb*" input.txt
 
-# Show pattern tier
-scred --list-patterns | grep CRITICAL
+# Cloud providers
+scred --redact "aws-*,gcp-*,azure-*" input.txt
+
+# AI/ML APIs
+scred --redact "openai*,anthropic*,huggingface*" input.txt
+
+# Combine tiers + glob patterns
+scred --redact "CRITICAL,aws-*,github-*,openai-*" input.txt
+
+# Exclude test/mock patterns
+scred --redact "CRITICAL,API_KEYS,!test-*,!mock-*" input.txt
+
+# Complex production filtering
+scred --redact "CRITICAL,aws-*,gcp-*,mysql*,postgresql*,!test-*,!example-*" input.txt
 ```
+
+**Glob pattern syntax**:
+- `*` - Matches 0 or more characters (mysql*, aws-*, *-password)
+- `?` - Matches exactly 1 character (aws-?)
+- Literal matching - Exact name match (CRITICAL, API_KEYS)
+- `!pattern` - Exclude patterns (exclude these from results)
 
 ## Performance
 
@@ -319,6 +337,95 @@ Memory usage      Unbounded <64KB         Bounded
 - Zero-copy redaction using position-based matching
 - Pattern-aware tier filtering
 
+## Available Patterns
+
+### Pattern Selection by Tier
+
+SCRED organizes 273+ patterns into 5 risk tiers:
+
+**CRITICAL** (24 patterns):
+AWS credentials, GitHub tokens, Stripe keys, database credentials
+```bash
+scred --redact CRITICAL input.txt
+```
+
+**API_KEYS** (60+ patterns):
+OpenAI, Anthropic, Twilio, SendGrid, Slack, Discord, HuggingFace
+```bash
+scred --redact API_KEYS input.txt
+```
+
+**INFRASTRUCTURE** (40+ patterns):
+Kubernetes, Docker, Vault, Grafana, DataDog, New Relic
+```bash
+scred --redact INFRASTRUCTURE input.txt
+```
+
+**SERVICES** (100+ patterns):
+Payment processors, communication services, analytics
+```bash
+scred --redact SERVICES input.txt
+```
+
+**PATTERNS** (50+ patterns):
+JWT tokens, Bearer tokens, Basic Auth, generic credentials
+```bash
+scred --redact PATTERNS input.txt
+```
+
+### Pattern Selection by Name (Glob Matching)
+
+Use wildcards to select specific pattern families:
+
+**Database patterns**:
+```bash
+scred --redact "mysql*,postgresql*,mongodb*,redis*,mariadb*" input.txt
+```
+
+**Cloud providers**:
+```bash
+scred --redact "aws-*,gcp-*,azure-*,digitalocean-*" input.txt
+```
+
+**AI/ML APIs**:
+```bash
+scred --redact "openai*,anthropic*,huggingface*,cohere*" input.txt
+```
+
+**Payment processors**:
+```bash
+scred --redact "stripe*,paypal*,square*,braintree*" input.txt
+```
+
+### List All Available Patterns
+
+```bash
+# Show all 273+ pattern names
+scred --list-patterns
+
+# Filter by provider
+scred --list-patterns | grep mysql
+scred --list-patterns | grep aws
+scred --list-patterns | grep github
+```
+
+### Common Pattern Examples
+
+**Individual patterns**:
+- `aws-akia` - AWS Access Key ID
+- `github-pat` - GitHub Personal Access Token
+- `openai-api-key` - OpenAI API Key
+- `stripe-sk-live` - Stripe Secret Key (live)
+- `mysql-password` - MySQL Connection Password
+- `postgresql-dsn` - PostgreSQL Data Source Name
+
+**Pattern families** (use wildcards):
+- `aws-*` - All AWS patterns (akia, secret-access-key, etc.)
+- `github-*` - All GitHub patterns (pat, oauth, refresh, etc.)
+- `mysql*` - All MySQL patterns (mysql-password, mysql-dsn, etc.)
+- `*-password` - All -password patterns (mysql-password, postgres-password, etc.)
+- `stripe-*` - All Stripe patterns (sk-live, sk-test, webhook, etc.)
+
 ## Compatibility
 
 | Feature | Status |
@@ -341,6 +448,68 @@ Memory usage      Unbounded <64KB         Bounded
 - ✅ Stateless (no internal state leakage)
 - ✅ 100% safe Rust (zero unsafe blocks)
 - ✅ No un-redaction (secrets never exposed after detection)
+
+## Tips & Common Use Cases
+
+### Environment-Specific Pattern Selection
+
+**Development** (catch everything):
+```bash
+export SCRED_REDACT_PATTERNS="CRITICAL,API_KEYS,INFRASTRUCTURE,SERVICES,PATTERNS"
+scred < logfile.txt
+```
+
+**Staging** (CRITICAL + common databases):
+```bash
+export SCRED_REDACT_PATTERNS="CRITICAL,API_KEYS,mysql*,postgresql*,mongodb*"
+scred < logfile.txt
+```
+
+**Production** (CRITICAL only, exclude test patterns):
+```bash
+export SCRED_REDACT_PATTERNS="CRITICAL,!test-*,!example-*,!sandbox-*"
+scred < logfile.txt
+```
+
+### Microservices Architecture
+
+**Database layer only**:
+```bash
+scred --redact "mysql*,postgresql*,mongodb*,redis*" < database_logs.txt
+```
+
+**API layer only**:
+```bash
+scred --redact "openai*,anthropic*,stripe*,github-*" < api_logs.txt
+```
+
+**Full stack**:
+```bash
+scred --redact "CRITICAL,API_KEYS,mysql*,postgresql*,mongodb*,redis*,openai*,github-*" < app.log
+```
+
+### Real-World Examples
+
+**Scrub AWS logs**:
+```bash
+scred --redact "aws-*,CRITICAL" < cloudtrail.log > cleaned.log
+```
+
+**Protect GitHub CI logs**:
+```bash
+scred --redact "github-*,openai*,CRITICAL" < ci-output.txt > safe-logs.txt
+```
+
+**Clean database backups**:
+```bash
+scred --redact "mysql*,postgresql*,mongodb*,redis*" < backup.sql > clean-backup.sql
+```
+
+**Safe log aggregation**:
+```bash
+# Parse and redact, keeping only high-value patterns
+find /var/log -name "*.log" -exec scred --redact "CRITICAL,API_KEYS,!test-*" {} \; > aggregated.log
+```
 
 ## Contributing
 
