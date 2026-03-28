@@ -4,8 +4,9 @@ use scred_config::ConfigLoader;
 use scred_http::fixed_upstream::FixedUpstream;
 use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequestConfig};
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
-use scred_http::{dns_resolver::DnsResolver, http_line_reader::read_response_line, ConnectionPool};
+use scred_http::http_line_reader::read_response_line;
 use scred_http::{PatternSelector, ConfigurableEngine};
+use scred_http::{PooledDnsResolver, PoolConfig};
 use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::env;
 use std::sync::Arc;
@@ -13,7 +14,6 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsConnector;
 use tracing::{info, debug};
-use bytes::Bytes;
 
 /// Application mode for redaction
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -340,7 +340,11 @@ impl ProxyConfig {
     }
 }
 
-async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Result<()> {
+async fn handle_connection(
+    stream: TcpStream,
+    config: Arc<ProxyConfig>,
+    pool: Arc<PooledDnsResolver>,
+) -> Result<()> {
     let peer_addr = stream.peer_addr()?;
     info!("New connection from {}", peer_addr);
 
@@ -465,7 +469,7 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
     
     info!("[{}] Using proxy_host for Location rewriting: {}", peer_addr, proxy_host);
 
-    let tcp_stream = DnsResolver::connect_with_retry(&upstream_addr).await?;
+    let tcp_stream = pool.connect_with_retry(&upstream_addr).await?;
 
     if config.upstream.scheme == "https" {
         let tls_stream = connect_tls_upstream(tcp_stream, &config.upstream.host).await?;
@@ -545,10 +549,10 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
 
     Ok(())
 }
-async fn connect_tls_upstream(
-    stream: TcpStream,
+async fn connect_tls_upstream<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
+    stream: S,
     host: &str,
-) -> Result<tokio_rustls::client::TlsStream<TcpStream>> {
+) -> Result<tokio_rustls::client::TlsStream<S>> {
     let mut root_store = RootCertStore::empty();
     root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -639,14 +643,26 @@ async fn main() -> Result<()> {
     info!("Proxy listening on {}", listen_addr);
     info!("Upstream: {}://{}{}", config.upstream.scheme, config.upstream.authority(), config.upstream.base_path);
 
+    // Create connection pool for upstream
+    // Performance: Reuse connections to avoid TCP handshake overhead (5-10ms per connection)
+    let pool_config = PoolConfig {
+        max_connections: 10,
+        idle_timeout_secs: 30,
+        enabled: true,
+    };
+    let max_connections = pool_config.max_connections;
+    let pool = Arc::new(PooledDnsResolver::new(pool_config));
+    info!("Connection pool enabled: max {} connections per upstream", max_connections);
+
     let listener = TcpListener::bind(&listen_addr).await?;
 
     loop {
         let (stream, peer_addr) = listener.accept().await?;
         let config = Arc::clone(&config);
+        let pool = Arc::clone(&pool);
 
         tokio::spawn(async move {
-            match handle_connection(stream, config).await {
+            match handle_connection(stream, config, pool).await {
                 Ok(_) => info!("Connection from {} handled successfully", peer_addr),
                 Err(e) => tracing::error!("Error handling connection from {}: {}", peer_addr, e),
             }
