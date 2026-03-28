@@ -113,8 +113,6 @@ File Size | Throughput  | Memory
 1 GB      | Streaming   | <64 KB
 ```
 
-See [OPTIMIZATION_COMPLETE.md](OPTIMIZATION_COMPLETE.md) for detailed benchmarks and methodology.
-
 ## Supported Platforms
 
 - ✅ x86_64 (Linux, macOS)
@@ -260,11 +258,7 @@ echo "test content..." | ./target/release/scred
 
 ## Documentation
 
-- **[OPTIMIZATION_COMPLETE.md](OPTIMIZATION_COMPLETE.md)** - Performance optimization details and benchmarks
-- **[STDIN_OPTIMIZATION_SUMMARY.md](STDIN_OPTIMIZATION_SUMMARY.md)** - CLI throughput optimization methodology
-- **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - Complete project status and metrics
-- **[AGENT.md](AGENT.md)** - Development notes and architecture decisions
-- **[CHANGELOG.md](CHANGELOG.md)** - Version history
+For architecture decisions and development notes, see the git history and inline code comments.
 
 ## CLI Reference
 
