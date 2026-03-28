@@ -347,7 +347,7 @@ async fn handle_connection(stream: TcpStream, config: Arc<ProxyConfig>) -> Resul
     // Extract path from request line for per-path rule checking
     // Request line format: "GET /path HTTP/1.1"
     let (client_read, mut client_write) = stream.into_split();
-    let mut client_reader = BufReader::new(client_read);
+    let mut client_reader = BufReader::with_capacity(256 * 1024, client_read);  // 256KB buffer instead of default 8KB
 
     // HTTP/1.1 Keep-Alive: Handle multiple requests on same connection
     let mut request_count = 0;
