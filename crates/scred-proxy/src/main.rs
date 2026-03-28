@@ -5,7 +5,7 @@ use scred_http::fixed_upstream::FixedUpstream;
 use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequestConfig};
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
 use scred_http::http_line_reader::read_response_line;
-use scred_http::{PatternSelector, ConfigurableEngine};
+use scred_http::{PatternSelector, ConfigurableEngine, logging};
 use scred_http::{OptimizedDnsResolver, OptimizedDnsResolverBuilder};
 use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::env;
@@ -572,11 +572,42 @@ async fn connect_tls_upstream<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + 
     Ok(connector.connect(server_name, stream).await?)
 }
 
+fn print_help() {
+    println!("scred-proxy - Forward proxy with secret redaction");
+    println!();
+    println!("USAGE:");
+    println!("  scred-proxy [OPTIONS]");
+    println!();
+    println!("OPTIONS:");
+    println!("  -h, --help              Print this help message");
+    println!("  --list-tiers            Show available pattern tiers");
+    println!();
+    println!("ENVIRONMENT VARIABLES:");
+    println!("  SCRED_PROXY_UPSTREAM_URL       Upstream proxy URL (required)");
+    println!("  SCRED_PROXY_LISTEN             Listen address (default: 0.0.0.0:9999)");
+    println!("  SCRED_DETECT_PATTERNS          Patterns to detect (comma-separated tiers)");
+    println!("  SCRED_REDACT_PATTERNS          Patterns to redact (comma-separated tiers)");
+    println!("  SCRED_LOG_LEVEL                Log level: trace, debug, info, warn, error (default: info)");
+    println!("  SCRED_LOG_FORMAT               Log format: text, json, pretty (default: text)");
+    println!("  SCRED_LOG_OUTPUT               Log output: stdout, stderr, or file path (default: stderr)");
+    println!();
+    println!("EXAMPLES:");
+    println!("  scred-proxy");
+    println!("  SCRED_PROXY_UPSTREAM_URL=https://api.example.com scred-proxy");
+    println!("  scred-proxy --detect CRITICAL,API_KEYS");
+    println!();
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .init();
+    // Check for help flag before any logging
+    let args: Vec<String> = std::env::args().collect();
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        return Ok(());
+    }
+
+    logging::init()?;
 
     // Implement proper configuration precedence: CLI > ENV > File > Default
     // Step 1: Start with defaults
@@ -632,7 +663,7 @@ async fn main() -> Result<()> {
             info!("🔍 DETECT MODE: Logging all detected secrets (no redaction)");
         }
         RedactionMode::Redact => {
-            info!("🔐 REDACT MODE: Actively redacting detected secrets");
+            info!("REDACT MODE: Actively redacting detected secrets");
         }
         RedactionMode::Passthrough => {
             info!("📊 PASSTHROUGH MODE: Forwarding requests with minimal logging");
