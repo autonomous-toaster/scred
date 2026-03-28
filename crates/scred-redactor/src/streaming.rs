@@ -116,6 +116,7 @@ impl StreamingRedactor {
     ///    - If selector exists and pattern doesn't match -> un-redact
     ///    - Otherwise -> keep redacted
     /// 4. Output result with selective un-redaction applied
+    #[inline]
     pub fn process_chunk(
         &self,
         chunk: &[u8],

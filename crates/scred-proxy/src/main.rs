@@ -4,7 +4,7 @@ use scred_config::ConfigLoader;
 use scred_http::fixed_upstream::FixedUpstream;
 use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequestConfig};
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
-use scred_http::{dns_resolver::DnsResolver, http_line_reader::read_response_line};
+use scred_http::{dns_resolver::DnsResolver, http_line_reader::read_response_line, ConnectionPool};
 use scred_http::{PatternSelector, ConfigurableEngine};
 use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor, StreamingConfig};
 use std::env;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsConnector;
-use tracing::{info, debug, warn};
+use tracing::{info, debug};
 use bytes::Bytes;
 
 /// Application mode for redaction
