@@ -12,6 +12,7 @@ pub struct ProxyServer {
     cert_generator: Arc<CertificateGenerator>,
     redaction_engine: Arc<scred_redactor::RedactionEngine>,
     pool: Arc<scred_http::MultiUpstreamPool>,
+    resolver: Arc<scred_http::OptimizedDnsResolver>,
 }
 
 impl ProxyServer {
@@ -33,6 +34,7 @@ impl ProxyServer {
             cert_generator: Arc::new(cert_generator),
             redaction_engine: Arc::new(redaction_engine),
             pool: Arc::new(scred_http::MultiUpstreamPool::new()),
+            resolver: Arc::new(scred_http::OptimizedDnsResolverBuilder::new().build()),
         })
     }
 
@@ -48,11 +50,12 @@ impl ProxyServer {
             let cert_gen = self.cert_generator.clone();
             let redaction = self.redaction_engine.clone();
             let pool = self.pool.clone();
+            let resolver = self.resolver.clone();
 
             let upstream_resolver = Arc::new(scred_http::proxy_resolver::MitmConfig::from_env());
 
             tokio::spawn(async move {
-                if let Err(e) = handle_client(socket, peer_addr, upstream_resolver, cert_gen, redaction, config, pool).await {
+                if let Err(e) = handle_client(socket, peer_addr, upstream_resolver, cert_gen, redaction, config, pool, resolver).await {
                     warn!("Error handling client {}: {}", peer_addr, e);
                 }
             });
@@ -68,6 +71,7 @@ async fn handle_client(
     redaction_engine: Arc<scred_redactor::RedactionEngine>,
     config: Config,
     pool: Arc<scred_http::MultiUpstreamPool>,
+    resolver: Arc<scred_http::OptimizedDnsResolver>,
 ) -> Result<()> {
     let (mut socket_read, mut socket_write) = socket.into_split();
     
@@ -119,7 +123,7 @@ async fn handle_client(
             let (host, port) = scred_http::connect::parse_host_port(parts[1])
                 .map_err(|e| anyhow::anyhow!("Failed to parse host:port: {}", e))?;
 
-            info!("CONNECT {}:{} from {}", host, port, peer_addr);
+            debug!("CONNECT {}:{} from {}", host, port, peer_addr);
 
             // Read headers until blank line without buffering
             // We need to consume the \r\n\r\n sequence that terminates HTTP headers
@@ -159,7 +163,7 @@ async fn handle_client(
                 format!("{}:{}", host, port)
             };
             
-            info!("[PROXY] CONNECT tunnel: {} -> {} (upstream_addr will be: '{}')", peer_addr, host, upstream_addr);
+            debug!("[PROXY] CONNECT tunnel: {} -> {} (upstream_addr will be: '{}')", peer_addr, host, upstream_addr);
 
             // Send 200 Connection Established BEFORE doing TLS!
             // Client is waiting for this before upgrading to TLS

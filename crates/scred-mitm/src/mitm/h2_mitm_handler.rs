@@ -109,7 +109,7 @@ impl H2MitmHandler {
     ) -> Result<()> {
         let method = request.method().clone();
         let uri = request.uri().clone();
-        tracing::info!("[H2] Stream: {} {}", method, uri);
+        tracing::debug!("[H2] Stream: {} {}", method, uri);
 
         // Extract request parts and body
         let (request_parts, mut recv_stream) = request.into_parts();
@@ -124,7 +124,7 @@ impl H2MitmHandler {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("unknown");
         
-        tracing::info!("[H2 Stream] {} {} (authority: {})", method, uri, authority);
+        tracing::debug!("[H2 Stream] {} {} (authority: {})", method, uri, authority);
 
         // Read complete request body from h2::RecvStream
         let mut request_body = Vec::new();
@@ -134,7 +134,7 @@ impl H2MitmHandler {
             tracing::debug!("[H2] Received body chunk: {} bytes", chunk.len());
         }
 
-        tracing::info!("[H2] Request body received: {} bytes", request_body.len());
+        tracing::debug!("[H2] Request body received: {} bytes", request_body.len());
 
         // Apply redaction to request body if present with selector support
         let redacted_body = if !request_body.is_empty() {
@@ -191,7 +191,7 @@ impl H2MitmHandler {
         .await
         {
             Ok(response_bytes) => {
-                tracing::info!("[H2 MITM] Got response from upstream: {} bytes", response_bytes.len());
+                tracing::debug!("[H2 MITM] Got response from upstream: {} bytes", response_bytes.len());
                 
                 // Build HTTP/2 response
                 let response = Response::builder()
