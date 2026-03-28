@@ -16,8 +16,8 @@ use tracing::{debug, info, warn, error};
 /// Maximum number of DNS resolution attempts
 const MAX_RETRIES: u32 = 3;
 
-/// Initial backoff duration (milliseconds)
-const INITIAL_BACKOFF_MS: u64 = 100;
+/// Initial backoff duration (milliseconds) - reduced from 100ms to 10ms for faster retries
+const INITIAL_BACKOFF_MS: u64 = 10;
 
 /// DNS resolver with retry logic
 pub struct DnsResolver;
