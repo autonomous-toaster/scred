@@ -179,7 +179,6 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     // CRITICAL Tier - JWT tokens
     // JWT tokens contain sensitive claims and are commonly used for authentication
     map.insert("jwt-generic", PatternTier::Critical);
-    map.insert("jwt", PatternTier::Critical);
     
     // PATTERNS Tier (50+ patterns - regex-based)
     // Generic patterns

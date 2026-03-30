@@ -1,168 +1,151 @@
-# SCRED - Secret Redaction Tool
+# SCRED - Secret Redaction Engine
 
-Best effort secret redaction tool using non regex patterns with streaming in mind.
+🔒 **Fast, safe, and comprehensive secret redaction for logs, configs, and environment variables.**
+
+Detects and redacts 372+ sensitive credential patterns with character-preserving redaction and streaming support.
 
 ## What It Does
 
-Detects and redacts sensitive credentials from text, preserving structure and length:
+Finds and redacts secrets while preserving structure and length:
 
 ```bash
-# Simple redaction from stdin
-$ echo "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" | scred
-Authorization: Bearer eyJhbxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Redact all secrets from stdin (default: redacts ALL patterns)
+$ cat secrets.txt | scred
+$ env | scred > redacted_env.txt
+
+# Redact only critical secrets
+$ scred --redact CRITICAL < input.txt
+
+# Show what was detected (debug mode)
+$ scred --detect-only < input.txt
 
 # Stream large files with bounded memory
-$ scred < large_logfile.txt > redacted_logfile.txt
-
-# Selective redaction by pattern tier
-$ scred --detect ALL --redact CRITICAL < input.txt
-
-# Show what was detected
-$ scred --detect-only < input.txt
+$ scred < 1GB_logfile.txt > redacted_logfile.txt
 ```
 
-**Features**:
-- 273+ credential patterns (AWS, GitHub, Stripe, API keys, SSH keys, etc.)
-- Character-preserving redaction (maintains structure and length)
-- Streaming mode (bounded memory, <64KB typical, 102+ MB/s throughput)
-- Selective redaction by tier (CRITICAL, API_KEYS, PATTERNS, INFRASTRUCTURE, SERVICES)
-- Zero-regex architecture (no dependency on regex crate)
+**Key Features**:
+- **372+ credential patterns** - AWS, GitHub, Stripe, JWT, SSH keys, databases, etc.
+- **Redacts ALL by default** - Maximum security out of the box
+- **Character-preserving** - Output same length as input (keeps first 4 chars of tokens)
+- **Streaming mode** - <64KB memory, 102+ MB/s throughput
+- **Pattern tiers** - CRITICAL, API_KEYS, INFRASTRUCTURE, SERVICES, PATTERNS
+- **Zero-regex** - Fast, no regex dependency, <100µs detection per 10KB
+- **100% safe Rust** - No unsafe code
 
 ## Quick Start
 
 ### Installation
 
 ```bash
-# Build from source
+# Clone and build
+git clone https://github.com/autonomous-toaster/scred.git
+cd scred
 cargo build --release
 
-# Run
+# Binary at: ./target/release/scred
 ./target/release/scred --help
 ```
 
-### Usage
+### Basic Usage
 
-**Basic redaction**:
 ```bash
-# Redact from stdin
-echo $OPENAI_API_KEY| scred
-sk-Fxxxxxxxxxxxxxxxxxxxxx
+# Redact all secrets from stdin (default behavior)
+cat secrets.txt | scred
+env | scred > redacted_env.txt
 
-# Redact file
-scred input.txt > output.txt
+# Redact only CRITICAL patterns
+scred --redact CRITICAL < input.txt
 
-# Streaming mode (low memory, high throughput)
-scred < large_file.txt > redacted.txt
+# Redact only API_KEYS
+scred --redact API_KEYS < input.txt
+
+# Show what was detected (debug mode)
+scred --detect-only < input.txt
+
+# Verbose output with statistics
+scred -v < input.txt
 ```
 
-**Pattern selection with glob patterns** (NEW):
+### Advanced Pattern Selection
+
 ```bash
-# Redact specific provider patterns using wildcards
+# Redact specific providers using glob patterns
 scred --redact "mysql*,postgresql*,mongodb*" input.txt
-
-# Cloud providers
 scred --redact "aws-*,gcp-*,azure-*" input.txt
-
-# AI/ML APIs
 scred --redact "openai*,anthropic*,huggingface*" input.txt
 
-# Combine tiers + glob patterns
-scred --redact "CRITICAL,aws-*,github-*,openai-*" input.txt
+# Combine tiers + patterns
+scred --redact "CRITICAL,aws-*,github-*" input.txt
 
-# Exclude test/mock patterns
+# Exclude patterns
 scred --redact "CRITICAL,API_KEYS,!test-*,!mock-*" input.txt
 
-# Complex production filtering
-scred --redact "CRITICAL,aws-*,gcp-*,mysql*,postgresql*,!test-*,!example-*" input.txt
+# Complex filtering
+scred --redact "CRITICAL,aws-*,gcp-*,mysql*,postgresql*" input.txt
 ```
 
-**Glob pattern syntax**:
-- `*` - Matches 0 or more characters (mysql*, aws-*, *-password)
-- `?` - Matches exactly 1 character (aws-?)
-- Literal matching - Exact name match (CRITICAL, API_KEYS)
-- `!pattern` - Exclude patterns (exclude these from results)
+### Pattern Syntax
 
-## Performance
+- `TIER_NAME` - Redact entire tier (CRITICAL, API_KEYS, INFRASTRUCTURE, SERVICES, PATTERNS)
+- `pattern*` - Glob pattern (mysql*, aws-*, openai*)
+- `pattern?` - Single char wildcard (aws-?)
+- `exact-name` - Exact pattern match
+- `!pattern` - Exclude pattern
+- `ALL` - All 372 patterns
 
-### CLI Throughput
 
-**Streaming redaction with realistic workloads** (102-116 MB/s):
-- AWS credentials: ✅ Detected and redacted
-- GitHub tokens: ✅ Detected and redacted
-- JWT tokens: ✅ Detected and redacted
-- Mixed patterns: ✅ All tiers handled
+## What Gets Redacted
 
-**Measured on production hardware**:
-- Input: 100+ MB of mixed log/config files
-- Memory usage: <64KB (bounded buffer)
-- Throughput: 102-116 MB/s (stdin processing)
-- Latency: Sub-millisecond for small inputs
+### By Tier (372 patterns total)
 
-### Benchmark Results
-
-```
-File Size | Throughput  | Memory
-----------|-------------|--------
-1 MB      | 102-116 MB/s| <1 MB
-10 MB     | 105-110 MB/s| <64 KB
-100 MB    | 108-115 MB/s| <64 KB
-1 GB      | Streaming   | <64 KB
-```
-
-## Supported Platforms
-
-- ✅ x86_64 (Linux, macOS)
-- ✅ ARM64 (macOS, Linux)
-- ✅ Other platforms (portable Rust)
-- ✅ All: Zero unsafe code, 100% safe Rust
-
-## Credential Types Covered
-
-### By Tier
-
-**Critical** (87 patterns):
-- AWS, Azure, GCP credentials
-- GitHub tokens, personal access tokens
-- Stripe, payment processor keys
+**CRITICAL** (87 patterns) - Highest priority
+- AWS (AKIA, secret keys, session tokens, MFA)
+- Azure (AD client secrets, connection strings)
+- GCP (private keys, service accounts)
+- GitHub (PAT, OAuth, app tokens)
+- Stripe (API keys, payment intents)
 - OpenAI, Anthropic, Claude API keys
-- Database passwords, connection strings
+- MongoDB, PostgreSQL, MySQL connection strings
+- Vault, Consul tokens
+- JWT tokens (eyJ prefix)
 
-**Infrastructure** (124 patterns):
-- Kubernetes secrets, Docker registry credentials
-- Terraform, CloudFormation AWS credentials
+**API_KEYS** (60+ patterns)
+- OpenAI, Anthropic, Google, Slack, Twilio
+- SendGrid, Mailgun, Discord, Telegram
+- Notion, Hugging Face, Linear, Vercel
+- Supabase, Heroku, npm, PyPI
+- And 40+ more providers
+
+**INFRASTRUCTURE** (124 patterns)
+- Kubernetes secrets, Docker registry
+- Terraform, CloudFormation credentials
+- SSH keys, PGP keys, certificates
 - Helm, Ansible, SaltStack secrets
-- SSH keys, PGP keys, private certificates
-- API tokens for cloud services
+- Databricks, Grafana, Prometheus tokens
+- Vault, Consul, etcd credentials
 
-**Services** (22 patterns):
-- SaaS provider credentials
-- Third-party API keys
-- Service account tokens
-- Webhook tokens
+**SERVICES** (22 patterns)
+- Payment processors (Razorpay, Square, Braintree)
+- Communication services (Twilio, SendGrid)
+- SaaS credentials and webhooks
 
-**API Keys** (20 patterns):
-- Generic API keys
-- Service-specific token formats
+**PATTERNS** (79 patterns)
+- Bearer tokens, BasicAuth headers
+- Private keys, certificates
+- Database URLs, connection strings
+- Generic API key patterns
 
-**Generic** (2 patterns):
-- JWT tokens
-- Generic API key pattern
+### Supported Providers (250+)
 
-### Provider Coverage
+**Cloud**: AWS, Azure, GCP, DigitalOcean, Linode, Vultr  
+**Databases**: MongoDB, PostgreSQL, MySQL, Redis, Cassandra, Elasticsearch  
+**APIs**: OpenAI, Anthropic, Stripe, Slack, Discord, Twilio, SendGrid  
+**DevOps**: Kubernetes, Docker, Terraform, Ansible, Helm, Chef  
+**Git**: GitHub, GitLab, Gitea, Bitbucket  
+**Secrets**: Vault, Consul, 1Password, LastPass  
+**And 200+ more...**
 
-252+ providers including:
-- ✅ AWS, Azure, GCP
-- ✅ GitHub, GitLab, Gitea
-- ✅ Stripe, Adyen, PayPal
-- ✅ OpenAI, Anthropic, Cohere
-- ✅ Slack, Discord, Telegram
-- ✅ Kubernetes, Docker
-- ✅ MongoDB, PostgreSQL, MySQL, Redis
-- ✅ Firebase, Supabase
-- ✅ Twilio, SendGrid, Mailgun
-- ✅ And many more...
-
-See [pattern documentation](crates/scred-detector/src/patterns.rs) for complete list.
+See `scred --list-patterns` for complete list.
 
 ## Architecture
 
@@ -258,32 +241,41 @@ For architecture decisions and development notes, see the git history and inline
 
 ## CLI Reference
 
-### Options
+### Command Line Options
 
 ```bash
 scred [OPTIONS] [FILE]
 
 Arguments:
-  FILE                   File to redact (stdin if not provided)
+  FILE                        File to redact (stdin if not provided)
 
-Options:
-  --detect-only          Show detected patterns, don't redact
-  --detect PATTERNS      Patterns to detect (e.g., CRITICAL,API_KEYS,ALL)
-  --redact PATTERNS      Patterns to redact (e.g., CRITICAL,API_KEYS,ALL)
-  --list-patterns        Show all 273+ patterns
-  --help                 Show help
-  --version              Show version
+Pattern Options:
+  --detect <TYPES>            Patterns to detect (default: ALL)
+  --redact <TYPES>            Patterns to redact (default: ALL)
+
+Mode Options:
+  -v, --verbose               Show statistics and detected patterns
+  --env-mode, --env           Force environment variable mode
+  --text-mode                 Force text/pattern mode
+  --detect-only               Show detection result and exit (debug)
+
+Information:
+  --list-patterns             Show all 372 patterns
+  --describe <NAME>           Show details for a specific pattern
+  --filter-type <TYPE>        Filter patterns: fast, structured, regex
+  --help                      Show help
+  --version                   Show version
 ```
 
 ### Pattern Tiers
 
 Available tiers for `--detect` and `--redact`:
-- **CRITICAL** (87 patterns): AWS, Azure, GCP, GitHub, Stripe, API keys, database passwords
-- **API_KEYS** (20 patterns): Generic and provider-specific API key formats
-- **PATTERNS** (2 patterns): JWT tokens, regex-based patterns
-- **INFRASTRUCTURE** (124 patterns): SSH keys, certificates, Kubernetes, Docker, Terraform
-- **SERVICES** (22 patterns): SaaS credentials, webhook tokens, service accounts
-- **ALL** (273 total): All patterns
+- **CRITICAL** (87 patterns): AWS, Azure, GCP, GitHub, Stripe, OpenAI, JWT, databases
+- **API_KEYS** (60+ patterns): OpenAI, Anthropic, Google, Slack, Twilio, Discord, etc.
+- **INFRASTRUCTURE** (124 patterns): Kubernetes, Docker, SSH keys, Terraform, Vault, etc.
+- **SERVICES** (22 patterns): Payment processors, SaaS, webhooks, service accounts
+- **PATTERNS** (79 patterns): Bearer tokens, BasicAuth, private keys, connection strings
+- **ALL** (372 total): All patterns (default)
 
 ### As Library
 
@@ -298,16 +290,6 @@ for m in matches.iter() {
 }
 ```
 
-## Comparison: Before & After Optimization
-
-**Throughput improvements** (verified on production hardware):
-
-```
-                  Before    After    Improvement
-Streaming CLI     16.7 MB/s 102-116 MB/s  6.9×
-Library detection 48 MB/s   185.5 MB/s    3.8×
-Memory usage      Unbounded <64KB         Bounded
-```
 
 **Key optimizations**:
 - In-memory buffering for small inputs
@@ -404,28 +386,6 @@ scred --list-patterns | grep github
 - `*-password` - All -password patterns (mysql-password, postgres-password, etc.)
 - `stripe-*` - All Stripe patterns (sk-live, sk-test, webhook, etc.)
 
-## Compatibility
-
-| Feature | Status |
-|---------|--------|
-| Linux x86_64 | ✅ Tested |
-| macOS x86_64 | ✅ Tested |
-| macOS ARM64 | ✅ Tested |
-| Windows (MSVC) | ✅ Rust compatible |
-| Stable Rust | ✅ Required |
-| Nightly Rust | ✅ Compatible |
-| Safety | ✅ 100% safe Rust |
-
-## Security
-
-- ✅ No network communication
-- ✅ No external dependencies for core detection
-- ✅ Pattern matching only (no ML, no inference)
-- ✅ Deterministic redaction (same input = same output)
-- ✅ Bounded memory usage (<64KB for streaming)
-- ✅ Stateless (no internal state leakage)
-- ✅ 100% safe Rust (zero unsafe blocks)
-- ✅ No un-redaction (secrets never exposed after detection)
 
 ## Tips & Common Use Cases
 
@@ -488,31 +448,3 @@ scred --redact "mysql*,postgresql*,mongodb*,redis*" < backup.sql > clean-backup.
 # Parse and redact, keeping only high-value patterns
 find /var/log -name "*.log" -exec scred --redact "CRITICAL,API_KEYS,!test-*" {} \; > aggregated.log
 ```
-
-## Contributing
-
-Contributions welcome! Areas for improvement:
-- Additional provider patterns
-- False positive reduction
-- Custom pattern support
-- Performance optimizations
-- Additional CLI features
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## License
-
-[LICENSE](LICENSE) - See file for terms
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
----
-
-**Status**: 🟢 **Production Ready**  
-**Latest Version**: March 28, 2026  
-**Tests**: 71/71 passing  
-**Code Quality**: 100% safe Rust  
-**Throughput**: 102-116 MB/s (streaming)  
-**Confidence**: 🟢 **HIGH**
