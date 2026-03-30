@@ -59,12 +59,11 @@ fn parse_pattern_selectors(
         .or(detect_env.as_deref())
         .unwrap_or("ALL");
     
-    // Redact conservatively: only CRITICAL and API_KEYS by default
-    // PATTERNS tier (JWT, Bearer, BasicAuth) excluded to reduce log noise
-    // Users can explicitly enable: --redact CRITICAL,API_KEYS,PATTERNS
+    // Redact ALL patterns by default for maximum security
+    // Users can restrict redaction with --redact flag if needed
     let redact_str = redact_flag
         .or(redact_env.as_deref())
-        .unwrap_or("CRITICAL,API_KEYS");
+        .unwrap_or("ALL");
 
     // Parse selectors - EXIT on error instead of fallback
     let detect_selector = match PatternSelector::from_str(detect_str) {

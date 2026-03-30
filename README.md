@@ -1,8 +1,6 @@
 # SCRED - Secret Redaction Tool
 
-**Fast, accurate, portable secret detection and redaction** for 273+ credential types.
-
-Production-ready CLI and library with zero-regex architecture, bounded memory, and comprehensive testing.
+Best effort secret redaction tool using non regex patterns with streaming in mind.
 
 ## What It Does
 
@@ -24,14 +22,11 @@ $ scred --detect-only < input.txt
 ```
 
 **Features**:
-- ✅ 273+ credential patterns (AWS, GitHub, Stripe, API keys, SSH keys, etc.)
-- ✅ Character-preserving redaction (maintains structure and length)
-- ✅ Streaming mode (bounded memory, <64KB typical, 102+ MB/s throughput)
-- ✅ Selective redaction by tier (CRITICAL, API_KEYS, PATTERNS, INFRASTRUCTURE, SERVICES)
-- ✅ Zero-regex architecture (no dependency on regex crate)
-- ✅ TLS MITM proxy support
-- ✅ 71 comprehensive tests
-- ✅ Production-ready code quality
+- 273+ credential patterns (AWS, GitHub, Stripe, API keys, SSH keys, etc.)
+- Character-preserving redaction (maintains structure and length)
+- Streaming mode (bounded memory, <64KB typical, 102+ MB/s throughput)
+- Selective redaction by tier (CRITICAL, API_KEYS, PATTERNS, INFRASTRUCTURE, SERVICES)
+- Zero-regex architecture (no dependency on regex crate)
 
 ## Quick Start
 
@@ -50,31 +45,14 @@ cargo build --release
 **Basic redaction**:
 ```bash
 # Redact from stdin
-echo "My password is SecretPass123!" | scred
+echo $OPENAI_API_KEY| scred
+sk-Fxxxxxxxxxxxxxxxxxxxxx
 
 # Redact file
 scred input.txt > output.txt
 
 # Streaming mode (low memory, high throughput)
 scred < large_file.txt > redacted.txt
-```
-
-**Detection modes**:
-```bash
-# Show all detected patterns
-scred --detect-only input.txt
-
-# Redact only critical patterns
-scred --redact CRITICAL input.txt
-
-# Redact specific tiers
-scred --redact API_KEYS input.txt
-
-# Redact multiple tiers
-scred --redact CRITICAL,API_KEYS input.txt
-
-# Detect all, redact selectively
-scred --detect ALL --redact CRITICAL input.txt
 ```
 
 **Pattern selection with glob patterns** (NEW):

@@ -568,7 +568,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
     PrefixValidationPattern {
         name: "docker-registry-token",
         prefix: "eyJ0eXAiOiJ",  // Base64 for JWT header {"typ":"JWT"
-        tier: PatternTier::Infrastructure,
+        tier: PatternTier::Critical,
         min_len: 100,
         max_len: 0,
         charset: Charset::Base64,
@@ -808,7 +808,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
     PrefixValidationPattern {
         name: "web3-storage-token",
         prefix: "eyJ",  // Base64 for JWT header
-        tier: PatternTier::Infrastructure,
+        tier: PatternTier::Critical,
         min_len: 100,
         max_len: 0,
         charset: Charset::Base64,
@@ -1507,7 +1507,7 @@ pub struct JwtPattern {
 }
 
 pub const JWT_PATTERNS: &[JwtPattern] = &[
-    JwtPattern { name: "jwt-generic", tier: PatternTier::Patterns },
+    JwtPattern { name: "jwt-generic", tier: PatternTier::Critical },
 ];
 
 // ============================================================================

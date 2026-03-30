@@ -176,10 +176,13 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     map.insert("tumblr-api-key", PatternTier::Services);
     map.insert("generic-api-key", PatternTier::Services);
     
+    // CRITICAL Tier - JWT tokens
+    // JWT tokens contain sensitive claims and are commonly used for authentication
+    map.insert("jwt-generic", PatternTier::Critical);
+    map.insert("jwt", PatternTier::Critical);
+    
     // PATTERNS Tier (50+ patterns - regex-based)
     // Generic patterns
-    map.insert("jwt-generic", PatternTier::Patterns);
-    map.insert("jwt", PatternTier::Patterns);
     map.insert("bearer-token", PatternTier::Patterns);
     map.insert("basic-auth", PatternTier::Patterns);
     map.insert("authorization-header", PatternTier::Patterns);
