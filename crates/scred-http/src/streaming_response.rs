@@ -8,7 +8,7 @@ use anyhow::Result;
 use scred_redactor::StreamingRedactor;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::http_headers::parse_http_headers;
 use crate::chunked_parser::ChunkedParser;

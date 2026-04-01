@@ -5,7 +5,7 @@ use std::time::Instant;
 use std::os::unix::io::AsRawFd;
 
 use scred_redactor::get_all_patterns;
-use scred_http::{PatternSelector, CompositePatternSelector, env_detection};
+use scred_http::{PatternSelector, env_detection};
 use tracing::{info, debug};
 
 /// Check if stdin is connected to a terminal (TTY)
@@ -397,8 +397,8 @@ fn describe_pattern(name: &str) {
 fn run_with_auto_detect(
     verbose: bool,
     detect_only_flag: bool,
-    detect_selector: &PatternSelector,
-    redact_selector: &PatternSelector,
+    _detect_selector: &PatternSelector,
+    _redact_selector: &PatternSelector,
 ) -> (streaming::RedactionMode, Option<Vec<u8>>) {
     let _start = Instant::now();
     

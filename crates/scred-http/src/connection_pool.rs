@@ -1,12 +1,9 @@
 /// Simple HTTP connection pool for upstream proxies
 /// Reuses TCP connections with Keep-Alive to avoid repeated DNS/TCP handshakes
 
-use anyhow::Result;
 use std::collections::VecDeque;
-use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, Duration};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 /// Pooled connection with timeout
@@ -48,7 +45,7 @@ impl ConnectionPool {
         pool.retain(|conn| !conn.is_idle_timeout(self.max_idle_time));
         
         // Try to get a connection
-        if let Some(mut conn) = pool.pop_front() {
+        if let Some(conn) = pool.pop_front() {
             // Verify connection is still alive with a simple check
             // In a real implementation, we'd test with a TCP_KEEPALIVE option
             return Some(conn.stream);

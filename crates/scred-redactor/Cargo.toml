@@ -42,10 +42,4 @@ harness = false
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 
-[[bin]]
-name = "profile_components"
-path = "examples/profile_components.rs"
 
-[[bin]]
-name = "micro_profile"
-path = "examples/micro_profile.rs"

@@ -11,7 +11,7 @@ use anyhow::{anyhow, Result};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 use tokio::net::TcpStream;
-use tracing::{debug, info, warn, error};
+use tracing::{debug, warn, error};
 
 /// Maximum number of DNS resolution attempts
 const MAX_RETRIES: u32 = 3;

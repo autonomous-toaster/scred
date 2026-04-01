@@ -60,7 +60,7 @@ where
     R: AsyncReadExt + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    use tracing::info;
+    
     
     debug!("[stream_request_to_upstream] ENTRY: request_line={}", request_line);
 

@@ -70,7 +70,7 @@ async fn handle_client(
     cert_generator: Arc<CertificateGenerator>,
     redaction_engine: Arc<scred_redactor::RedactionEngine>,
     config: Config,
-    pool: Arc<scred_http::MultiUpstreamPool>,
+    _pool: Arc<scred_http::MultiUpstreamPool>,
     resolver: Arc<scred_http::OptimizedDnsResolver>,
 ) -> Result<()> {
     let (mut socket_read, mut socket_write) = socket.into_split();

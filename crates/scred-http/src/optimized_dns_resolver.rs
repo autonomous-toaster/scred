@@ -21,8 +21,6 @@ use crate::cached_dns_resolver::{CachedDnsResolver, CachedDnsConfig};
 use crate::pooled_dns_resolver::{PooledDnsResolver, PoolConfig};
 use anyhow::Result;
 use std::sync::Arc;
-use tokio::net::TcpStream;
-use tracing::info;
 
 /// Combined DNS resolver with both caching and pooling
 pub struct OptimizedDnsResolver {

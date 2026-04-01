@@ -1,9 +1,3 @@
-/// Multi-upstream connection pool for MITM
-///
-/// Maintains separate connection pools for each upstream address.
-/// Enables efficient proxying to multiple different upstreams.
-
-use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
