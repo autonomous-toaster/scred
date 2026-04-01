@@ -530,10 +530,9 @@ pub fn detect_uri_patterns(text: &[u8]) -> DetectionResult {
 /// - Environment variables (contain '='): keep key=value structure
 /// - Regular patterns: keep first 4 chars, redact rest
 fn apply_redaction_rule(buffer: &mut [u8], match_: &Match, original: &[u8]) {
-    let is_ssh_key = match_.pattern_type >= 300;
-    
-    // Env var detection: contains '=' in the original match
-    if !is_ssh_key && original[match_.start..match_.end].contains(&b'=') {
+    // Check for environment variables FIRST (contains '=')
+    // This takes precedence over SSH key type because env vars can have pattern_type >= 300
+    if original[match_.start..match_.end].contains(&b'=') {
         // Environment variable: key=value structure
         // Keep the key and equals sign, preserve first 4 chars of value, redact rest
         if let Some(eq_pos) = original[match_.start..match_.end].iter().position(|&b| b == b'=') {
@@ -541,13 +540,14 @@ fn apply_redaction_rule(buffer: &mut [u8], match_: &Match, original: &[u8]) {
             let preserve_len = 4.min(match_.end - value_start);
             let redact_start = value_start + preserve_len;
             
+            
             for i in redact_start..match_.end {
                 if i < buffer.len() {
                     buffer[i] = b'x';
                 }
             }
         }
-    } else if is_ssh_key {
+    } else if match_.pattern_type >= 300 {
         // SSH keys and certificates: fully redacted with 'x'
         for i in match_.start..match_.end {
             if i < buffer.len() {

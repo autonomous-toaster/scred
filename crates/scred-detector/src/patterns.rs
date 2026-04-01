@@ -192,19 +192,19 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
     PrefixValidationPattern { name: "docker-config-auth-env", prefix: "DOCKER_CONFIG_AUTH=", tier: PatternTier::Infrastructure, min_len: 40, max_len: 300, charset: Charset::Base64 },
     PrefixValidationPattern { name: "ssh-key-path-env", prefix: "SSH_KEY_PATH=/", tier: PatternTier::Infrastructure, min_len: 20, max_len: 500, charset: Charset::Any },
     
-    // Generic Environment Variable Suffixes: Fixed min_len too short (critical security issue)
-    // TOKEN was min_len:10, PASSWORD was min_len:8 - both dangerously short!
-    // Updated to min_len:20 for meaningful secrets + added max_len bounds
-    PrefixValidationPattern { name: "env-client-secret-suffix", prefix: "_CLIENT_SECRET=", tier: PatternTier::Critical, min_len: 20, max_len: 500, charset: Charset::Any },
-    PrefixValidationPattern { name: "env-api-key-suffix", prefix: "_API_KEY=", tier: PatternTier::Critical, min_len: 15, max_len: 500, charset: Charset::Any },
-    PrefixValidationPattern { name: "env-token-suffix", prefix: "_TOKEN=", tier: PatternTier::Critical, min_len: 20, max_len: 500, charset: Charset::Any },
-    PrefixValidationPattern { name: "env-secret-suffix", prefix: "_SECRET=", tier: PatternTier::Critical, min_len: 15, max_len: 500, charset: Charset::Any },
-    PrefixValidationPattern { name: "env-password-suffix", prefix: "_PASSWORD=", tier: PatternTier::Critical, min_len: 20, max_len: 500, charset: Charset::Any },
-    PrefixValidationPattern { name: "env-api-key-lowercase", prefix: "api_key=", tier: PatternTier::Critical, min_len: 15, max_len: 500, charset: Charset::Any },
-    // PGPASSWORD & PASSPHRASE: Fixed min_len too short (was 8 - dangerously permissive)
-    PrefixValidationPattern { name: "pgpassword-env", prefix: "PGPASSWORD=", tier: PatternTier::Critical, min_len: 20, max_len: 500, charset: Charset::Any },
-    PrefixValidationPattern { name: "passphrase-env", prefix: "PASSPHRASE=", tier: PatternTier::Critical, min_len: 20, max_len: 500, charset: Charset::Any },
-    PrefixValidationPattern { name: "env-client-secret-lowercase", prefix: "client_secret=", tier: PatternTier::Critical, min_len: 20, max_len: 500, charset: Charset::Any },
+    // Generic Environment Variable Patterns - REMOVED: OLD STRICT VERSIONS
+    // These were replaced by more lenient versions below (min_len: 1) to catch
+    // both short and long values. The old patterns required min_len: 15-20 which
+    // was too strict for detecting all environment variable secrets.
+    // Removed patterns:
+    // - env-client-secret-suffix (prefix="_CLIENT_SECRET=", min_len: 20)
+    // - env-api-key-suffix (prefix="_API_KEY=", min_len: 15)
+    // - env-token-suffix (prefix="_TOKEN=", min_len: 20)
+    // - env-secret-suffix (prefix="_SECRET=", min_len: 15)
+    // - env-password-prefix (prefix="_PASSWORD=", min_len: 20)
+    // - env-api-key-lowercase (prefix="api_key=", min_len: 15)
+    // - env-client-secret-lowercase (prefix="client_secret=", min_len: 20)
+    
     
     // Vault / Hashicorp (3 patterns)
     PrefixValidationPattern { name: "vault-api-token", prefix: "hvs.", tier: PatternTier::Critical, min_len: 30, max_len: 200, charset: Charset::Base64Url },
@@ -461,6 +461,41 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
     
     // SMTP mail server password (email authentication)
     PrefixValidationPattern { name: "smtp-password-env", prefix: "SMTP_PASSWORD=", tier: PatternTier::Critical, min_len: 15, max_len: 100, charset: Charset::Any },
+    
+    // Generic environment variable KEY=VALUE patterns (hardcoded for common naming conventions)
+    // These are added to catch PASSWORD=, SECRET=, TOKEN=, API_KEY=, APIKEY= in various forms
+    // with auto-generated variations (exact, prefix, suffix)
+    
+    // PASSWORD variations
+    PrefixValidationPattern { name: "env-password", prefix: "PASSWORD=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-password-prefix-lenient", prefix: "_PASSWORD=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-password-suffix", prefix: "PASSWORD_", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    
+    // SECRET variations
+    PrefixValidationPattern { name: "env-secret", prefix: "SECRET=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-secret-prefix-lenient", prefix: "_SECRET=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-secret-suffix", prefix: "SECRET_", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    
+    // TOKEN variations
+    PrefixValidationPattern { name: "env-token", prefix: "TOKEN=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-token-prefix-lenient", prefix: "_TOKEN=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-token-suffix", prefix: "TOKEN_", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    
+    // API_KEY variations
+    PrefixValidationPattern { name: "env-api-key", prefix: "API_KEY=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-api-key-prefix-lenient", prefix: "_API_KEY=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-api-key-suffix", prefix: "API_KEY_", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    
+    // APIKEY variations (no underscore)
+    PrefixValidationPattern { name: "env-apikey", prefix: "APIKEY=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-apikey-prefix", prefix: "_APIKEY=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-apikey-suffix", prefix: "APIKEY_", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    
+    // PASSPHRASE variations
+    PrefixValidationPattern { name: "env-passphrase", prefix: "PASSPHRASE=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-passphrase-prefix-lenient", prefix: "_PASSPHRASE=", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    PrefixValidationPattern { name: "env-passphrase-suffix", prefix: "PASSPHRASE_", tier: PatternTier::Critical, min_len: 1, max_len: 500, charset: Charset::Any },
+    
     PrefixValidationPattern {
         name: "bcrypt-password-hash",
         prefix: "$2",  // $2a, $2y, $2x variants
@@ -1783,7 +1818,7 @@ pub const URI_PATTERNS_COUNT: usize = 14; // Database URIs (11) + Webhook URLs (
 // ============================================================================
 
 pub const SIMPLE_PREFIX_COUNT: usize = 23; // Removed 4 overly broad patterns (generic-password, etc.)
-pub const PREFIX_VALIDATION_COUNT: usize = 348; // 349 patterns - 1 duplicate vault-api-token removed
+pub const PREFIX_VALIDATION_COUNT: usize = 359; // Removed 7 old strict env patterns, added 18 lenient ones (PASSWORD, SECRET, TOKEN, API_KEY, APIKEY, PASSPHRASE variations)
 pub const JWT_COUNT: usize = 1;
 pub const MULTILINE_MARKER_COUNT: usize = 11; // SSH keys + certificate + PGP patterns (Phase 4a-4c)
 
