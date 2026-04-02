@@ -1,0 +1,10 @@
+[package]
+name = "scred-bin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Launcher for LD_PRELOAD-based output redaction of arbitrary binaries"
+
+[dependencies]
+anyhow = { workspace = true }

@@ -1,4 +1,5 @@
 use crate::RedactionEngine;
+use std::io::{self, Read, Write};
 use std::sync::Arc;
 
 /// Statistics from a streaming redaction session
@@ -173,6 +174,90 @@ impl StreamingRedactor {
         (output_text, bytes_written, patterns_found)
     }
 
+    /// Byte-preserving variant for filesystem / binary-safe consumers.
+    ///
+    /// Unlike `process_chunk`/`process_chunk_in_place`, this never converts to String
+    /// and therefore preserves exact byte length and avoids UTF-8 lossy transformations.
+    pub fn process_chunk_bytes(
+        &self,
+        chunk: &[u8],
+        lookahead: &mut Vec<u8>,
+        is_eof: bool,
+    ) -> (Vec<u8>, u64, u64) {
+        use scred_detector::detect_all;
+
+        let mut combined = std::mem::take(lookahead);
+        combined.extend_from_slice(chunk);
+
+        let detection = detect_all(&combined);
+        let patterns_found = detection.matches.len() as u64;
+
+        let mut redacted = combined;
+        scred_detector::redact_in_place(&mut redacted, &detection.matches);
+
+        let redacted_len = redacted.len();
+        let output_end = if is_eof {
+            redacted_len
+        } else if redacted_len > self.config.lookahead_size {
+            redacted_len - self.config.lookahead_size
+        } else {
+            0
+        };
+
+        let output = if output_end > 0 {
+            redacted[..output_end].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        if !is_eof && output_end < redacted_len {
+            *lookahead = redacted[output_end..].to_vec();
+        } else {
+            lookahead.clear();
+        }
+
+        let bytes_written = output.len() as u64;
+        (output, bytes_written, patterns_found)
+    }
+
+    /// Redact reader to writer using byte-preserving streaming.
+    pub fn redact_reader_to_writer<R: Read, W: Write>(
+        &self,
+        reader: &mut R,
+        writer: &mut W,
+    ) -> io::Result<StreamingStats> {
+        let mut stats = StreamingStats::default();
+        let mut lookahead = Vec::with_capacity(self.config.lookahead_size);
+        let mut buf = vec![0u8; self.config.chunk_size];
+
+        loop {
+            let n = reader.read(&mut buf)?;
+            if n == 0 {
+                let (out, bytes_written, patterns_found) =
+                    self.process_chunk_bytes(&[], &mut lookahead, true);
+                if !out.is_empty() {
+                    writer.write_all(&out)?;
+                }
+                stats.bytes_written += bytes_written;
+                stats.patterns_found += patterns_found;
+                break;
+            }
+
+            let (out, bytes_written, patterns_found) =
+                self.process_chunk_bytes(&buf[..n], &mut lookahead, false);
+            if !out.is_empty() {
+                writer.write_all(&out)?;
+            }
+
+            stats.bytes_read += n as u64;
+            stats.bytes_written += bytes_written;
+            stats.patterns_found += patterns_found;
+            stats.chunks_processed += 1;
+        }
+
+        Ok(stats)
+    }
+
     /// Convenience method: process a complete buffer (one-shot)
     /// 
     /// # Notes on Optimization (Phase 4 - FrameRing)
@@ -242,6 +327,34 @@ impl StreamingRedactor {
             stats.bytes_written += bytes_written;
             stats.patterns_found += patterns;
             stats.chunks_processed += 1;
+        }
+
+        (output, stats)
+    }
+
+    pub fn redact_buffer_bytes(&self, data: &[u8]) -> (Vec<u8>, StreamingStats) {
+        let mut stats = StreamingStats::default();
+        let mut lookahead = Vec::with_capacity(self.config.lookahead_size);
+        let mut output = Vec::with_capacity(data.len());
+
+        for (i, chunk) in data.chunks(self.config.chunk_size).enumerate() {
+            let is_eof = (i + 1) * self.config.chunk_size >= data.len();
+            let (chunk_output, bytes_written, patterns) =
+                self.process_chunk_bytes(chunk, &mut lookahead, is_eof);
+
+            output.extend_from_slice(&chunk_output);
+            stats.bytes_read += chunk.len() as u64;
+            stats.bytes_written += bytes_written;
+            stats.patterns_found += patterns;
+            stats.chunks_processed += 1;
+        }
+
+        if data.is_empty() {
+            let (chunk_output, bytes_written, patterns) =
+                self.process_chunk_bytes(&[], &mut lookahead, true);
+            output.extend_from_slice(&chunk_output);
+            stats.bytes_written += bytes_written;
+            stats.patterns_found += patterns;
         }
 
         (output, stats)

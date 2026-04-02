@@ -1,0 +1,26 @@
+FROM rust:1-bookworm AS builder
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends pkg-config build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN cargo build --release -p scred-bin -p scred-bin-preload
+
+FROM debian:bookworm-slim
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl bash busybox python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/scred-bin /usr/local/bin/scred-bin
+COPY --from=builder /app/target/release/libscred_bin_preload.so /usr/local/lib/libscred_bin_preload.so
+
+ENV SCRED_BIN_PRELOAD_LIB=/usr/local/lib/libscred_bin_preload.so
+
+ENTRYPOINT ["/usr/local/bin/scred-bin"]
+CMD ["--help"]
