@@ -8,7 +8,6 @@ description = "Shared HTTP library for SCRED proxies"
 
 [dependencies]
 scred-redactor = { path = "../scred-redactor" }
-regex = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
