@@ -1,0 +1,101 @@
+# =============================================================================
+# SCRED Forward Proxy Configuration
+# =============================================================================
+# Policy: Replace placeholders with real secrets at runtime
+# Redaction: Remove secrets from responses to prevent leakage
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# POLICY CONFIGURATION (Placeholder Replacement)
+# -----------------------------------------------------------------------------
+# Containers use placeholders instead of real secrets.
+# Placeholders format: {SECRET_NAME}_{hash}
+# Example: OPENAI_API_KEY_a1b2c3d4e5f6
+# -----------------------------------------------------------------------------
+policy:
+  enabled: true
+  seed: "${SCRED_POLICY_SEED}"
+
+  # Discovery API - containers fetch their placeholders
+  # Endpoint: http://proxy:9998/placeholders
+  discovery:
+    enabled: true
+    port: 9998
+
+  # Default providers - glob patterns match environment variables
+  # These secrets are available to ALL hosts unless restricted
+  providers:
+    - type: env
+      keys:
+        - "*_API_KEY"
+        - "*_SECRET"
+        - "*_TOKEN"
+
+  # Where to replace placeholders with real secrets
+  location:
+    request_body: true
+    request_headers: true
+    response_body: true
+    response_headers: true
+    keep_headers: []
+    replace_headers: []
+
+# -----------------------------------------------------------------------------
+# REDACTION CONFIGURATION
+# -----------------------------------------------------------------------------
+# Remove secrets from responses to prevent leakage.
+# Runs AFTER policy replacement to catch any secrets in responses.
+# -----------------------------------------------------------------------------
+redaction:
+  mode: redact
+  patterns:
+    redact: ["*"]
+    keep: []
+
+# -----------------------------------------------------------------------------
+# FORWARD PROXY CONFIGURATION
+# -----------------------------------------------------------------------------
+scred-proxy:
+  listen:
+    port: 9999
+    address: "0.0.0.0"
+
+  upstream:
+    url: "http://httpbin:80"
+    timeout_secs: 30
+
+# -----------------------------------------------------------------------------
+# PER-HOST POLICIES (Recommended for Production)
+# -----------------------------------------------------------------------------
+# Uncomment to restrict which secrets are available to specific hosts.
+# This prevents accidental exposure of secrets to unintended services.
+#
+# Example: Only expose OpenAI keys to OpenAI API
+# policies:
+#   - hosts: ["*.openai.com"]
+#     policy:
+#       providers:
+#         - type: env
+#           keys: ["OPENAI_*"]  # Only OPENAI_API_KEY, OPENAI_ORG_ID, etc.
+#       location:
+#         request_body: true
+#         request_headers: true
+#         response_body: true   # Replace secrets in response
+#         response_headers: true
+#
+#   # Example: Only expose GitHub keys to GitHub API
+#   - hosts: ["api.github.com"]
+#     policy:
+#       providers:
+#         - type: env
+#           keys: ["GITHUB_*"]
+#
+#   # Example: Multiple keys for internal LLM gateway
+#   - hosts: ["llm.internal.example.com"]
+#     policy:
+#       providers:
+#         - type: env
+#           keys:
+#             - "OPENAI_API_KEY"
+#             - "ANTHROPIC_API_KEY"
+#             - "LITELLM_*"

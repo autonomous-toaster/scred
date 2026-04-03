@@ -118,10 +118,9 @@ fn test_exclude_test_patterns() {
 #[test]
 fn test_include_specific_exclude_pattern_family() {
     // Real-world: Include specific patterns but exclude one family
-    let selector = CompositePatternSelector::from_string(
-        "mysql*,postgresql*,mongodb*,redis*,!redis-dev*",
-    )
-    .unwrap();
+    let selector =
+        CompositePatternSelector::from_string("mysql*,postgresql*,mongodb*,redis*,!redis-dev*")
+            .unwrap();
 
     assert!(selector.matches("mysql-password", PatternTier::ApiKeys));
     assert!(selector.matches("postgresql-dsn", PatternTier::ApiKeys));
@@ -164,8 +163,8 @@ fn test_microservices_architecture_scenario() {
     // Real-world: Microservices with multiple databases and services
     // Database tier: mysql, postgres, mongo, redis
     // Service tier: stripe, sendgrid, twilio, datadog
-    let db_selector = CompositePatternSelector::from_string("mysql*,postgresql*,mongodb*,redis*")
-        .unwrap();
+    let db_selector =
+        CompositePatternSelector::from_string("mysql*,postgresql*,mongodb*,redis*").unwrap();
     let service_selector =
         CompositePatternSelector::from_string("stripe*,sendgrid*,twilio*,datadog*").unwrap();
 
@@ -185,10 +184,9 @@ fn test_tiered_deployment_scenario() {
     // Staging: CRITICAL + API_KEYS + common databases
     // Prod: CRITICAL only + exclude test patterns
 
-    let dev_selector = CompositePatternSelector::from_string(
-        "CRITICAL,API_KEYS,INFRASTRUCTURE,SERVICES,PATTERNS",
-    )
-    .unwrap();
+    let dev_selector =
+        CompositePatternSelector::from_string("CRITICAL,API_KEYS,INFRASTRUCTURE,SERVICES,PATTERNS")
+            .unwrap();
     let staging_selector =
         CompositePatternSelector::from_string("CRITICAL,API_KEYS,mysql*,postgresql*,mongodb*")
             .unwrap();
@@ -207,17 +205,17 @@ fn test_tiered_deployment_scenario() {
         let should_dev = true; // Dev matches all tiers
 
         let should_staging = match pattern_name {
-            "aws-akia" => true,           // CRITICAL
-            "github-pat" => true,         // CRITICAL
-            "openai-api-key" => true,     // API_KEYS
-            "mysql-password" => true,     // mysql*
-            "mytest-secret" => false,     // Not CRITICAL, API_KEYS, mysql*, postgresql*, mongodb*
+            "aws-akia" => true,       // CRITICAL
+            "github-pat" => true,     // CRITICAL
+            "openai-api-key" => true, // API_KEYS
+            "mysql-password" => true, // mysql*
+            "mytest-secret" => false, // Not CRITICAL, API_KEYS, mysql*, postgresql*, mongodb*
             _ => false,
         };
 
         let should_prod = match pattern_name {
-            "aws-akia" => true,       // CRITICAL
-            "github-pat" => true,     // CRITICAL
+            "aws-akia" => true,        // CRITICAL
+            "github-pat" => true,      // CRITICAL
             "openai-api-key" => false, // Not CRITICAL
             "mysql-password" => false, // Not CRITICAL
             "mytest-secret" => false,  // Not CRITICAL
@@ -249,10 +247,9 @@ fn test_tiered_deployment_scenario() {
 fn test_security_team_audit_scenario() {
     // Real-world: Security team wants to audit all CRITICAL patterns
     // but exclude internal/test patterns
-    let selector = CompositePatternSelector::from_string(
-        "CRITICAL,!internal-*,!test-*,!sandbox-*,!dev-*",
-    )
-    .unwrap();
+    let selector =
+        CompositePatternSelector::from_string("CRITICAL,!internal-*,!test-*,!sandbox-*,!dev-*")
+            .unwrap();
 
     assert!(selector.matches("aws-akia", PatternTier::Critical));
     assert!(selector.matches("github-pat", PatternTier::Critical));

@@ -1,0 +1,25 @@
+[package]
+name = "scred-policy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+sha2 = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+wax = { workspace = true }
+serde_json = "1.0"
+aho-corasick = "1.0"
+http = "1.0"
+scred-config = { path = "../scred-config" }
+scred-redactor = { path = "../scred-redactor" }
+
+[dev-dependencies]
+tokio-test = "0.4"

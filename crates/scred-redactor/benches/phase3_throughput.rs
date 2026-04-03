@@ -169,8 +169,10 @@ fn benchmark_redaction(data: &[u8]) {
     let reduction = 100.0 - (result.len() as f64 / data.len() as f64) * 100.0;
 
     println!("Total time: {:?}", total_time);
-    println!("Throughput: {:.2} MB/s", 
-        (data.len() as f64 / (1024.0 * 1024.0)) / total_time.as_secs_f64());
+    println!(
+        "Throughput: {:.2} MB/s",
+        (data.len() as f64 / (1024.0 * 1024.0)) / total_time.as_secs_f64()
+    );
     println!("Input size: {} MB", data.len() / (1024 * 1024));
     println!("Output size: {} MB", result.len() / (1024 * 1024));
     println!("Space reduction: {:.2}%\n", reduction);
@@ -183,6 +185,9 @@ fn benchmark_memory_usage() {
 
     // Estimate memory from binary size
     let binary_size = std::mem::size_of::<Vec<u8>>() * 1000; // Rough estimate
-    println!("Estimated runtime memory: ~{} KB (library)", binary_size / 1024);
+    println!(
+        "Estimated runtime memory: ~{} KB (library)",
+        binary_size / 1024
+    );
     println!("Note: Use /usr/bin/time -v or ps for actual measurements\n");
 }

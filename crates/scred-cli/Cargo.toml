@@ -9,7 +9,7 @@ description = "Secret redaction CLI tool"
 [dependencies]
 scred-config = { path = "../scred-config" }
 scred-redactor = { path = "../scred-redactor" }
-scred-http = { path = "../scred-http" }
+scred-http = { path = "../scred-http", features = ["redaction"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 libc = "0.2"

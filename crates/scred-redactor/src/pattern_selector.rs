@@ -1,6 +1,5 @@
 /// Phase 4: Pattern Selector
 /// Flexible pattern selection with 6 modes: All, Tiers, Patterns, Tags, Wildcard, Regex
-
 use crate::metadata_cache::{MetadataCache, PatternMetadata, RiskTier};
 use std::collections::HashSet;
 
@@ -79,11 +78,11 @@ impl GlobMatcher {
 /// DIMENSION 1: Severity - Actual risk if the secret is leaked
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Severity {
-    Critical = 95,  // Signing keys, database credentials, payment keys (high impact if leaked)
-    High = 85,      // AWS/GitHub tokens, cloud credentials (high value targets)
-    Medium = 65,    // Generic API keys, OAuth tokens (medium impact)
-    Low = 40,       // Specialty/niche services (low impact, easy to rotate)
-    Generic = 30,   // Regex patterns, generic formats (lowest confidence)
+    Critical = 95, // Signing keys, database credentials, payment keys (high impact if leaked)
+    High = 85,     // AWS/GitHub tokens, cloud credentials (high value targets)
+    Medium = 65,   // Generic API keys, OAuth tokens (medium impact)
+    Low = 40,      // Specialty/niche services (low impact, easy to rotate)
+    Generic = 30,  // Regex patterns, generic formats (lowest confidence)
 }
 
 impl Severity {
@@ -106,10 +105,7 @@ impl Severity {
     }
 
     pub fn parse_list(input: &str) -> Result<Vec<Self>, String> {
-        input
-            .split(',')
-            .map(|s| Self::from_str(s.trim()))
-            .collect()
+        input.split(',').map(|s| Self::from_str(s.trim())).collect()
     }
 
     pub fn from_str(s: &str) -> Result<Self, String> {
@@ -133,17 +129,17 @@ impl std::fmt::Display for Severity {
 /// DIMENSION 2: Service Category - What type of service/system?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceCategory {
-    CloudProvider,      // AWS, Azure, GCP
-    PaymentProcessor,   // Stripe, Square, PayPal, etc.
-    CodeHost,          // GitHub, GitLab, Bitbucket, etc.
-    Database,          // PostgreSQL, MongoDB, MySQL, etc.
-    Messaging,         // Slack, Discord, Telegram, etc.
-    Infrastructure,    // Docker, K8s, Vault, etcd, etc.
-    Authentication,    // Auth0, Okta, KeyCloak, etc.
-    Monitoring,        // Datadog, New Relic, Grafana, etc.
-    Development,       // npm, PyPI, RubyGems, etc.
-    AI,                // OpenAI, Anthropic, Huggingface, etc.
-    Other,             // Everything else
+    CloudProvider,    // AWS, Azure, GCP
+    PaymentProcessor, // Stripe, Square, PayPal, etc.
+    CodeHost,         // GitHub, GitLab, Bitbucket, etc.
+    Database,         // PostgreSQL, MongoDB, MySQL, etc.
+    Messaging,        // Slack, Discord, Telegram, etc.
+    Infrastructure,   // Docker, K8s, Vault, etcd, etc.
+    Authentication,   // Auth0, Okta, KeyCloak, etc.
+    Monitoring,       // Datadog, New Relic, Grafana, etc.
+    Development,      // npm, PyPI, RubyGems, etc.
+    AI,               // OpenAI, Anthropic, Huggingface, etc.
+    Other,            // Everything else
 }
 
 impl ServiceCategory {
@@ -164,10 +160,7 @@ impl ServiceCategory {
     }
 
     pub fn parse_list(input: &str) -> Result<Vec<Self>, String> {
-        input
-            .split(',')
-            .map(|s| Self::from_str(s.trim()))
-            .collect()
+        input.split(',').map(|s| Self::from_str(s.trim())).collect()
     }
 
     pub fn from_str(s: &str) -> Result<Self, String> {
@@ -197,9 +190,9 @@ impl std::fmt::Display for ServiceCategory {
 /// DIMENSION 3: Pattern Kind - How is the pattern detected?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PatternKind {
-    FixedPrefix,       // Starts with known prefix (e.g., AKIA for AWS)
-    StructuredFormat,  // JWT, PEM, Base64-encoded format
-    RegexBased,        // Generic regex pattern
+    FixedPrefix,      // Starts with known prefix (e.g., AKIA for AWS)
+    StructuredFormat, // JWT, PEM, Base64-encoded format
+    RegexBased,       // Generic regex pattern
 }
 
 impl PatternKind {
@@ -212,10 +205,7 @@ impl PatternKind {
     }
 
     pub fn parse_list(input: &str) -> Result<Vec<Self>, String> {
-        input
-            .split(',')
-            .map(|s| Self::from_str(s.trim()))
-            .collect()
+        input.split(',').map(|s| Self::from_str(s.trim())).collect()
     }
 
     pub fn from_str(s: &str) -> Result<Self, String> {
@@ -237,8 +227,8 @@ impl std::fmt::Display for PatternKind {
 /// DIMENSION 4: Origin - Internal or external service?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Origin {
-    FirstParty,  // Internal company services
-    ThirdParty,  // External vendor services
+    FirstParty, // Internal company services
+    ThirdParty, // External vendor services
 }
 
 impl Origin {
@@ -264,25 +254,25 @@ impl std::fmt::Display for Origin {
 pub enum PatternSelector {
     /// All 274 patterns
     All,
-    
+
     /// No patterns (don't detect/redact anything)
     None,
-    
+
     /// Specific tiers (e.g., [Critical, ApiKeys])
     Tiers(Vec<RiskTier>),
-    
+
     /// Select by pattern type (performance-based: FastPrefix, StructuredFormat, RegexBased)
     Type(Vec<String>), // "fast", "structured", "regex"
-    
+
     /// Exact pattern names
     Patterns(Vec<String>),
-    
+
     /// By tags (exact match)
     Tags(Vec<String>),
-    
+
     /// Wildcard matching (e.g., "aws-*", "github-*")
     Wildcard(String),
-    
+
     /// Regex pattern matching
     Regex(Vec<String>),
 }
@@ -302,10 +292,10 @@ impl Default for PatternSelector {
 pub enum PatternFilter {
     /// Match by tier: CRITICAL, API_KEYS, INFRASTRUCTURE, SERVICES, PATTERNS
     Tier(RiskTier),
-    
+
     /// Match by glob pattern name: mysql*, aws-*, github-*
     GlobName(String),
-    
+
     /// Exclude pattern by glob: !test-*, !mock-*
     Exclude(String),
 }
@@ -325,7 +315,7 @@ impl PatternFilter {
             }
         }
     }
-    
+
     /// Check if this exclusion filter should block a pattern
     pub fn should_exclude(&self, pattern_name: &str) -> bool {
         if let PatternFilter::Exclude(glob) = self {
@@ -335,21 +325,21 @@ impl PatternFilter {
             false
         }
     }
-    
+
     /// Parse a single filter from string
     /// Examples: "CRITICAL", "mysql*", "!test-*", "exclude:dummy-*"
     pub fn from_str(s: &str) -> Result<Self, String> {
         let s = s.trim();
-        
+
         // Handle exclusion patterns
         if s.starts_with('!') {
             return Ok(PatternFilter::Exclude(s[1..].to_string()));
         }
-        
+
         if s.starts_with("exclude:") {
             return Ok(PatternFilter::Exclude(s[8..].to_string()));
         }
-        
+
         // Handle tier names (case-insensitive)
         match s.to_uppercase().as_str() {
             "CRITICAL" => return Ok(PatternFilter::Tier(RiskTier::Critical)),
@@ -360,7 +350,7 @@ impl PatternFilter {
             "ALL" => return Ok(PatternFilter::Tier(RiskTier::Critical)), // Special case: ALL means all tiers
             _ => {}
         }
-        
+
         // Otherwise treat as glob pattern name
         Ok(PatternFilter::GlobName(s.to_string()))
     }
@@ -387,26 +377,26 @@ impl CompositePatternSelector {
     pub fn from_string(spec: &str) -> Result<Self, String> {
         let mut inclusions = Vec::new();
         let mut exclusions = Vec::new();
-        
+
         for filter_str in spec.split(',') {
             let filter = PatternFilter::from_str(filter_str)?;
-            
+
             match &filter {
                 PatternFilter::Exclude(_) => exclusions.push(filter),
                 _ => inclusions.push(filter),
             }
         }
-        
+
         if inclusions.is_empty() {
             return Err("No inclusion filters specified".to_string());
         }
-        
+
         Ok(Self {
             inclusions,
             exclusions,
         })
     }
-    
+
     /// Check if a pattern should be selected
     /// Returns true if:
     /// 1. Pattern matches at least one inclusion filter, AND
@@ -418,40 +408,46 @@ impl CompositePatternSelector {
                 return false;
             }
         }
-        
+
         // Check inclusions (at least one must match)
         for inclusion in &self.inclusions {
             if inclusion.matches(pattern_name, pattern_tier) {
                 return true;
             }
         }
-        
+
         false
     }
-    
+
     /// Get description of this selector
     pub fn description(&self) -> String {
-        let inclusion_strs: Vec<String> = self.inclusions.iter().map(|f| {
-            match f {
+        let inclusion_strs: Vec<String> = self
+            .inclusions
+            .iter()
+            .map(|f| match f {
                 PatternFilter::Tier(t) => format!("tier:{:?}", t),
                 PatternFilter::GlobName(g) => format!("glob:{}", g),
                 PatternFilter::Exclude(_) => unreachable!(),
-            }
-        }).collect();
-        
+            })
+            .collect();
+
         let mut desc = inclusion_strs.join(", ");
-        
+
         if !self.exclusions.is_empty() {
-            let exclude_strs: Vec<String> = self.exclusions.iter().map(|f| {
-                if let PatternFilter::Exclude(g) = f {
-                    format!("!{}", g)
-                } else {
-                    unreachable!()
-                }
-            }).collect();
+            let exclude_strs: Vec<String> = self
+                .exclusions
+                .iter()
+                .map(|f| {
+                    if let PatternFilter::Exclude(g) = f {
+                        format!("!{}", g)
+                    } else {
+                        unreachable!()
+                    }
+                })
+                .collect();
             desc.push_str(&format!(", excluding: {}", exclude_strs.join(", ")));
         }
-        
+
         desc
     }
 }
@@ -466,71 +462,62 @@ impl PatternSelector {
         match self {
             PatternSelector::All => true,
             PatternSelector::None => false,
-            
-            PatternSelector::Tiers(tiers) => {
-                tiers.iter().any(|t| t == &metadata.tier)
-            },
-            
+
+            PatternSelector::Tiers(tiers) => tiers.iter().any(|t| t == &metadata.tier),
+
             PatternSelector::Type(_types) => {
                 // TODO: Add pattern_type to PatternMetadata once integrated
                 // For now, Type filtering happens at detector level
                 true
-            },
-            
-            PatternSelector::Patterns(names) => {
-                names.iter().any(|n| n == &metadata.name)
-            },
-            
+            }
+
+            PatternSelector::Patterns(names) => names.iter().any(|n| n == &metadata.name),
+
             PatternSelector::Tags(tags) => {
                 tags.iter().any(|tag| {
                     if tag.ends_with('*') {
                         // Prefix match
-                        let prefix = &tag[..tag.len()-1];
+                        let prefix = &tag[..tag.len() - 1];
                         metadata.tags.iter().any(|t| t.starts_with(prefix))
                     } else {
                         // Exact match
                         metadata.tags.contains(tag)
                     }
                 })
-            },
-            
-            PatternSelector::Wildcard(pattern) => {
-                self.wildcard_match_name(pattern, &metadata.name)
-            },
-            
+            }
+
+            PatternSelector::Wildcard(pattern) => self.wildcard_match_name(pattern, &metadata.name),
+
             PatternSelector::Regex(_regex_patterns) => {
                 // Regex matching: for now, simplified
                 false
-            },
+            }
         }
     }
-    
+
     /// Wildcard matching: "aws-*" matches "aws-access-key", etc.
     /// Uses efficient glob matching with * and ? support
     fn wildcard_match_name(&self, pattern: &str, name: &str) -> bool {
         let matcher = GlobMatcher::new(pattern);
         matcher.matches(name)
     }
-    
+
     /// Get all matching pattern names from cache
-    pub fn get_matching_patterns(
-        &self,
-        cache: &MetadataCache,
-    ) -> Vec<String> {
+    pub fn get_matching_patterns(&self, cache: &MetadataCache) -> Vec<String> {
         let mut matching = Vec::new();
-        
+
         match self {
             PatternSelector::All => {
                 // Get all pattern names
                 for name in cache.all_pattern_names() {
                     matching.push(name.clone());
                 }
-            },
-            
+            }
+
             PatternSelector::None => {
                 // No patterns match
-            },
-            
+            }
+
             PatternSelector::Tiers(tiers) => {
                 // Get patterns for each tier
                 for tier in tiers {
@@ -538,8 +525,8 @@ impl PatternSelector {
                         matching.extend_from_slice(patterns);
                     }
                 }
-            },
-            
+            }
+
             PatternSelector::Patterns(names) => {
                 // Filter to only specified names
                 for name in names {
@@ -547,8 +534,8 @@ impl PatternSelector {
                         matching.push(name.clone());
                     }
                 }
-            },
-            
+            }
+
             PatternSelector::Tags(tags) => {
                 // Collect all patterns with matching tags
                 let mut seen = HashSet::new();
@@ -561,8 +548,8 @@ impl PatternSelector {
                         }
                     }
                 }
-            },
-            
+            }
+
             PatternSelector::Wildcard(pattern) => {
                 // Find all patterns matching wildcard
                 for (name, _) in cache.all_patterns() {
@@ -570,36 +557,36 @@ impl PatternSelector {
                         matching.push(name.clone());
                     }
                 }
-            },
-            
+            }
+
             PatternSelector::Regex(_regex_patterns) => {
                 // Regex patterns - simplified for now
-            },
-            
+            }
+
             PatternSelector::Type(_types) => {
                 // Type filtering happens at detector level
                 // For now, return all patterns
                 for name in cache.all_pattern_names() {
                     matching.push(name.clone());
                 }
-            },
+            }
         }
-        
+
         matching
     }
-    
+
     /// Count matching patterns
     pub fn count_matches(&self, cache: &MetadataCache) -> usize {
         self.get_matching_patterns(cache).len()
     }
-    
+
     /// Get statistics about matching patterns by tier
     pub fn get_tier_distribution(&self, cache: &MetadataCache) -> Vec<(RiskTier, usize)> {
         let matching = self.get_matching_patterns(cache);
         let matching_set: HashSet<&String> = matching.iter().collect();
-        
+
         let mut distribution = Vec::new();
-        
+
         let tiers = vec![
             RiskTier::Critical,
             RiskTier::ApiKeys,
@@ -607,19 +594,19 @@ impl PatternSelector {
             RiskTier::Services,
             RiskTier::Patterns,
         ];
-        
+
         for tier in tiers {
             let count = if let Some(patterns) = cache.get_patterns_by_tier(&tier) {
                 patterns.iter().filter(|p| matching_set.contains(p)).count()
             } else {
                 0
             };
-            
+
             if count > 0 {
                 distribution.push((tier, count));
             }
         }
-        
+
         distribution
     }
 }
@@ -633,29 +620,27 @@ impl PatternSelector {
     pub fn default_detect() -> Self {
         PatternSelector::Tiers(vec![RiskTier::Critical, RiskTier::ApiKeys])
     }
-    
+
     /// Default redaction: Critical and ApiKeys only (exclude Infrastructure, Services, Patterns)
     pub fn default_redact() -> Self {
         PatternSelector::Tiers(vec![RiskTier::Critical, RiskTier::ApiKeys])
     }
-    
+
     /// Check if a pattern string matches this selector (for testing)
     pub fn matches_pattern(&self, _pattern: &str, tier: RiskTier) -> bool {
         // Check if this tier matches the selector
         match self {
             PatternSelector::All => true,
             PatternSelector::None => false,
-            
-            PatternSelector::Tiers(tiers) => {
-                tiers.iter().any(|t| *t == tier)
-            },
-            
+
+            PatternSelector::Tiers(tiers) => tiers.iter().any(|t| *t == tier),
+
             // For other selectors, we can't easily match by tier alone
             // Would need full PatternMetadata
             _ => true, // Conservative: match if we don't have enough info
         }
     }
-    
+
     /// Get description of selector
     pub fn description(&self) -> String {
         match self {
@@ -664,17 +649,17 @@ impl PatternSelector {
             PatternSelector::Tiers(tiers) => {
                 let tier_names: Vec<String> = tiers.iter().map(|t| format!("{:?}", t)).collect();
                 format!("Tiers: {}", tier_names.join(", "))
-            },
+            }
             PatternSelector::Type(types) => {
                 format!("Pattern Types: {}", types.join(", "))
-            },
+            }
             PatternSelector::Patterns(names) => format!("Patterns: {}", names.len()),
             PatternSelector::Tags(tags) => format!("Tags: {}", tags.join(", ")),
             PatternSelector::Wildcard(pattern) => format!("Wildcard: {}", pattern),
             PatternSelector::Regex(patterns) => format!("Regex: {}", patterns.join(", ")),
         }
     }
-    
+
     /// Parse selector from string format
     /// Examples:
     ///   "all"
@@ -686,20 +671,20 @@ impl PatternSelector {
     pub fn from_str(spec: &str) -> Result<Self, String> {
         Self::from_string(spec)
     }
-    
+
     pub fn from_string(spec: &str) -> Result<Self, String> {
         let spec_lower = spec.to_lowercase();
-        
+
         // Handle "all" or "ALL"
         if spec_lower == "all" {
             return Ok(PatternSelector::All);
         }
-        
+
         // Handle "none" or "NONE"
         if spec_lower == "none" {
             return Ok(PatternSelector::None);
         }
-        
+
         // Handle pattern types: fast, structured, regex, or combinations
         match spec_lower.as_str() {
             "fast" | "fastprefix" => {
@@ -713,21 +698,29 @@ impl PatternSelector {
             }
             _ => {}
         }
-        
+
         // Handle type:X,Y
         if let Some(rest) = spec_lower.strip_prefix("type:") {
-            let types: Vec<String> = rest
-                .split(',')
-                .map(|s| s.trim().to_lowercase())
-                .collect();
+            let types: Vec<String> = rest.split(',').map(|s| s.trim().to_lowercase()).collect();
             return Ok(PatternSelector::Type(types));
         }
-        
+
         // Handle comma-separated pattern types (e.g., "fast,structured")
         if !spec_lower.contains(':') && !spec_lower.contains('*') && !spec_lower.contains('^') {
             let parts: Vec<&str> = spec_lower.split(',').map(|s| s.trim()).collect();
-            if parts.iter().all(|p| matches!(p, &"fast" | &"fastprefix" | &"structured" | &"structuredformat" | &"regex" | &"regexbased")) {
-                let types: Vec<String> = parts.iter()
+            if parts.iter().all(|p| {
+                matches!(
+                    p,
+                    &"fast"
+                        | &"fastprefix"
+                        | &"structured"
+                        | &"structuredformat"
+                        | &"regex"
+                        | &"regexbased"
+                )
+            }) {
+                let types: Vec<String> = parts
+                    .iter()
                     .map(|p| match *p {
                         "fastprefix" => "fast".to_string(),
                         "structuredformat" => "structured".to_string(),
@@ -735,12 +728,15 @@ impl PatternSelector {
                         other => other.to_string(),
                     })
                     .collect();
-                if types.iter().all(|t| matches!(t.as_str(), "fast" | "structured" | "regex")) {
+                if types
+                    .iter()
+                    .all(|t| matches!(t.as_str(), "fast" | "structured" | "regex"))
+                {
                     return Ok(PatternSelector::Type(types));
                 }
             }
         }
-        
+
         // Handle tier:X,Y or TIER:X,Y
         if let Some(rest) = spec_lower.strip_prefix("tier:") {
             let tiers = rest
@@ -755,12 +751,12 @@ impl PatternSelector {
                     _ => None,
                 })
                 .collect::<Vec<_>>();
-            
+
             if !tiers.is_empty() {
                 return Ok(PatternSelector::Tiers(tiers));
             }
         }
-        
+
         // Handle comma-separated tier names without prefix (e.g., "CRITICAL" or "CRITICAL,API_KEYS")
         if !spec_lower.contains(':') && !spec_lower.contains('*') && !spec_lower.contains('^') {
             let tiers = spec_lower
@@ -775,40 +771,34 @@ impl PatternSelector {
                     _ => None,
                 })
                 .collect::<Vec<_>>();
-            
+
             if !tiers.is_empty() {
                 return Ok(PatternSelector::Tiers(tiers));
             }
         }
-        
+
         // Handle patterns:X,Y
         if let Some(rest) = spec_lower.strip_prefix("patterns:") {
-            let patterns = rest
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect();
+            let patterns = rest.split(',').map(|s| s.trim().to_string()).collect();
             return Ok(PatternSelector::Patterns(patterns));
         }
-        
+
         // Handle tags:X,Y
         if let Some(rest) = spec_lower.strip_prefix("tags:") {
-            let tags = rest
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect();
+            let tags = rest.split(',').map(|s| s.trim().to_string()).collect();
             return Ok(PatternSelector::Tags(tags));
         }
-        
+
         // Handle wildcard:X-*
         if let Some(rest) = spec_lower.strip_prefix("wildcard:") {
             return Ok(PatternSelector::Wildcard(rest.to_string()));
         }
-        
+
         // Handle regex:pattern
         if let Some(rest) = spec_lower.strip_prefix("regex:") {
             return Ok(PatternSelector::Regex(vec![rest.to_string()]));
         }
-        
+
         Err(format!(
             "Invalid selector spec: {}. Expected format:\n  \
             - 'all' or 'ALL'\n  \
@@ -832,7 +822,6 @@ impl PatternSelector {
 // ============================================================================
 // Tests
 // ============================================================================
-
 
 #[cfg(test)]
 mod glob_tests {
@@ -942,7 +931,12 @@ mod glob_tests {
         for (pattern, expected_matches) in matchers {
             let matcher = GlobMatcher::new(pattern);
             for name in expected_matches {
-                assert!(matcher.matches(name), "Pattern {} should match {}", pattern, name);
+                assert!(
+                    matcher.matches(name),
+                    "Pattern {} should match {}",
+                    pattern,
+                    name
+                );
             }
         }
     }
@@ -969,7 +963,11 @@ mod glob_tests {
         }
         let elapsed = start.elapsed();
         // Should be very fast (<1ms for 10k matches)
-        assert!(elapsed.as_millis() < 50, "Performance regression: {}ms for 10k matches", elapsed.as_millis());
+        assert!(
+            elapsed.as_millis() < 50,
+            "Performance regression: {}ms for 10k matches",
+            elapsed.as_millis()
+        );
     }
 
     #[test]
@@ -1012,7 +1010,8 @@ mod pattern_selector_glob_tests {
     #[test]
     fn test_selector_from_string_multiple_globs() {
         // Note: Currently supports "patterns:mysql*,postgres*" syntax
-        let selector = PatternSelector::from_string("patterns:mysql-password,postgres-dsn").unwrap();
+        let selector =
+            PatternSelector::from_string("patterns:mysql-password,postgres-dsn").unwrap();
         assert!(matches!(selector, PatternSelector::Patterns(_)));
     }
 }
@@ -1077,18 +1076,19 @@ mod composite_selector_tests {
     fn test_exclude_syntax_variations() {
         let selector1 = CompositePatternSelector::from_string("CRITICAL,!test-*").unwrap();
         let selector2 = CompositePatternSelector::from_string("CRITICAL,exclude:test-*").unwrap();
-        
+
         // Both should behave identically
         assert!(selector1.matches("aws-akia", RiskTier::Critical));
         assert!(selector2.matches("aws-akia", RiskTier::Critical));
-        
+
         assert!(!selector1.matches("test-secret", RiskTier::Critical));
         assert!(!selector2.matches("test-secret", RiskTier::Critical));
     }
 
     #[test]
     fn test_multiple_exclusions() {
-        let selector = CompositePatternSelector::from_string("CRITICAL,!test-*,!mock-*,!dummy-*").unwrap();
+        let selector =
+            CompositePatternSelector::from_string("CRITICAL,!test-*,!mock-*,!dummy-*").unwrap();
         assert!(selector.matches("aws-akia", RiskTier::Critical));
         assert!(!selector.matches("test-secret", RiskTier::Critical));
         assert!(!selector.matches("mock-password", RiskTier::Critical));
@@ -1099,19 +1099,20 @@ mod composite_selector_tests {
     fn test_complex_real_world_scenario() {
         // Detect CRITICAL tier + AWS/GitHub/OpenAI patterns, excluding test patterns
         let selector = CompositePatternSelector::from_string(
-            "CRITICAL,aws-*,github-*,openai-*,!test-*,!example-*"
-        ).unwrap();
-        
+            "CRITICAL,aws-*,github-*,openai-*,!test-*,!example-*",
+        )
+        .unwrap();
+
         // Should match
         assert!(selector.matches("aws-akia", RiskTier::Critical));
         assert!(selector.matches("aws-access-key", RiskTier::Critical));
         assert!(selector.matches("github-ghp", RiskTier::Critical));
         assert!(selector.matches("openai-sk-proj", RiskTier::Critical));
-        
+
         // Should NOT match (exclusions)
         assert!(!selector.matches("test-secret", RiskTier::Critical));
         assert!(!selector.matches("example-password", RiskTier::Critical));
-        
+
         // Should NOT match (not included - different pattern type)
         assert!(!selector.matches("mysql-password", RiskTier::ApiKeys));
     }
@@ -1119,15 +1120,14 @@ mod composite_selector_tests {
     #[test]
     fn test_database_pattern_selection() {
         // Select only database patterns
-        let selector = CompositePatternSelector::from_string(
-            "mysql*,postgresql*,mongodb*,redis*"
-        ).unwrap();
-        
+        let selector =
+            CompositePatternSelector::from_string("mysql*,postgresql*,mongodb*,redis*").unwrap();
+
         assert!(selector.matches("mysql-password", RiskTier::Critical));
         assert!(selector.matches("postgresql-dsn", RiskTier::Critical));
         assert!(selector.matches("mongodb-uri", RiskTier::Critical));
         assert!(selector.matches("redis-password", RiskTier::Critical));
-        
+
         assert!(!selector.matches("aws-akia", RiskTier::Critical));
         assert!(!selector.matches("github-ghp", RiskTier::Critical));
     }
@@ -1135,24 +1135,22 @@ mod composite_selector_tests {
     #[test]
     fn test_api_provider_selection() {
         // Select OpenAI, Anthropic, HuggingFace
-        let selector = CompositePatternSelector::from_string(
-            "openai*,anthropic*,huggingface*"
-        ).unwrap();
-        
+        let selector =
+            CompositePatternSelector::from_string("openai*,anthropic*,huggingface*").unwrap();
+
         assert!(selector.matches("openai-api-key", RiskTier::Critical));
         assert!(selector.matches("openai-sk-proj", RiskTier::Critical));
         assert!(selector.matches("anthropic-api-key", RiskTier::Critical));
         assert!(selector.matches("huggingface-token", RiskTier::ApiKeys));
-        
+
         assert!(!selector.matches("aws-akia", RiskTier::Critical));
     }
 
     #[test]
     fn test_tier_with_specific_glob_and_exclusion() {
-        let selector = CompositePatternSelector::from_string(
-            "CRITICAL,API_KEYS,mysql*,!test-*"
-        ).unwrap();
-        
+        let selector =
+            CompositePatternSelector::from_string("CRITICAL,API_KEYS,mysql*,!test-*").unwrap();
+
         // CRITICAL tier
         assert!(selector.matches("aws-akia", RiskTier::Critical));
         // API_KEYS tier
@@ -1173,14 +1171,17 @@ mod composite_selector_tests {
     #[test]
     fn test_pattern_filter_parsing() {
         let tier_filter = PatternFilter::from_str("CRITICAL").unwrap();
-        assert!(matches!(tier_filter, PatternFilter::Tier(RiskTier::Critical)));
-        
+        assert!(matches!(
+            tier_filter,
+            PatternFilter::Tier(RiskTier::Critical)
+        ));
+
         let glob_filter = PatternFilter::from_str("mysql*").unwrap();
         assert!(matches!(glob_filter, PatternFilter::GlobName(_)));
-        
+
         let exclude_filter1 = PatternFilter::from_str("!test-*").unwrap();
         assert!(matches!(exclude_filter1, PatternFilter::Exclude(_)));
-        
+
         let exclude_filter2 = PatternFilter::from_str("exclude:dummy-*").unwrap();
         assert!(matches!(exclude_filter2, PatternFilter::Exclude(_)));
     }
@@ -1197,9 +1198,10 @@ mod composite_selector_tests {
     #[test]
     fn test_performance_composite_matching() {
         let selector = CompositePatternSelector::from_string(
-            "CRITICAL,API_KEYS,mysql*,postgresql*,redis*,mongodb*,!test-*,!mock-*"
-        ).unwrap();
-        
+            "CRITICAL,API_KEYS,mysql*,postgresql*,redis*,mongodb*,!test-*,!mock-*",
+        )
+        .unwrap();
+
         // Verify it's fast (should be <1ms for 1000 matches)
         let start = std::time::Instant::now();
         for _ in 0..1000 {
@@ -1208,6 +1210,10 @@ mod composite_selector_tests {
             let _ = selector.matches("test-secret", RiskTier::Critical);
         }
         let elapsed = start.elapsed();
-        assert!(elapsed.as_millis() < 10, "Performance regression: {}ms for 3000 matches", elapsed.as_millis());
+        assert!(
+            elapsed.as_millis() < 10,
+            "Performance regression: {}ms for 3000 matches",
+            elapsed.as_millis()
+        );
     }
 }

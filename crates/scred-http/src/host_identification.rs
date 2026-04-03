@@ -7,7 +7,6 @@
 /// 4. Certificate CN from upstream (fallback)
 ///
 /// This is isomorphic to the Zig implementation
-
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
@@ -107,14 +106,12 @@ impl HostIdentification {
             }
         }
 
-        let host = selected_host.ok_or_else(|| anyhow!("No host identification source available"))?;
+        let host =
+            selected_host.ok_or_else(|| anyhow!("No host identification source available"))?;
 
         // Collect all sources for validation
         if let Some((h, p)) = &sources.connect_host {
-            alt_sources.insert(
-                "connect".to_string(),
-                format!("{}:{}", h, p),
-            );
+            alt_sources.insert("connect".to_string(), format!("{}:{}", h, p));
         }
         if let Some(h) = &sources.sni_host {
             alt_sources.insert("sni".to_string(), h.clone());
@@ -152,10 +149,7 @@ impl HostIdentification {
         // Check CONNECT vs SNI
         if let (Some((connect_host, _)), Some(sni)) = (&sources.connect_host, &sources.sni_host) {
             if connect_host != sni {
-                warn!(
-                    "CONNECT host '{}' != SNI host '{}'",
-                    connect_host, sni
-                );
+                warn!("CONNECT host '{}' != SNI host '{}'", connect_host, sni);
                 consistent = false;
             }
         }
@@ -184,10 +178,7 @@ impl HostIdentification {
         // Check Certificate CN against primary
         if let Some(cn) = &sources.cert_cn {
             if cn != primary_host {
-                warn!(
-                    "Primary host '{}' != certificate CN '{}'",
-                    primary_host, cn
-                );
+                warn!("Primary host '{}' != certificate CN '{}'", primary_host, cn);
                 consistent = false;
             }
         }
@@ -248,4 +239,3 @@ pub fn extract_sni_from_clienthello(_data: &[u8]) -> Option<String> {
     // which provides SNI info through the TLS connection
     None
 }
-

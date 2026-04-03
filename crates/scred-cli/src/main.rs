@@ -1,21 +1,19 @@
-use std::io::{self, Read};
 use std::env;
-use std::time::Instant;
+use std::io::{self, Read};
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
+use std::time::Instant;
 
+use scred_http::{env_detection, PatternSelector};
 use scred_redactor::get_all_patterns;
-use scred_http::{PatternSelector, env_detection};
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Check if stdin is connected to a terminal (TTY)
 /// Returns true if stdin is a terminal, false if piped/redirected
 #[cfg(unix)]
 fn stdin_is_tty() -> bool {
     use libc::isatty;
-    unsafe {
-        isatty(io::stdin().as_raw_fd()) == 1
-    }
+    unsafe { isatty(io::stdin().as_raw_fd()) == 1 }
 }
 
 #[cfg(not(unix))]
@@ -55,21 +53,20 @@ fn parse_pattern_selectors(
 
     // CLI flags take precedence over env vars
     // Detect ALL patterns by default (for logging visibility)
-    let detect_str = detect_flag
-        .or(detect_env.as_deref())
-        .unwrap_or("ALL");
-    
+    let detect_str = detect_flag.or(detect_env.as_deref()).unwrap_or("ALL");
+
     // Redact ALL patterns by default for maximum security
     // Users can restrict redaction with --redact flag if needed
-    let redact_str = redact_flag
-        .or(redact_env.as_deref())
-        .unwrap_or("ALL");
+    let redact_str = redact_flag.or(redact_env.as_deref()).unwrap_or("ALL");
 
     // Parse selectors - EXIT on error instead of fallback
     let detect_selector = match PatternSelector::from_str(detect_str) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("ERROR: Invalid SCRED_DETECT_PATTERNS value: '{}'", detect_str);
+            eprintln!(
+                "ERROR: Invalid SCRED_DETECT_PATTERNS value: '{}'",
+                detect_str
+            );
             eprintln!("Reason: {}", e);
             eprintln!("\nValid tier names: CRITICAL, API_KEYS, INFRASTRUCTURE, SERVICES, PATTERNS");
             eprintln!("Valid patterns: aws-*, github-*, sk-*, etc.");
@@ -86,7 +83,10 @@ fn parse_pattern_selectors(
     let redact_selector = match PatternSelector::from_str(redact_str) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("ERROR: Invalid SCRED_REDACT_PATTERNS value: '{}'", redact_str);
+            eprintln!(
+                "ERROR: Invalid SCRED_REDACT_PATTERNS value: '{}'",
+                redact_str
+            );
             eprintln!("Reason: {}", e);
             eprintln!("\nValid tier names: CRITICAL, API_KEYS, INFRASTRUCTURE, SERVICES, PATTERNS");
             eprintln!("Valid glob patterns: mysql*, aws-*, github-*, openai-*, etc.");
@@ -112,7 +112,7 @@ fn list_tiers_command() {
     println!();
     println!("{:<20} {:<10} Redact by Default", "Tier", "Risk");
     println!("{}", "=".repeat(50));
-    
+
     let tiers = [
         ("CRITICAL", "95%", "YES"),
         ("API_KEYS", "80%", "YES"),
@@ -135,7 +135,7 @@ fn list_tiers_command() {
 
 fn main() {
     // Initialize logging - DISABLED FOR DEBUGGING
-    
+
     // let log_level = if env::var("SCRED_DEBUG").is_ok() {
     //     "debug"
     // } else if env::var("SCRED_TRACE").is_ok() {
@@ -143,7 +143,7 @@ fn main() {
     // } else {
     //     "warn"
     // };
-    
+
     // tracing_subscriber::fmt()
     //     .with_max_level(log_level.parse().unwrap_or(tracing::Level::WARN))
     //     .with_target(false)
@@ -153,18 +153,18 @@ fn main() {
     //     .init();
 
     let args: Vec<String> = env::args().collect();
-    
+
     // Parse flags
     let verbose = args.iter().any(|arg| arg == "-v" || arg == "--verbose");
     let env_mode_forced = args.iter().any(|arg| arg == "--env-mode" || arg == "--env");
     let text_mode_forced = args.iter().any(|arg| arg == "--text-mode");
     let auto_detect_enabled = !args.iter().any(|arg| arg == "--auto-detect=off");
     let detect_only_flag = args.iter().any(|arg| arg == "--detect-only");
-    
+
     // New pattern tier flags
     let detect_flag = extract_flag_value(&args, "--detect");
     let redact_flag = extract_flag_value(&args, "--redact");
-    
+
     // Handle special commands
     if args.len() > 1 {
         match args[1].as_str() {
@@ -199,11 +199,8 @@ fn main() {
     }
 
     // Parse pattern selectors from flags and env vars
-    let (detect_selector, redact_selector) = parse_pattern_selectors(
-        detect_flag.as_deref(),
-        redact_flag.as_deref(),
-        verbose,
-    );
+    let (detect_selector, redact_selector) =
+        parse_pattern_selectors(detect_flag.as_deref(), redact_flag.as_deref(), verbose);
 
     // Determine which mode to use
     // FIX: Skip auto-detect if stdin is piped (not a TTY) to avoid blocking on read()
@@ -230,7 +227,7 @@ fn main() {
         debug!("[cli-mode] Using text mode (stdin is piped)");
         (streaming::RedactionMode::Text, None)
     };
-    
+
     // Use unified streaming redaction
     streaming::stream_and_redact(
         mode,
@@ -254,7 +251,9 @@ fn print_help() {
     println!("                          Combine: CRITICAL,API_KEYS,mysql*");
     println!("  --redact <TYPES>        Which patterns to redact (default: ALL)");
     println!("                          Same format as --detect");
-    println!("                          By default, ALL patterns are redacted for maximum security");
+    println!(
+        "                          By default, ALL patterns are redacted for maximum security"
+    );
     println!();
     println!("Mode Options:");
     println!("  -v, --verbose           Show statistics and detected patterns");
@@ -286,43 +285,48 @@ fn print_help() {
     println!("  env | scred > redacted_env.txt                             # Redacts ALL patterns");
     println!("  scred < ~/.aws/credentials > redacted_creds                # Redacts ALL patterns");
     println!("  scred --redact CRITICAL < file.txt                         # Redact only CRITICAL");
-    println!("  scred --detect CRITICAL --redact CRITICAL < file.txt       # Show/redact only CRITICAL");
+    println!(
+        "  scred --detect CRITICAL --redact CRITICAL < file.txt       # Show/redact only CRITICAL"
+    );
     println!("  SCRED_REDACT_PATTERNS=CRITICAL scred < file.txt            # Redact only CRITICAL");
     println!("  scred --list-patterns                                      # Show all patterns");
-    println!("  scred --describe jwt                                       # Show JWT pattern details");
-    println!("  env | scred -v 2>&1                                        # Verbose output with stats");
+    println!(
+        "  scred --describe jwt                                       # Show JWT pattern details"
+    );
+    println!(
+        "  env | scred -v 2>&1                                        # Verbose output with stats"
+    );
     println!();
 }
 
 fn list_patterns(filter_type: Option<&str>) {
-    
-    
     use std::collections::BTreeMap;
-    
+
     // Get all patterns directly from Zig detector (single source of truth)
     let all_patterns = get_all_patterns();
-    
+
     // Filter by pattern type if specified
     let filtered_patterns: Vec<_> = if let Some(filter) = filter_type {
         let filter_lower = filter.to_lowercase();
-        all_patterns.into_iter().filter(|p| {
-            match (p.pattern_type, filter_lower.as_str()) {
+        all_patterns
+            .into_iter()
+            .filter(|p| match (p.pattern_type, filter_lower.as_str()) {
                 (0, "fast" | "fastprefix") => true,
                 (1, "structured" | "structuredformat") => true,
                 (2, "regex" | "regexbased") => true,
                 (_, "all") => true,
                 _ => false,
-            }
-        }).collect()
+            })
+            .collect()
     } else {
         all_patterns
     };
-    
+
     let total = filtered_patterns.len();
-    
+
     // Group patterns by pattern type
     let mut by_type: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
-    
+
     for pattern in &filtered_patterns {
         let type_name = match pattern.pattern_type {
             0 => "FastPrefix",
@@ -330,43 +334,48 @@ fn list_patterns(filter_type: Option<&str>) {
             2 => "RegexBased",
             _ => "Unknown",
         };
-        
+
         let type_key = match pattern.pattern_type {
             0 => "0. FastPrefix (26+45 patterns, <5ms total)",
             1 => "1. StructuredFormat (1 pattern, ~1ms)",
             2 => "2. RegexBased (198 patterns, ~1000ms total)",
             _ => "Unknown",
         };
-        
-        by_type.entry(type_key.to_string())
+
+        by_type
+            .entry(type_key.to_string())
             .or_default()
             .push((pattern.name.clone(), type_name.to_string()));
     }
-    
+
     println!("╔════════════════════════════════════════════════════════════╗");
-    println!("║         SCRED Pattern Library - {} patterns                ║", total);
+    println!(
+        "║         SCRED Pattern Library - {} patterns                ║",
+        total
+    );
     println!("║                  Grouped by Performance Type                ║");
     println!("╚════════════════════════════════════════════════════════════╝\n");
-    
+
     println!("⚡ Use --filter-type to control performance:\n");
     println!("  scred --list-patterns --filter-type fast       # Only FastPrefix");
     println!("  scred --list-patterns --filter-type regex      # Only RegexBased");
     println!("  scred --list-patterns --filter-type all        # All patterns\n");
-    
+
     for (type_key, pattern_list) in &by_type {
         println!("📊 {} - {} patterns", type_key, pattern_list.len());
-        
+
         // Print patterns in 3 columns
         let cols = 3;
         for chunk in pattern_list.chunks(cols) {
-            let formatted: Vec<String> = chunk.iter()
+            let formatted: Vec<String> = chunk
+                .iter()
                 .map(|(name, _)| format!("{:<30}", name))
                 .collect();
             println!("   {}", formatted.join("   "));
         }
         println!();
     }
-    
+
     println!("\n📋 Usage Examples:");
     println!("  Detect fast patterns only (production):");
     println!("    SCRED_DETECT_PATTERNS=fast scred < input.txt");
@@ -382,7 +391,7 @@ fn list_patterns(filter_type: Option<&str>) {
 
 fn describe_pattern(name: &str) {
     let patterns = get_all_patterns();
-    
+
     if let Some(pattern) = patterns.iter().find(|p| p.name == name) {
         println!("Pattern: {}", pattern.name);
         println!("Prefix: {}", pattern.prefix);
@@ -401,44 +410,45 @@ fn run_with_auto_detect(
     _redact_selector: &PatternSelector,
 ) -> (streaming::RedactionMode, Option<Vec<u8>>) {
     let _start = Instant::now();
-    
+
     // Read first 512 bytes for detection (much faster than 4KB)
     // Typical env files are 0.1-10 KB, so 512B is sufficient for first few lines
     const DETECTION_BUFFER_SIZE: usize = 512;
     let mut buffer = vec![0u8; DETECTION_BUFFER_SIZE];
-    
+
     let n = match io::stdin().read(&mut buffer) {
-        Ok(bytes) => {
-            bytes
-        },
+        Ok(bytes) => bytes,
         Err(e) => {
             eprintln!("Error reading input: {}", e);
             std::process::exit(1);
         }
     };
-    
+
     buffer.truncate(n);
-    
+
     // Detect format
     let detection = env_detection::detect_format(&buffer);
-    
+
     if verbose || detect_only_flag {
-        eprintln!("[auto-detect: {} (score: {:.2})]", detection.reason, detection.score);
+        eprintln!(
+            "[auto-detect: {} (score: {:.2})]",
+            detection.reason, detection.score
+        );
     }
-    
+
     if detect_only_flag {
         println!("Detection: {:?}", detection.mode);
         println!("Score: {:.2}", detection.score);
         println!("Reason: {}", detection.reason);
         std::process::exit(0);
     }
-    
+
     // Decide which mode based on detection
     let mode = match detection.mode {
         env_detection::DetectionMode::EnvFormat => streaming::RedactionMode::Env,
         env_detection::DetectionMode::TextFormat => streaming::RedactionMode::Text,
         env_detection::DetectionMode::BinaryDetected => streaming::RedactionMode::Text, // Treat binary as text
     };
-    
+
     (mode, Some(buffer))
 }

@@ -14,25 +14,25 @@ fn benchmark_pattern_frequency(c: &mut Criterion) {
         data.extend_from_slice(b"normal text content here ");
         data.extend_from_slice(b"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U ");
     }
-    
+
     c.bench_function("pattern_frequency_analysis", |b| {
         b.iter(|| {
             let result = detect_all(black_box(&data));
-            
+
             // Analyze which patterns were found
             let mut pattern_counts: HashMap<u16, usize> = HashMap::new();
             for m in &result.matches {
                 *pattern_counts.entry(m.pattern_id).or_insert(0) += 1;
             }
-            
+
             // Print top patterns
             let mut vec: Vec<_> = pattern_counts.into_iter().collect();
             vec.sort_by_key(|&(_, count)| std::cmp::Reverse(count));
-            
+
             for (pattern_id, count) in vec.iter().take(10) {
                 println!("Pattern {}: {} matches", pattern_id, count);
             }
-            
+
             result
         })
     });

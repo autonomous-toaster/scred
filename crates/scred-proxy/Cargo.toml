@@ -4,12 +4,12 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Reverse proxy with selective secret redaction"
+description = "Forward proxy with unified policy support (placeholder replacement + redaction)"
 
 [dependencies]
 scred-config = { path = "../scred-config" }
 scred-http = { path = "../scred-http" }
-scred-redactor = { path = "../scred-redactor" }
+scred-policy = { path = "../scred-policy" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

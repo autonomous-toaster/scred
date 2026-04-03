@@ -1,13 +1,12 @@
+use std::io;
 /// HTTP CONNECT Handler for HTTPS Proxy
-/// 
+///
 /// The CONNECT method is used to establish a tunnel through the proxy.
 /// Client sends: CONNECT example.com:443 HTTP/1.1
 /// Proxy responds: HTTP/1.1 200 Connection Established
 /// Then bidirectional TLS traffic flows through the proxy
-
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
-use std::io;
 
 #[derive(Debug, Clone)]
 pub struct ConnectRequest {
@@ -16,7 +15,7 @@ pub struct ConnectRequest {
 }
 
 /// Parse HTTP CONNECT request from client
-/// 
+///
 /// Expected format:
 ///   CONNECT example.com:443 HTTP/1.1\r\n
 ///   Host: example.com:443\r\n
@@ -63,7 +62,7 @@ pub async fn parse_connect_request<R: AsyncBufRead + Unpin>(
 /// Parse "host:port" format
 pub fn parse_host_port(host_port: &str) -> io::Result<(String, u16)> {
     let parts: Vec<&str> = host_port.rsplitn(2, ':').collect();
-    
+
     if parts.len() != 2 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -74,18 +73,18 @@ pub fn parse_host_port(host_port: &str) -> io::Result<(String, u16)> {
     let port_str = parts[0];
     let host = parts[1].to_string();
 
-    let port = port_str.parse::<u16>().map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidData, "Invalid port number")
-    })?;
+    let port = port_str
+        .parse::<u16>()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid port number"))?;
 
     Ok((host, port))
 }
 
 /// Send HTTP 200 Connection Established response
-pub async fn send_connect_response<W: AsyncWrite + Unpin>(
-    writer: &mut W,
-) -> io::Result<()> {
-    writer.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
+pub async fn send_connect_response<W: AsyncWrite + Unpin>(writer: &mut W) -> io::Result<()> {
+    writer
+        .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        .await?;
     writer.flush().await?;
     Ok(())
 }
@@ -96,7 +95,10 @@ pub async fn send_error_response<W: AsyncWrite + Unpin>(
     status_code: u16,
     reason: &str,
 ) -> io::Result<()> {
-    let response = format!("HTTP/1.1 {} {}\r\nContent-Length: 0\r\n\r\n", status_code, reason);
+    let response = format!(
+        "HTTP/1.1 {} {}\r\nContent-Length: 0\r\n\r\n",
+        status_code, reason
+    );
     writer.write_all(response.as_bytes()).await?;
     writer.flush().await?;
     Ok(())
@@ -104,10 +106,7 @@ pub async fn send_error_response<W: AsyncWrite + Unpin>(
 
 /// Bidirectional tunnel between client and upstream
 /// Copies data in both directions, allowing for interception
-pub async fn tunnel(
-    mut client: TcpStream,
-    mut upstream: TcpStream,
-) -> io::Result<()> {
+pub async fn tunnel(mut client: TcpStream, mut upstream: TcpStream) -> io::Result<()> {
     let (mut client_read, mut client_write) = client.split();
     let (mut upstream_read, mut upstream_write) = upstream.split();
 
@@ -124,4 +123,3 @@ pub async fn tunnel(
 
     Ok(())
 }
-

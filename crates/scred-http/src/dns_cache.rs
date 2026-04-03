@@ -1,10 +1,9 @@
 /// DNS Result Cache with TTL
 /// Caches successful DNS resolutions to avoid repeated lookups
-
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 struct CachedDnsEntry {
@@ -35,7 +34,7 @@ impl DnsCache {
     /// Try to get cached addresses for a hostname
     pub fn get(&self, hostname: &str) -> Option<Vec<SocketAddr>> {
         let mut cache = self.cache.lock().unwrap();
-        
+
         if let Some(entry) = cache.get(hostname) {
             if Instant::now() < entry.expires_at {
                 return Some(entry.addresses.clone());
@@ -44,7 +43,7 @@ impl DnsCache {
                 cache.remove(hostname);
             }
         }
-        
+
         None
     }
 
@@ -52,10 +51,13 @@ impl DnsCache {
     pub fn set(&self, hostname: String, addresses: Vec<SocketAddr>) {
         if !addresses.is_empty() {
             let mut cache = self.cache.lock().unwrap();
-            cache.insert(hostname, CachedDnsEntry {
-                addresses,
-                expires_at: Instant::now() + self.ttl,
-            });
+            cache.insert(
+                hostname,
+                CachedDnsEntry {
+                    addresses,
+                    expires_at: Instant::now() + self.ttl,
+                },
+            );
         }
     }
 
@@ -78,13 +80,13 @@ mod tests {
     fn test_dns_cache_basic() {
         let cache = DnsCache::new(60);
         let addr = "127.0.0.1:8080".parse().unwrap();
-        
+
         // Initially empty
         assert!(cache.get("localhost").is_none());
-        
+
         // Store entry
         cache.set("localhost".to_string(), vec![addr]);
-        
+
         // Retrieve entry
         let addrs = cache.get("localhost").unwrap();
         assert_eq!(addrs.len(), 1);
@@ -93,14 +95,14 @@ mod tests {
 
     #[test]
     fn test_dns_cache_expiry() {
-        let cache = DnsCache::new(0);  // 0 second TTL - immediate expiry
+        let cache = DnsCache::new(0); // 0 second TTL - immediate expiry
         let addr = "127.0.0.1:8080".parse().unwrap();
-        
+
         cache.set("localhost".to_string(), vec![addr]);
-        
+
         // Small sleep to ensure expiry
         std::thread::sleep(Duration::from_millis(10));
-        
+
         // Should be expired
         assert!(cache.get("localhost").is_none());
     }
@@ -110,9 +112,9 @@ mod tests {
         let cache = DnsCache::new(60);
         let addr1 = "127.0.0.1:8080".parse().unwrap();
         let addr2 = "127.0.0.1:8081".parse().unwrap();
-        
+
         cache.set("localhost".to_string(), vec![addr1, addr2]);
-        
+
         let addrs = cache.get("localhost").unwrap();
         assert_eq!(addrs.len(), 2);
     }
@@ -121,10 +123,10 @@ mod tests {
     fn test_dns_cache_clear() {
         let cache = DnsCache::new(60);
         let addr = "127.0.0.1:8080".parse().unwrap();
-        
+
         cache.set("localhost".to_string(), vec![addr]);
         assert_eq!(cache.size(), 1);
-        
+
         cache.clear();
         assert_eq!(cache.size(), 0);
     }

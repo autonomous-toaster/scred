@@ -51,21 +51,23 @@ impl HttpRequest {
     /// Serialize request to HTTP format
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        
+
         // Request line
-        buf.extend_from_slice(format!("{} {} {}\r\n", self.method, self.path, self.version).as_bytes());
-        
+        buf.extend_from_slice(
+            format!("{} {} {}\r\n", self.method, self.path, self.version).as_bytes(),
+        );
+
         // Headers
         for (key, value) in &self.headers {
             buf.extend_from_slice(format!("{}: {}\r\n", key, value).as_bytes());
         }
-        
+
         // Empty line
         buf.extend_from_slice(b"\r\n");
-        
+
         // Body
         buf.extend_from_slice(&self.body);
-        
+
         buf
     }
 }
@@ -120,23 +122,23 @@ impl HttpResponse {
     /// Serialize response to HTTP format
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        
+
         // Status line
         buf.extend_from_slice(
-            format!("{} {} {}\r\n", self.version, self.status_code, self.reason).as_bytes()
+            format!("{} {} {}\r\n", self.version, self.status_code, self.reason).as_bytes(),
         );
-        
+
         // Headers
         for (key, value) in &self.headers {
             buf.extend_from_slice(format!("{}: {}\r\n", key, value).as_bytes());
         }
-        
+
         // Empty line
         buf.extend_from_slice(b"\r\n");
-        
+
         // Body
         buf.extend_from_slice(&self.body);
-        
+
         buf
     }
 }
@@ -149,4 +151,3 @@ pub struct PatternMatch {
     pub byte_offset: usize,
     pub redacted_as: String,
 }
-

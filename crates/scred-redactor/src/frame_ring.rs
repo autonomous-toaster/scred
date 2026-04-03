@@ -31,7 +31,7 @@ pub enum FrameState {
 }
 
 /// Ring buffer of pre-allocated frames for streaming processing
-/// 
+///
 /// Typical usage (3 frames in flight: read, process, write):
 /// 1. Get read frame, fill with input data
 /// 2. Mark ready, get process frame, redact it
@@ -140,9 +140,10 @@ impl<const FRAME_SIZE: usize, const NUM_FRAMES: usize> FrameRing<FRAME_SIZE, NUM
     }
 }
 
-impl<const FRAME_SIZE: usize, const NUM_FRAMES: usize> Default for FrameRing<FRAME_SIZE, NUM_FRAMES> {
+impl<const FRAME_SIZE: usize, const NUM_FRAMES: usize> Default
+    for FrameRing<FRAME_SIZE, NUM_FRAMES>
+{
     fn default() -> Self {
         Self::new()
     }
 }
-

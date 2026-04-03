@@ -10,16 +10,16 @@ pub enum PatternSelection {
     /// Only redact explicitly listed patterns
     #[serde(rename = "whitelist")]
     Whitelist(Vec<String>),
-    
+
     /// Redact everything except explicitly listed patterns
     #[serde(rename = "blacklist")]
     Blacklist(Vec<String>),
-    
+
     /// Redact all 244+ patterns (strictest)
     #[serde(rename = "all")]
     #[default]
     All,
-    
+
     /// Don't redact anything (for testing)
     #[serde(rename = "none")]
     None,
@@ -31,12 +31,8 @@ impl PatternSelection {
         match self {
             PatternSelection::All => true,
             PatternSelection::None => false,
-            PatternSelection::Whitelist(patterns) => {
-                patterns.iter().any(|p| p == pattern_name)
-            }
-            PatternSelection::Blacklist(patterns) => {
-                !patterns.iter().any(|p| p == pattern_name)
-            }
+            PatternSelection::Whitelist(patterns) => patterns.iter().any(|p| p == pattern_name),
+            PatternSelection::Blacklist(patterns) => !patterns.iter().any(|p| p == pattern_name),
         }
     }
 }
@@ -47,7 +43,7 @@ pub struct RedactionConfig {
     /// Mode: "all" | "none" | "configured"
     #[serde(default)]
     pub mode: String,
-    
+
     /// Pattern selection (if mode == "configured")
     #[serde(default)]
     pub patterns: PatternSelection,
@@ -61,7 +57,7 @@ impl RedactionConfig {
             patterns: PatternSelection::All,
         }
     }
-    
+
     /// Create a new redaction config that redacts nothing
     pub fn none() -> Self {
         Self {
@@ -70,7 +66,6 @@ impl RedactionConfig {
         }
     }
 }
-
 
 impl Default for RedactionConfig {
     fn default() -> Self {
@@ -119,4 +114,3 @@ pub fn parse_env_int(env_var: &str, default: i32) -> i32 {
         .and_then(|v| v.parse::<i32>().ok())
         .unwrap_or(default)
 }
-

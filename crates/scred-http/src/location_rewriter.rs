@@ -54,15 +54,15 @@ pub fn extract_host_from_uri(uri: &str) -> Option<String> {
     // Find scheme end (://)
     let scheme_end = uri.find("://")?;
     let after_scheme = &uri[scheme_end + 3..];
-    
+
     // Find path start (first / after scheme)
     let path_start = after_scheme.find('/').unwrap_or(after_scheme.len());
     let host_part = &after_scheme[..path_start];
-    
+
     if host_part.is_empty() {
         return None;
     }
-    
+
     Some(host_part.to_string())
 }
 
@@ -97,7 +97,7 @@ pub fn should_rewrite_location(location: &str, upstream_host: &str) -> bool {
     if !is_absolute_uri(location) {
         return false;
     }
-    
+
     // Extract host from location
     match extract_host_from_uri(location) {
         Some(location_host) => {
@@ -105,16 +105,16 @@ pub fn should_rewrite_location(location: &str, upstream_host: &str) -> bool {
             // If one has a port and the other doesn't, we need to be careful
             let location_hostname = location_host.split(':').next().unwrap_or(&location_host);
             let upstream_hostname = upstream_host.split(':').next().unwrap_or(upstream_host);
-            
+
             // Hostnames must match (case-insensitive)
             if location_hostname.to_lowercase() != upstream_hostname.to_lowercase() {
                 return false;
             }
-            
+
             // If both specify ports explicitly, they must match too
             let location_port = location_host.split(':').nth(1);
             let upstream_port = upstream_host.split(':').nth(1);
-            
+
             match (location_port, upstream_port) {
                 // Both have ports: must match
                 (Some(lp), Some(up)) => lp == up,
@@ -162,8 +162,7 @@ pub fn rewrite_location_to_proxy(location: &str, client_scheme: &str, proxy_host
         }
         None => "/",
     };
-    
+
     // Reconstruct as: scheme://proxy_host/path
     format!("{}://{}{}", client_scheme, proxy_host, path_and_after)
 }
-

@@ -1,14 +1,14 @@
-use std::time::Instant;
-use scred_redactor::{RedactionEngine, RedactionConfig, StreamingRedactor};
+use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor};
 use std::sync::Arc;
+use std::time::Instant;
 
 fn benchmark_scenario(name: &str, data: &[u8]) {
     let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
     let redactor = StreamingRedactor::with_defaults(engine);
-    
+
     let chunk_size = 64 * 1024;
     let chunks: Vec<&[u8]> = data.chunks(chunk_size).collect();
-    
+
     let start = Instant::now();
     let mut lookahead = Vec::new();
     for (i, chunk) in chunks.iter().enumerate() {
@@ -16,14 +16,14 @@ fn benchmark_scenario(name: &str, data: &[u8]) {
         let _ = redactor.process_chunk(chunk, &mut lookahead, is_eof);
     }
     let elapsed = start.elapsed();
-    
+
     let throughput = (data.len() as f64) / 1024.0 / 1024.0 / elapsed.as_secs_f64();
     eprintln!("{:30}: {:.1} MB/s", name, throughput);
 }
 
 fn main() {
     let target_size = 10 * 1024 * 1024;
-    
+
     // Scenario 1: No secrets
     let mut data = Vec::with_capacity(target_size);
     let normal = b"This is completely normal data with no secrets whatsoever\n";
@@ -32,7 +32,7 @@ fn main() {
     }
     data.truncate(target_size);
     benchmark_scenario("No secrets", &data);
-    
+
     // Scenario 2: Sparse (realistic logs)
     let mut data = Vec::with_capacity(target_size);
     let normal_lines: &[&[u8]] = &[
@@ -55,7 +55,7 @@ fn main() {
     }
     data.truncate(target_size);
     benchmark_scenario("Realistic (1 secret/100KB)", &data);
-    
+
     // Scenario 3: Dense (every line)
     let mut data = Vec::with_capacity(target_size);
     let secret_line = b"Line with AKIAIOSFODNN7EXAMPLE secret key and more data\n";
@@ -64,7 +64,7 @@ fn main() {
     }
     data.truncate(target_size);
     benchmark_scenario("Dense (every line)", &data);
-    
+
     // Scenario 4: High density (secrets every 10 bytes)
     let mut data = Vec::with_capacity(target_size);
     let pattern = b"AKIAIOSFODNN7EXAMPLE_";

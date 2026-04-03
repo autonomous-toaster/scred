@@ -3,16 +3,15 @@
 ///
 /// This is a temporary solution until we export full metadata from Zig.
 /// Eventually this will be auto-generated from patterns.zig
-
 use crate::PatternTier;
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 
 /// Map of pattern names to their tiers
 /// Updated as we categorize more patterns in patterns.zig
 static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(|| {
     let mut map = HashMap::new();
-    
+
     // CRITICAL Tier (24 patterns)
     // AWS credentials
     map.insert("aws-akia", PatternTier::Critical);
@@ -20,7 +19,7 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     map.insert("aws-secret-access-key", PatternTier::Critical);
     map.insert("aws-session-token", PatternTier::Critical);
     map.insert("aws-mfa-serial", PatternTier::Critical);
-    
+
     // GitHub tokens
     map.insert("github-token", PatternTier::Critical);
     map.insert("github-pat", PatternTier::Critical);
@@ -28,40 +27,40 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     map.insert("github-user", PatternTier::Critical);
     map.insert("github-server", PatternTier::Critical);
     map.insert("github-refresh", PatternTier::Critical);
-    
+
     // Stripe API keys (live keys = critical)
     map.insert("stripe-api-key", PatternTier::Critical);
     map.insert("stripe-restricted-key", PatternTier::Critical);
     map.insert("stripe-payment-intent", PatternTier::Critical);
     map.insert("stripepaymentintent-2", PatternTier::Critical);
-    
+
     // Shopify
     map.insert("shopify-app-password", PatternTier::Critical);
-    
+
     // OpenAI admin
     map.insert("openaiadmin", PatternTier::Critical);
     map.insert("sk-admin-", PatternTier::Critical);
-    
+
     // Context7 (critical secrets)
     map.insert("context7-api-key", PatternTier::Critical);
     map.insert("context7-secret", PatternTier::Critical);
-    
+
     // Database connections
     map.insert("mongodb", PatternTier::Critical);
     map.insert("postgres", PatternTier::Critical);
-    
+
     // API_KEYS Tier (60+ patterns)
     // OpenAI
     map.insert("openai-api-key", PatternTier::ApiKeys);
     map.insert("openai", PatternTier::ApiKeys);
-    
+
     // Anthropic
     map.insert("anthropic", PatternTier::ApiKeys);
-    
+
     // Google
     map.insert("google-gemini", PatternTier::ApiKeys);
     map.insert("google-cloud-api-key", PatternTier::ApiKeys);
-    
+
     // Communication APIs
     map.insert("slack-token", PatternTier::ApiKeys);
     map.insert("twilio-api-key", PatternTier::ApiKeys);
@@ -70,18 +69,18 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     map.insert("mailgun-api-key", PatternTier::ApiKeys);
     map.insert("telegram-bot-token", PatternTier::ApiKeys);
     map.insert("discord-webhook", PatternTier::ApiKeys);
-    
+
     // Cloud providers
     map.insert("azure-api-key", PatternTier::ApiKeys);
     map.insert("azure-ad-client-secret", PatternTier::ApiKeys);
-    
+
     // Monitoring/observability
     map.insert("datadog-api-key", PatternTier::ApiKeys);
     map.insert("sentry-access-token", PatternTier::ApiKeys);
     map.insert("sentryorgtoken", PatternTier::ApiKeys);
     map.insert("pagerduty-api-key", PatternTier::ApiKeys);
     map.insert("new-relic-api-key", PatternTier::ApiKeys);
-    
+
     // Other APIs
     map.insert("heroku-api-key", PatternTier::ApiKeys);
     map.insert("npm-token", PatternTier::ApiKeys);
@@ -107,26 +106,26 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     map.insert("gandi-api-key", PatternTier::ApiKeys);
     map.insert("apideck", PatternTier::ApiKeys);
     map.insert("okta-api-token", PatternTier::ApiKeys);
-    
+
     // INFRASTRUCTURE Tier (40+ patterns)
     // Kubernetes & container orchestration
     map.insert("k8s-bearer-token", PatternTier::Infrastructure);
     map.insert("k8s-service-account-token", PatternTier::Infrastructure);
     map.insert("kubelet-token", PatternTier::Infrastructure);
-    
+
     // Container registries
     map.insert("docker-registry-token", PatternTier::Infrastructure);
     map.insert("docker-login-token", PatternTier::Infrastructure);
     map.insert("ecr-registry-token", PatternTier::Infrastructure);
     map.insert("ghcr-token", PatternTier::Infrastructure);
-    
+
     // Secrets management
     map.insert("vault-token", PatternTier::Infrastructure);
     map.insert("vault-unseal-key", PatternTier::Infrastructure);
     map.insert("consul-token", PatternTier::Infrastructure);
     map.insert("etcd-password", PatternTier::Infrastructure);
     map.insert("minio-access-key", PatternTier::Infrastructure);
-    
+
     // Infrastructure APIs
     map.insert("databricks-token", PatternTier::Infrastructure);
     map.insert("dynatrace-api-token", PatternTier::Infrastructure);
@@ -148,7 +147,7 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     map.insert("azure-app-config", PatternTier::Infrastructure);
     map.insert("azure-batch", PatternTier::Infrastructure);
     map.insert("azure-cosmosdb", PatternTier::Infrastructure);
-    
+
     // SERVICES Tier (100+ patterns)
     // Payment processors
     map.insert("razorpay-api-key", PatternTier::Services);
@@ -159,7 +158,7 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     map.insert("ramp", PatternTier::Services);
     map.insert("flutterwave", PatternTier::Services);
     map.insert("flutterwave-public-key", PatternTier::Services);
-    
+
     // Communication services
     map.insert("coinbase", PatternTier::Services);
     map.insert("checkr-personal-access-token", PatternTier::Services);
@@ -175,11 +174,11 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     map.insert("pypi-upload-token", PatternTier::Services);
     map.insert("tumblr-api-key", PatternTier::Services);
     map.insert("generic-api-key", PatternTier::Services);
-    
+
     // CRITICAL Tier - JWT tokens
     // JWT tokens contain sensitive claims and are commonly used for authentication
     map.insert("jwt-generic", PatternTier::Critical);
-    
+
     // PATTERNS Tier (50+ patterns - regex-based)
     // Generic patterns
     map.insert("bearer-token", PatternTier::Patterns);
@@ -188,7 +187,7 @@ static PATTERN_TIER_MAP: Lazy<HashMap<&'static str, PatternTier>> = Lazy::new(||
     map.insert("api-key-header", PatternTier::Patterns);
     map.insert("private-key", PatternTier::Patterns);
     map.insert("privatekey", PatternTier::Patterns);
-    
+
     map
 });
 
@@ -198,7 +197,7 @@ pub fn get_pattern_tier(pattern_name: &str) -> PatternTier {
     if let Some(tier) = PATTERN_TIER_MAP.get(pattern_name) {
         return *tier;
     }
-    
+
     // Try case-insensitive match
     let lower = pattern_name.to_lowercase();
     for (key, tier) in PATTERN_TIER_MAP.iter() {
@@ -206,9 +205,8 @@ pub fn get_pattern_tier(pattern_name: &str) -> PatternTier {
             return *tier;
         }
     }
-    
+
     // Default to PATTERNS (generic/unknown patterns)
     // This is conservative - unknown patterns are treated as low-risk
     PatternTier::Patterns
 }
-

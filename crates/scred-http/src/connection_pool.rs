@@ -1,9 +1,8 @@
 /// Simple HTTP connection pool for upstream proxies
 /// Reuses TCP connections with Keep-Alive to avoid repeated DNS/TCP handshakes
-
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 
 /// Pooled connection with timeout
@@ -33,31 +32,31 @@ impl ConnectionPool {
             pool: Arc::new(Mutex::new(VecDeque::with_capacity(max_connections))),
             addr,
             max_connections,
-            max_idle_time: Duration::from_secs(30),  // 30 second timeout
+            max_idle_time: Duration::from_secs(30), // 30 second timeout
         }
     }
 
     /// Try to get a reusable connection from the pool
     pub fn get(&self) -> Option<TcpStream> {
         let mut pool = self.pool.lock().unwrap();
-        
+
         // Remove idle connections
         pool.retain(|conn| !conn.is_idle_timeout(self.max_idle_time));
-        
+
         // Try to get a connection
         if let Some(conn) = pool.pop_front() {
             // Verify connection is still alive with a simple check
             // In a real implementation, we'd test with a TCP_KEEPALIVE option
             return Some(conn.stream);
         }
-        
+
         None
     }
 
     /// Return a connection to the pool for reuse
     pub fn put(&self, stream: TcpStream) {
         let mut pool = self.pool.lock().unwrap();
-        
+
         // Only keep if pool not full
         if pool.len() < self.max_connections {
             pool.push_back(PooledConnection {
@@ -85,7 +84,7 @@ mod tests {
     #[tokio::test]
     async fn test_connection_pool_basic() {
         let pool = ConnectionPool::new("127.0.0.1:8080".to_string(), 3);
-        
+
         // Pool should be empty initially
         assert_eq!(pool.size(), 0);
         assert!(pool.get().is_none());
@@ -94,11 +93,11 @@ mod tests {
     #[tokio::test]
     async fn test_connection_pool_lifecycle() {
         let pool = ConnectionPool::new("127.0.0.1:8080".to_string(), 3);
-        
+
         // Create a mock stream (would be a real TcpStream in production)
         // For now, just test the logic
         assert_eq!(pool.size(), 0);
-        
+
         pool.clear();
         assert_eq!(pool.size(), 0);
     }

@@ -1,4 +1,4 @@
-//! Unified Detection and Redaction Engine with Pattern Tier Support
+//! Detection and Redaction Engine with Pattern Tier Support
 //!
 //! This module provides a configurable engine that wraps the core RedactionEngine
 //! and applies pattern tier filtering to both detection and redaction operations.
@@ -27,10 +27,10 @@
 //! let result = config_engine.detect_and_redact("some secret text");
 //! ```
 
-use scred_redactor::{RedactionEngine, RedactionWarning, PatternMatch};
+use scred_redactor::{PatternMatch, RedactionEngine, RedactionWarning};
 use std::sync::Arc;
 
-use crate::{PatternSelector, get_pattern_tier};
+use crate::{get_pattern_tier, PatternSelector};
 
 /// Filtered redaction result that includes detection warnings
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ pub struct FilteredRedactionResult {
     pub warnings: Vec<RedactionWarning>,
 }
 
-/// Unified detection and redaction engine with pattern tier support
+/// Detection and redaction engine with pattern tier support
 ///
 /// This engine combines:
 /// - Core redaction logic (from RedactionEngine)
@@ -119,7 +119,8 @@ impl ConfigurableEngine {
             .into_iter()
             .filter(|warning| {
                 let tier = get_pattern_tier(&warning.pattern_type);
-                self.detect_selector.matches_pattern(&warning.pattern_type, tier)
+                self.detect_selector
+                    .matches_pattern(&warning.pattern_type, tier)
             })
             .collect()
     }
@@ -167,7 +168,8 @@ impl ConfigurableEngine {
             .iter()
             .filter(|warning| {
                 let tier = get_pattern_tier(&warning.pattern_type);
-                self.detect_selector.matches_pattern(&warning.pattern_type, tier)
+                self.detect_selector
+                    .matches_pattern(&warning.pattern_type, tier)
             })
             .cloned()
             .collect();
@@ -198,13 +200,9 @@ impl ConfigurableEngine {
     ///
     /// # Returns
     /// Text with only redact_selector-matching patterns redacted
-    fn apply_redact_selector(
-        &self,
-        original: &str,
-        matches: &[PatternMatch],
-    ) -> String {
+    fn apply_redact_selector(&self, original: &str, matches: &[PatternMatch]) -> String {
         use scred_redactor::metadata_cache::RiskTier;
-        
+
         // Filter matches: keep only those matching redact_selector
         let selected_matches: Vec<&PatternMatch> = matches
             .iter()
@@ -294,4 +292,3 @@ impl ConfigurableEngine {
         self.redact_selector = selector;
     }
 }
-

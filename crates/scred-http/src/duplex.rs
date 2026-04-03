@@ -1,11 +1,10 @@
 /// DuplexSocket - Combines split AsyncRead + AsyncWrite halves
-/// 
+///
 /// Problem: tokio TcpStream.into_split() gives ReadHalf and WriteHalf
 /// These can't be recombined, and TLS acceptor needs a full AsyncRead+AsyncWrite
 ///
 /// Solution: Wrapper that implements both traits by delegating to the halves
 /// This allows us to accept TLS from the client after we've already split the socket!
-
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -51,4 +50,3 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> AsyncWrite for DuplexSocket<R,
         Pin::new(&mut self.write).poll_shutdown(cx)
     }
 }
-

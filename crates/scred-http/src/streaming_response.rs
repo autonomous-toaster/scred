@@ -3,15 +3,14 @@
 /// Streams HTTP responses from upstream → redactor → client
 /// without buffering the entire response body.
 /// Now with support for chunked transfer-encoding.
-
 use anyhow::Result;
 use scred_redactor::StreamingRedactor;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::debug;
 
-use crate::http_headers::parse_http_headers;
 use crate::chunked_parser::ChunkedParser;
+use crate::http_headers::parse_http_headers;
 
 /// Configuration for streaming response handling
 #[derive(Clone, Debug)]
@@ -30,7 +29,6 @@ impl Default for StreamingResponseConfig {
         }
     }
 }
-
 
 /// Handle HTTP response with streaming
 ///
@@ -66,7 +64,7 @@ where
     debug!("[streaming] Response: {}", response_line);
 
     // 1. Parse headers (non-streaming)
-    let headers = parse_http_headers(upstream_reader).await?;
+    let headers = parse_http_headers(upstream_reader, true).await?;
 
     if config.debug {
         debug!(
@@ -100,22 +98,34 @@ where
 
     // ALWAYS normalize Location headers by removing default ports
     // This should run regardless of whether we're rewriting for proxy transparency
-    if let Some(location_pos) = forwarded_headers.iter().position(|(k, _)| k.eq_ignore_ascii_case("Location")) {
+    if let Some(location_pos) = forwarded_headers
+        .iter()
+        .position(|(k, _)| k.eq_ignore_ascii_case("Location"))
+    {
         let mut location = forwarded_headers[location_pos].1.clone();
         debug!("[Location] Found Location header: {}", location);
-        
+
         // Remove :443 from https:// URLs and :80 from http:// URLs
         if location.contains("https://") && location.contains(":443/") {
             location = location.replace(":443/", "/");
-            debug!("[Location] Normalized (removed default HTTPS port): {}", location);
+            debug!(
+                "[Location] Normalized (removed default HTTPS port): {}",
+                location
+            );
         } else if location.contains("http://") && location.contains(":80/") {
             location = location.replace(":80/", "/");
-            debug!("[Location] Normalized (removed default HTTP port): {}", location);
+            debug!(
+                "[Location] Normalized (removed default HTTP port): {}",
+                location
+            );
         } else {
-            debug!("[Location] No normalization needed (https={}, :443/={})", 
-                location.contains("https://"), location.contains(":443/"));
+            debug!(
+                "[Location] No normalization needed (https={}, :443/={})",
+                location.contains("https://"),
+                location.contains(":443/")
+            );
         }
-        
+
         // Now optionally rewrite Location headers to point back to proxy (if applicable)
         if let Some(_upstream_hostname) = upstream_host {
             if let Some(proxy_hostname) = proxy_host {
@@ -129,21 +139,30 @@ where
                         scheme,
                         proxy_hostname,
                     );
-                    
+
                     forwarded_headers[location_pos].1 = rewritten_location.clone();
-                    debug!("[Location] Rewriting absolute-URI to proxy: {} → {}", location, rewritten_location);
+                    debug!(
+                        "[Location] Rewriting absolute-URI to proxy: {} → {}",
+                        location, rewritten_location
+                    );
                 } else {
                     debug!("[Location] NOT rewriting (relative URI): {}", location);
                     forwarded_headers[location_pos].1 = location;
                 }
             } else {
                 // upstream_hostname provided but not proxy_hostname - just use normalized
-                debug!("[Location] No proxy_hostname, using normalized: {}", location);
+                debug!(
+                    "[Location] No proxy_hostname, using normalized: {}",
+                    location
+                );
                 forwarded_headers[location_pos].1 = location;
             }
         } else {
             // No upstream hostname - just use normalized version
-            debug!("[Location] No upstream_hostname, using normalized: {}", location);
+            debug!(
+                "[Location] No upstream_hostname, using normalized: {}",
+                location
+            );
             forwarded_headers[location_pos].1 = location;
         }
     }
@@ -167,10 +186,13 @@ where
     let (redacted_headers, header_stats) = redactor.redact_buffer(headers_text.as_bytes());
     client_writer.write_all(redacted_headers.as_bytes()).await?;
     client_writer.write_all(b"\r\n").await?;
-    
+
     // Report header redaction
     if header_stats.patterns_found > 0 {
-        debug!("[REDACTION] Headers: {} patterns found and redacted", header_stats.patterns_found);
+        debug!(
+            "[REDACTION] Headers: {} patterns found and redacted",
+            header_stats.patterns_found
+        );
     }
 
     // 4. Stream body through redactor
@@ -206,7 +228,10 @@ where
 
     // Report redaction stats at WARNING level if anything was redacted
     if stats.patterns_found > 0 {
-        debug!("[REDACTION] Body: {} patterns found and redacted", stats.patterns_found);
+        debug!(
+            "[REDACTION] Body: {} patterns found and redacted",
+            stats.patterns_found
+        );
     }
 
     if config.debug {
@@ -238,7 +263,10 @@ where
     R: AsyncReadExt + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    debug!("[streaming] Streaming response body with connection-close framing: {} bytes", content_length);
+    debug!(
+        "[streaming] Streaming response body with connection-close framing: {} bytes",
+        content_length
+    );
 
     let mut stats = StreamingStats::default();
     let mut remaining = content_length;
@@ -250,7 +278,8 @@ where
         upstream_reader.read_exact(&mut chunk).await?;
 
         let is_eof = remaining == chunk_size;
-        let (output, _bytes_written, patterns) = redactor.process_chunk(&chunk, &mut lookahead, is_eof);
+        let (output, _bytes_written, patterns) =
+            redactor.process_chunk(&chunk, &mut lookahead, is_eof);
 
         client_writer.write_all(output.as_bytes()).await?;
 
@@ -296,7 +325,10 @@ where
         total_stats.chunks_processed += chunk_stats.chunks_read;
     }
 
-    debug!("[streaming] Chunked response complete: {} bytes", total_stats.bytes_read);
+    debug!(
+        "[streaming] Chunked response complete: {} bytes",
+        total_stats.bytes_read
+    );
     Ok(total_stats)
 }
 
@@ -309,7 +341,10 @@ pub struct StreamingStats {
     pub patterns_found: u64,
 }
 
-fn response_is_head_or_bodyless(response_line: &str, headers: &crate::http_headers::HttpHeaders) -> bool {
+fn response_is_head_or_bodyless(
+    response_line: &str,
+    headers: &crate::http_headers::HttpHeaders,
+) -> bool {
     let mut parts = response_line.split_whitespace();
     let _http_version = parts.next();
     let status_code = parts
@@ -326,4 +361,3 @@ fn response_is_head_or_bodyless(response_line: &str, headers: &crate::http_heade
         Some(ct) if ct.eq_ignore_ascii_case("text/event-stream")
     )
 }
-

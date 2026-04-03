@@ -1,80 +1,106 @@
-# Docker build context exclusions
-# This dramatically speeds up docker build by not copying unnecessary files
+# =============================================================================
+# Docker Ignore - Exclude unnecessary files from Docker build context
+# =============================================================================
 
-# Version control
-.git
+# -----------------------------------------------------------------------------
+# Version Control
+# -----------------------------------------------------------------------------
+.git/
 .gitignore
-.gitattributes
+.github/
 
-# Build artifacts - but keep release binaries
-target/release/**/*.d
-target/debug/
-target/incremental/
+# -----------------------------------------------------------------------------
+# Build Artifacts (Rust)
+# -----------------------------------------------------------------------------
+# Exclude local target directory (builds happen in container)
+target/
 
-# IDE and editor files
+# Keep Cargo.lock for reproducible builds (don't exclude)
+
+# -----------------------------------------------------------------------------
+# IDE and Editor
+# -----------------------------------------------------------------------------
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.DS_Store
-.env.local
+*.sublime-*
 
-# Documentation
-docs/
-**/*.md
-LICENSE
+# -----------------------------------------------------------------------------
+# Environment and Secrets
+# -----------------------------------------------------------------------------
+.env
+.env.*
+*.env
+!.env.example
 
-# Test files and fixtures
-tests/fixtures/
-**/*_test.rs
+# -----------------------------------------------------------------------------
+# Certificates and Keys
+# -----------------------------------------------------------------------------
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
 
-# Docker and container files
+# -----------------------------------------------------------------------------
+# Data Directories
+# -----------------------------------------------------------------------------
+data/
+logs/
+
+# -----------------------------------------------------------------------------
+# Docker Files (not needed in build context)
+# -----------------------------------------------------------------------------
 docker-compose/
-Dockerfile*
+docker-compose.yaml
+docker-compose.yml
 .dockerignore
+Dockerfile*
 
-# CI/CD
-.github/
-.gitlab-ci.yml
-.circleci/
+# Keep only the specific Dockerfile being built:
+!Dockerfile.scred-proxy
+!Dockerfile.scred-mitm
 
-# Node, Python, etc
-node_modules/
-venv/
-env/
-*.pyc
-__pycache__/
+# -----------------------------------------------------------------------------
+# Documentation
+# -----------------------------------------------------------------------------
+docs/
+*.md
+!README.md
 
-# Temporary files
-tmp/
-temp/
-*.tmp
-.tmp/
-
-# Large files
-*.tar
-*.tar.gz
-*.zip
-*.7z
-*.rar
-
-# Development files
+# -----------------------------------------------------------------------------
+# Scripts and Tools
+# -----------------------------------------------------------------------------
+scripts/
 .pi/
-.env.example
-QUICKSTART.md
-SETUP_GUIDE.md
-README.md
+*.sh
 
-# Keep only what's needed for build
-# Cargo files
-!Cargo.toml
-!Cargo.lock
+# -----------------------------------------------------------------------------
+# OS Generated
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
 
-# Source code
-!crates/
-!src/
+# -----------------------------------------------------------------------------
+# Test and Coverage
+# -----------------------------------------------------------------------------
+coverage/
+.nyc_output/
+*.profraw
+*.profdata
 
-# Keep release binaries for Docker deployment
-!target/release/scred-proxy-docker
-!target/release/scred-mitm-docker
+# -----------------------------------------------------------------------------
+# Misc
+# -----------------------------------------------------------------------------
+*.log
+*.tmp
+*.temp
+.profile_result

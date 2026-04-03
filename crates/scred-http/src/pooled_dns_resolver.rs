@@ -12,13 +12,12 @@
 /// - Arc<Mutex> for thread-safe sharing (minimal overhead)
 /// - TcpStream moved directly (no cloning)
 /// - Upstream address stored as &'static str or interned (reduces allocations)
-
 use crate::connection_pool::ConnectionPool;
 use crate::dns_resolver::DnsResolver;
 use anyhow::Result;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::TcpStream;
@@ -47,7 +46,7 @@ impl Default for PoolConfig {
 }
 
 /// Pooled DNS resolver - manages connection pools per upstream address
-/// 
+///
 /// PERFORMANCE CRITICAL: Uses RwLock for minimal contention on reads
 pub struct PooledDnsResolver {
     /// Pools per upstream address
@@ -131,7 +130,7 @@ impl PooledDnsResolver {
 }
 
 /// Wrapper around TcpStream that returns connection to pool on drop
-/// 
+///
 /// CRITICAL: Implements AsyncRead/AsyncWrite for transparent usage as TcpStream
 pub struct PooledTcpStream {
     stream: Option<TcpStream>,
@@ -176,14 +175,18 @@ impl std::ops::Deref for PooledTcpStream {
     type Target = TcpStream;
 
     fn deref(&self) -> &Self::Target {
-        self.stream.as_ref().expect("PooledTcpStream used after drop")
+        self.stream
+            .as_ref()
+            .expect("PooledTcpStream used after drop")
     }
 }
 
 /// Implement DerefMut for transparent usage
 impl std::ops::DerefMut for PooledTcpStream {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.stream.as_mut().expect("PooledTcpStream used after drop")
+        self.stream
+            .as_mut()
+            .expect("PooledTcpStream used after drop")
     }
 }
 
@@ -230,10 +233,7 @@ impl AsyncWrite for PooledTcpStream {
         }
     }
 
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match &mut self.stream {
             Some(stream) => Pin::new(stream).poll_shutdown(cx),
             None => Poll::Ready(Err(std::io::Error::new(
@@ -295,4 +295,3 @@ mod tests {
         // Stream creation would require actual TCP connection
     }
 }
-

@@ -22,20 +22,20 @@ pub struct StreamingConfig {
 impl Default for StreamingConfig {
     fn default() -> Self {
         Self {
-            chunk_size: 64 * 1024,           // 64KB chunks
-            lookahead_size: 512,              // 512B lookahead (verified in Phase 1a)
+            chunk_size: 64 * 1024, // 64KB chunks
+            lookahead_size: 512,   // 512B lookahead (verified in Phase 1a)
         }
     }
 }
 
 /// Generic streaming redactor (sync version)
 /// For async usage, wrap with tokio::io adapters
-/// 
+///
 /// # Phase 1B.1: Zero-Copy Buffer Pooling
-/// 
+///
 /// This implementation includes pre-allocated buffer pooling to eliminate
 /// allocation/deallocation overhead in the hot path. Benefits:
-/// 
+///
 /// - No Vec<u8>::new() per chunk
 /// - No Vec<u8>::drop() per chunk
 /// - Reduced GC pressure
@@ -52,8 +52,8 @@ pub struct StreamingRedactor {
 
 impl StreamingRedactor {
     pub fn new(engine: Arc<RedactionEngine>, config: StreamingConfig) -> Self {
-        Self { 
-            engine, 
+        Self {
+            engine,
             config,
             selector: None,
             buffer_pool: crate::buffer_pool::BufferPool::with_defaults(),
@@ -61,7 +61,7 @@ impl StreamingRedactor {
     }
 
     /// Create a new StreamingRedactor with selector support
-    /// 
+    ///
     /// # Example
     /// ```ignore
     /// let selector = PatternSelector::Tier(vec![PatternTier::Critical]);
@@ -103,17 +103,17 @@ impl StreamingRedactor {
     }
 
     /// Process a chunk of data with lookahead buffer management and selective filtering
-    /// 
+    ///
     /// # Arguments
     /// * `chunk` - Raw bytes to process
     /// * `lookahead` - Previous lookahead buffer (mutable, will be updated)
     /// * `is_eof` - Whether this is the final chunk
-    /// 
+    ///
     /// # Returns
     /// Tuple of (output_data, bytes_written, patterns_found)
-    /// 
+    ///
     /// # How Selective Filtering Works
-    /// 
+    ///
     /// 1. Combine lookahead + new chunk
     /// 2. Redact ALL patterns (get metadata about each match)
     /// 3. For matches in the output region:
@@ -129,7 +129,7 @@ impl StreamingRedactor {
     ) -> (String, u64, u64) {
         // Use in-place detection for efficiency (28% faster than string-based)
         use scred_detector::detect_all;
-        
+
         // Combine lookahead + new chunk (reuse buffer to avoid clone)
         let mut combined = std::mem::take(lookahead);
         combined.extend_from_slice(chunk);
@@ -259,9 +259,9 @@ impl StreamingRedactor {
     }
 
     /// Convenience method: process a complete buffer (one-shot)
-    /// 
+    ///
     /// # Notes on Optimization (Phase 4 - FrameRing)
-    /// 
+    ///
     /// This method uses the FrameRing pattern internally: instead of cloning Vec<u8> lookahead
     /// on every chunk iteration, we use `LookaheadBuffer` which rotates between 2 pre-allocated
     /// buffers. This eliminates the allocation/clone overhead from `lookahead.clone()` in
@@ -270,7 +270,7 @@ impl StreamingRedactor {
     /// **Benefit measured**: +1.5% throughput improvement (120 → 121.8 MB/s)
     /// **Trade-off**: Requires managing 2 lookahead buffers instead of 1, but no allocation in hot path
     /// **Inspired by**: Video transcoding frame ring pattern (3 pre-allocated frames in flight)
-    /// 
+    ///
     /// Returns (redacted_output, stats)
     pub fn redact_buffer(&self, data: &[u8]) -> (String, StreamingStats) {
         // Phase 2.1: Default to in-place redaction for better performance
@@ -278,7 +278,7 @@ impl StreamingRedactor {
     }
 
     /// Legacy method using copy-based redaction (for testing/compatibility)
-    /// 
+    ///
     /// Use `redact_buffer()` for default optimized path (in-place redaction).
     /// This method is provided for backward compatibility and benchmarking.
     pub fn redact_buffer_copy_based(&self, data: &[u8]) -> (String, StreamingStats) {
@@ -289,9 +289,9 @@ impl StreamingRedactor {
         // Process in chunks using copy-based redaction
         for chunk in data.chunks(self.config.chunk_size) {
             let is_eof = chunk.len() < self.config.chunk_size;
-            let (chunk_output, bytes_written, patterns) = 
+            let (chunk_output, bytes_written, patterns) =
                 self.process_chunk(chunk, &mut lookahead, is_eof);
-            
+
             output.push_str(&chunk_output);
             stats.bytes_read += chunk.len() as u64;
             stats.bytes_written += bytes_written;
@@ -303,15 +303,19 @@ impl StreamingRedactor {
     }
 
     /// In-place redaction (optimized zero-copy path, now default)
-    /// 
+    ///
     /// Phase 2.1: In-place redaction is the default path for StreamingRedactor.
     /// This uses scred_detector::redact_in_place() instead of creating separate
     /// output buffers, reducing memory allocations and improving throughput.
-    /// 
+    ///
     /// # Arguments
     /// * `data` - Input data to redact
     /// * `_use_copy_based` - DEPRECATED: ignored, kept for compatibility
-    pub fn redact_buffer_in_place(&self, data: &[u8], _use_copy_based: bool) -> (String, StreamingStats) {
+    pub fn redact_buffer_in_place(
+        &self,
+        data: &[u8],
+        _use_copy_based: bool,
+    ) -> (String, StreamingStats) {
         let mut stats = StreamingStats::default();
         let mut lookahead = Vec::with_capacity(self.config.lookahead_size);
         let mut output = String::new();
@@ -319,9 +323,9 @@ impl StreamingRedactor {
         // Process in chunks with in-place redaction
         for chunk in data.chunks(self.config.chunk_size) {
             let is_eof = chunk.len() < self.config.chunk_size;
-            let (chunk_output, bytes_written, patterns) = 
+            let (chunk_output, bytes_written, patterns) =
                 self.process_chunk_in_place(chunk, &mut lookahead, is_eof);
-            
+
             output.push_str(&chunk_output);
             stats.bytes_read += chunk.len() as u64;
             stats.bytes_written += bytes_written;
@@ -366,9 +370,9 @@ impl StreamingRedactor {
     }
 
     /// Get mutable reference to buffer pool for optimization
-    /// 
+    ///
     /// # Phase 1B.1 - Zero-Copy Optimization
-    /// 
+    ///
     /// This allows users to pre-acquire buffers from the pool and use them
     /// across multiple streaming operations without allocation overhead.
     pub fn buffer_pool_mut(&mut self) -> &mut crate::buffer_pool::BufferPool {
@@ -376,17 +380,17 @@ impl StreamingRedactor {
     }
 
     /// Process chunk with in-place redaction (Phase 1B.2 optimization)
-    /// 
+    ///
     /// # Arguments
     /// * `chunk` - Raw bytes to process
     /// * `lookahead` - Previous lookahead buffer (mutable, will be updated)
     /// * `is_eof` - Whether this is the final chunk
-    /// 
+    ///
     /// # Returns
     /// Tuple of (output_data, bytes_written, patterns_found)
-    /// 
+    ///
     /// # Performance Notes
-    /// 
+    ///
     /// This variant uses in-place redaction where possible:
     /// - Uses scred_detector::redact_in_place() for faster redaction
     /// - No separate output buffer allocated for redaction
@@ -448,17 +452,17 @@ impl StreamingRedactor {
 }
 
 /// Frame-Ring-optimized streaming redactor
-/// 
+///
 /// Demonstrates FrameRing pattern (3 pre-allocated 65KB frames in flight) for zero-copy streaming.
 /// The frame_ring module was designed for transcoding use cases but wasn't integrated into streaming.
 /// This struct properly integrates FrameRing into the main redaction pipeline.
-/// 
+///
 /// # Benefits (Phase 4 optimization)
 /// - Eliminates Vec<u8>::clone() per chunk (FrameRing rotates buffers instead)
 /// - Pre-allocated 195 KB (3 × 65KB frames), no allocation in hot path
 /// - Measured +1.5% throughput improvement (120 → 121.8 MB/s)
 /// - Cache-friendly: contiguous memory layout
-/// 
+///
 /// # Example
 /// ```ignore
 /// let mut redactor = FrameRingRedactor::with_defaults(engine);
@@ -485,15 +489,15 @@ impl FrameRingRedactor {
     }
 
     /// Process a chunk using frame ring for zero-copy lookahead management
-    /// 
+    ///
     /// FrameRing rotates between 3 pre-allocated 65KB buffers:
     /// 1. Read frame: incoming chunk
     /// 2. Process frame: previous frame's output (which becomes input + lookahead)  
     /// 3. Write frame: combined result ready to output
-    /// 
+    ///
     /// This eliminates allocation and cloning overhead from the traditional
     /// Vec<u8> lookahead pattern.
-    /// 
+    ///
     /// Phase 2.1 Update: Now uses in-place redaction for better performance
     pub fn process_chunk(&mut self, chunk: &[u8], is_eof: bool) -> (String, u64) {
         // Read frame: fill with new chunk data
@@ -504,12 +508,12 @@ impl FrameRingRedactor {
 
         // Process frame: redact the combined data (previous lookahead + new chunk)
         let process_frame = self.ring.get_process_frame();
-        
+
         // Use in-place redaction (Phase 2.1 optimization)
         use scred_detector::{detect_all, redact_in_place};
         let detection = detect_all(process_frame);
         let patterns_found = detection.matches.len() as u64;
-        
+
         // Redact in-place on frame data
         let mut redacted = process_frame.to_vec();
         redact_in_place(&mut redacted, &detection.matches);
@@ -547,7 +551,7 @@ impl FrameRingRedactor {
         for chunk in data.chunks(self.config.chunk_size) {
             let is_eof = chunk.len() < self.config.chunk_size;
             let (chunk_output, patterns) = self.process_chunk(chunk, is_eof);
-            
+
             output.push_str(&chunk_output);
             stats.bytes_read += chunk.len() as u64;
             stats.bytes_written += chunk_output.len() as u64;
@@ -566,4 +570,3 @@ impl FrameRingRedactor {
         &self.engine
     }
 }
-

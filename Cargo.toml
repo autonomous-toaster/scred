@@ -1,15 +1,14 @@
 [workspace]
 members = [
     "crates/scred-cli",
-    "crates/scred-config", "crates/scred-debug-server",
-    "crates/scred-bin",
-    "crates/scred-bin-preload",
+    "crates/scred-config",
+    "crates/scred-debug-server",
     "crates/scred-detector",
-    "crates/scred-fuse",
     "crates/scred-http",
     "crates/scred-mitm",
+    "crates/scred-policy",
     "crates/scred-proxy",
-    "crates/scred-redactor", "crates/scred-bin-printf-wrapper",
+    "crates/scred-redactor",
 ]
 resolver = "2"
 
@@ -35,11 +34,25 @@ tokio-rustls = "0.24"
 rcgen = "0.12"
 dirs = "5.0"
 http2 = "0.5"
+sha2 = "0.10"
+hex = "0.4"
+glob = "0.3"
+wax = "0.5"
 
 [profile.release]
-opt-level = 3
-lto = "thin"
-codegen-units = 1
+opt-level = "z"      # Optimize for size
+lto = "thin"        # Thin LTO
+codegen-units = 1   # Better optimization
+panic = "abort"     # Remove panic unwinding
+strip = true        # Strip symbols
+
+# Docker build profile - reduces memory usage during compilation
+[profile.docker]
+inherits = "release"
+opt-level = "z"
+lto = false         # Disable LTO to reduce memory
+codegen-units = 16  # More parallelism, less memory per unit
+panic = "abort"
 strip = true
 
 [profile.docker-release]
@@ -50,4 +63,3 @@ strip = true
 
 [profile.bench]
 inherits = "release"
-

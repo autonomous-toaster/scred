@@ -8,7 +8,10 @@ fn main() {
         data.extend_from_slice(pattern);
     }
     data.truncate(target_size);
-    
+
     let result = detect_all(&data);
-    eprintln!("Patterns found in very dense data: {}", result.matches.len());
+    eprintln!(
+        "Patterns found in very dense data: {}",
+        result.matches.len()
+    );
 }

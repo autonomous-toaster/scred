@@ -16,14 +16,14 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 /// Prefix-based index for O(1) pattern dispatch
-/// 
+///
 /// Maps pattern start_marker prefixes (up to 16 bytes) to their pattern indices
 /// Enables scanning text once instead of checking all patterns at each position
 #[derive(Debug)]
 pub struct PrefixIndex {
     /// Map from prefix string to list of matching pattern indices
     index: HashMap<String, Vec<usize>>,
-    
+
     /// Maximum prefix length to extract (usually 16)
     max_prefix_len: usize,
 }
@@ -39,11 +39,8 @@ impl PrefixIndex {
             let marker = pattern.start_marker;
             let prefix_len = std::cmp::min(MAX_PREFIX, marker.len());
             let prefix = marker[..prefix_len].to_string();
-            
-            index
-                .entry(prefix)
-                .or_insert_with(Vec::new)
-                .push(idx);
+
+            index.entry(prefix).or_insert_with(Vec::new).push(idx);
         }
 
         PrefixIndex {
@@ -62,7 +59,7 @@ impl PrefixIndex {
 
         let remaining = text.len() - pos;
         let prefix_len = std::cmp::min(self.max_prefix_len, remaining);
-        
+
         // Convert bytes to string for lookup
         let prefix_bytes = &text[pos..pos + prefix_len];
         if let Ok(prefix_str) = std::str::from_utf8(prefix_bytes) {
@@ -128,4 +125,3 @@ pub fn init_prefix_index(patterns: &[GeneralizedMarkerPattern]) -> &'static Pref
         index
     })
 }
-

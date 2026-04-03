@@ -1,39 +1,31 @@
-FROM rust:1-bookworm AS builder
-WORKDIR /app
+FROM rust:1-bookworm
 
+WORKDIR /app
+ARG CACHE_BUST=1
+
+# Install dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends pkg-config build-essential ca-certificates curl bash busybox python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy source
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends pkg-config build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Build
+RUN cargo build --release -p scred-bin -p scred-bin-preload
 
-RUN cargo build --release -p scred-bin -p scred-bin-preload -p scred-bin-printf-wrapper
+# Debug: Check what files were created
+RUN echo "=== Contents of target/release ===" && ls -la /app/target/release/scred-bin /app/target/release/libscred_bin_preload.so 2>&1
 
-FROM debian:bookworm-slim
-WORKDIR /app
+# Install binaries
+RUN install -m755 /app/target/release/scred-bin /usr/local/bin/ && \
+    install -m755 /app/target/release/libscred_bin_preload.so /usr/local/lib/
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl bash busybox python3 \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /app/target/release/scred-bin /usr/local/bin/scred-bin
-
-# Copy preload library (dylib format, named .so on Linux, .dylib on macOS)
-RUN if [ -f /app/target/release/libscred_bin_preload.so ]; then \
-    cp /app/target/release/libscred_bin_preload.so /usr/local/lib/; \
-    elif [ -f /app/target/release/libscred_bin_preload.dylib ]; then \
-    cp /app/target/release/libscred_bin_preload.dylib /usr/local/lib/libscred_bin_preload.so; \
-    fi || true
-
-# Copy printf wrapper if it exists (Linux-only build artifact)
-# On macOS, this file won't exist, which is okay
-RUN if [ -f /app/target/release/libscred_bin_printf_wrapper.so ]; then \
-    cp /app/target/release/libscred_bin_printf_wrapper.so /usr/local/lib/; \
-    fi || true
+# Debug: Check installation
+RUN echo "=== Installed files ===" && ls -la /usr/local/bin/scred-bin /usr/local/lib/libscred_bin_preload.so
 
 ENV SCRED_BIN_PRELOAD_LIB=/usr/local/lib/libscred_bin_preload.so
-ENV SCRED_BIN_PRINTF_LIB=/usr/local/lib/libscred_bin_printf_wrapper.so
 
 ENTRYPOINT ["/usr/local/bin/scred-bin"]
 CMD ["--help"]

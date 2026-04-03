@@ -1,5 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use scred_redactor::{RedactionEngine, RedactionConfig, StreamingRedactor, StreamingConfig};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use scred_redactor::{RedactionConfig, RedactionEngine, StreamingConfig, StreamingRedactor};
 use std::sync::Arc;
 
 fn create_test_data(size: usize) -> Vec<u8> {

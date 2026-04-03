@@ -4,7 +4,7 @@ use scred_detector::detect_all;
 fn benchmark_varying_sizes(c: &mut Criterion) {
     let mut group = c.benchmark_group("sizes");
     group.sample_size(50);
-    
+
     // 10KB
     group.bench_function("detect_all_10kb", |b| {
         let mut data = Vec::new();
@@ -15,7 +15,7 @@ fn benchmark_varying_sizes(c: &mut Criterion) {
         }
         b.iter(|| detect_all(black_box(&data)))
     });
-    
+
     // 100KB
     group.bench_function("detect_all_100kb", |b| {
         let mut data = Vec::new();
@@ -26,7 +26,7 @@ fn benchmark_varying_sizes(c: &mut Criterion) {
         }
         b.iter(|| detect_all(black_box(&data)))
     });
-    
+
     // 1MB (same as before)
     group.bench_function("detect_all_1mb", |b| {
         let mut data = Vec::new();
@@ -37,7 +37,7 @@ fn benchmark_varying_sizes(c: &mut Criterion) {
         }
         b.iter(|| detect_all(black_box(&data)))
     });
-    
+
     // 10MB
     group.bench_function("detect_all_10mb", |b| {
         let mut data = Vec::new();
@@ -48,7 +48,7 @@ fn benchmark_varying_sizes(c: &mut Criterion) {
         }
         b.iter(|| detect_all(black_box(&data)))
     });
-    
+
     group.finish();
 }
 

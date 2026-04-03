@@ -1,0 +1,848 @@
+use anyhow::{anyhow, Result};
+use rustls::{ClientConfig, RootCertStore, ServerName};
+use scred_config::ConfigLoader;
+use scred_http::fixed_upstream::FixedUpstream;
+use scred_http::logging;
+use scred_http::{OptimizedDnsResolver, OptimizedDnsResolverBuilder};
+use std::env;
+use std::sync::Arc;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::TlsConnector;
+use tracing::{debug, info, warn};
+
+#[cfg(feature = "redaction")]
+use scred_http::PatternSelector;
+
+#[cfg(feature = "redaction")]
+use scred_http::http_line_reader::read_response_line;
+
+#[cfg(feature = "redaction")]
+use scred_http::streaming_request::{stream_request_to_upstream, StreamingRequestConfig};
+
+#[cfg(feature = "redaction")]
+use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
+
+#[cfg(feature = "redaction")]
+use scred_redactor::{RedactionConfig, RedactionEngine, StreamingConfig, StreamingRedactor};
+
+#[cfg(feature = "policy")]
+mod policy_integration;
+
+#[cfg(feature = "policy")]
+pub use policy_integration::init_policy_from_config;
+
+fn print_help() {
+    println!("scred-proxy - Reverse proxy with secret detection and redaction");
+    println!();
+    println!("USAGE:");
+    println!("    scred-proxy [OPTIONS]");
+    println!();
+    println!("OPTIONS:");
+    println!("    -h, --help          Show this help message");
+    println!("    --config            Show configuration file help");
+    println!("    --generate-config   Generate example configuration file");
+    #[cfg(feature = "redaction")]
+    println!("    --list-patterns        List available patterns");
+    println!();
+
+    #[cfg(feature = "redaction")]
+    {
+        println!("REDACTION OPTIONS:");
+        println!("    --detect TIERS     Pattern tiers to detect (comma-separated)");
+        println!("    --redact TIERS     Pattern tiers to redact (comma-separated)");
+        println!();
+    }
+
+    println!("ENVIRONMENT VARIABLES:");
+    println!("    SCRED_PROXY_UPSTREAM_URL    Upstream backend URL (required)");
+    println!("    SCRED_PROXY_LISTEN_PORT     Listen port (default: 9999)");
+    println!("    SCRED_LOG_LEVEL             Log level: trace, debug, info, warn, error");
+    println!("    SCRED_LOG_FORMAT            Log format: text, json, pretty");
+    println!();
+
+    #[cfg(feature = "redaction")]
+    {
+        println!("REDACTION ENVIRONMENT:");
+        println!("    SCRED_DETECT_PATTERNS       Tiers to detect (e.g., CRITICAL,API_KEYS)");
+        println!("    SCRED_REDACT_PATTERNS       Tiers to redact (e.g., CRITICAL,API_KEYS)");
+        println!();
+    }
+
+    #[cfg(feature = "policy")]
+    {
+        println!("POLICY ENVIRONMENT:");
+        println!("    Set secrets via environment variables matching patterns in config.");
+        println!("    Example: OPENAI_API_KEY=sk-xxx (matched by '*_API_KEY' glob)");
+        println!();
+    }
+
+    println!("FEATURES COMPILED:");
+    #[cfg(feature = "redaction")]
+    println!("    + redaction (secret detection and redaction)");
+    #[cfg(not(feature = "redaction"))]
+    println!("    - redaction (forward-only, no detection)");
+    #[cfg(feature = "policy")]
+    println!("    + policy (placeholder replacement)");
+    #[cfg(not(feature = "policy"))]
+    println!("    - policy");
+    println!();
+
+    println!("EXAMPLES:");
+    println!("    scred-proxy");
+    println!("    SCRED_PROXY_UPSTREAM_URL=https://api.example.com scred-proxy");
+    #[cfg(feature = "redaction")]
+    println!("    scred-proxy --detect CRITICAL,API_KEYS");
+    println!("    scred-proxy --generate-config > scred.yaml");
+    println!();
+
+    println!("CONFIGURATION FILE:");
+    println!(
+        "    scred-proxy reads from: ./scred.yaml, ~/.scred/config.yaml, /etc/scred/config.yaml"
+    );
+    println!("    Run 'scred-proxy --config' for configuration file format");
+    println!();
+}
+
+fn print_config_help() {
+    println!("CONFIGURATION FILE FORMAT (scred.yaml)");
+    println!();
+    println!("Create scred.yaml in current directory, ~/.scred/, or /etc/scred/");
+    println!();
+    println!("EXAMPLE:");
+    println!("---");
+    println!("scred-proxy:");
+    println!("  listen:");
+    println!("    port: 9999");
+    println!("    address: \"0.0.0.0\"");
+    println!();
+    println!("  upstream:");
+    println!("    url: \"https://api.openai.com\"");
+    println!("    timeout_secs: 30");
+    println!();
+
+    #[cfg(feature = "redaction")]
+    {
+        println!("  redaction:");
+        println!("    mode: selective  # selective | strict | passive");
+        println!("    patterns:");
+        println!("      detect: [CRITICAL, API_KEYS, INFRASTRUCTURE]");
+        println!("      redact: [CRITICAL, API_KEYS]");
+        println!();
+    }
+
+    #[cfg(feature = "policy")]
+    {
+        println!("scred-policy:");
+        println!("  enabled: true");
+        println!("  seed: \"your-seed-here\"");
+        println!("  providers:");
+        println!("    - type: env");
+        println!("      glob: [\"*_API_KEY\", \"*_SECRET\"]");
+        println!("  discovery:");
+        println!("    enabled: true");
+        println!("    port: 9998");
+        println!();
+    }
+
+    println!("See: https://github.com/autonomous-toaster/scred for full documentation");
+    println!();
+}
+
+fn generate_example_config() {
+    let config = r#"
+# =============================================================================
+# SCRED Forward Proxy Configuration
+# =============================================================================
+# Generated by: scred-proxy --generate-config
+#
+# This is an EXHAUSTIVE configuration showing ALL available options.
+# Save as: scred.yaml or ~/.scred/config.yaml
+#
+# SCRED Forward Proxy sits between your app and an upstream service,
+# with optional secret redaction and placeholder replacement.
+#
+# Quick Start:
+#   1. Save: scred-proxy --generate-config > scred.yaml
+#   2. Run: scred-proxy --upstream https://api.openai.com
+#   3. Test: curl http://localhost:9999/v1/models
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# POLICY CONFIGURATION (Placeholder Replacement)
+# -----------------------------------------------------------------------------
+# Allows containers to use placeholders instead of real secrets.
+# The proxy replaces placeholders at runtime.
+# -----------------------------------------------------------------------------
+policy:
+  enabled: false
+  seed: "$SCRED_POLICY_SEED"
+  
+  discovery:
+    enabled: true
+    port: 9998
+    path: /placeholders
+  
+  providers:
+    - type: env
+      keys:
+        - "*_API_KEY"
+        - "*_SECRET"
+        - "*_TOKEN"
+  
+  patterns: ["*"]
+  
+  location:
+    request_body: true
+    request_headers: true
+    response_body: true
+    response_headers: true
+    keep_headers: []
+    replace_headers: []
+
+# -----------------------------------------------------------------------------
+# REDACTION CONFIGURATION
+# -----------------------------------------------------------------------------
+redaction:
+  mode: redact  # detect | redact | passthrough
+  
+  patterns:
+    redact: ["*"]
+    keep: []
+
+# -----------------------------------------------------------------------------
+# FORWARD PROXY CONFIGURATION
+# -----------------------------------------------------------------------------
+scred-proxy:
+  listen:
+    port: 9999
+    address: "0.0.0.0"
+  
+  upstream:
+    # Target service URL
+    url: "https://api.openai.com"
+    
+    # Request timeout
+    timeout_secs: 30
+    
+    # Override Host header (optional)
+    # host-header: "api.openai.com"
+
+# -----------------------------------------------------------------------------
+# PER-HOST POLICIES
+# -----------------------------------------------------------------------------
+# policies:
+#   - hosts: ["*.openai.com"]
+#     policy:
+#       providers:
+#         - type: env
+#           keys: ["OPENAI_API_KEY"]
+#       patterns: ["openai-*"]
+
+# =============================================================================
+# ENVIRONMENT VARIABLES
+# =============================================================================
+# SCRED_PROXY_LISTEN_PORT=9999
+# SCRED_PROXY_UPSTREAM_URL=https://api.openai.com
+# SCRED_POLICY_ENABLED=true
+# SCRED_POLICY_SEED=your-secret-seed
+# =============================================================================
+
+# Usage:
+#   scred-proxy
+#   scred-proxy --upstream https://api.openai.com
+#   scred-proxy --config scred.yaml
+"#;
+    println!("{}", config.trim());
+}
+
+
+
+#[cfg(feature = "redaction")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum RedactionMode {
+    Detect,
+    Redact,
+    Passthrough,
+}
+
+#[cfg(feature = "redaction")]
+#[derive(Clone, Debug)]
+struct PathRedactionRule {
+    path_pattern: String,
+    should_redact: bool,
+    reason: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct ProxyConfig {
+    listen_addr: String,
+    listen_port: u16,
+    upstream: FixedUpstream,
+    #[cfg(feature = "redaction")]
+    redaction_mode: RedactionMode,
+    #[cfg(feature = "redaction")]
+    detect_selector: PatternSelector,
+    #[cfg(feature = "redaction")]
+    redact_selector: PatternSelector,
+    #[cfg(feature = "redaction")]
+    per_path_rules: Vec<PathRedactionRule>,
+}
+
+impl ProxyConfig {
+    #[cfg(feature = "redaction")]
+    fn from_config_file() -> Result<Self> {
+        let file_config = ConfigLoader::load()?;
+        ConfigLoader::validate(&file_config)?;
+
+        let proxy_cfg = file_config.scred_proxy.ok_or_else(|| {
+            anyhow!(
+                "No scred-proxy configuration found. \
+                     Configure scred-proxy section in scred.yaml or set SCRED_PROXY_UPSTREAM_URL"
+            )
+        })?;
+
+        let listen_port = proxy_cfg
+            .listen
+            .port
+            .or_else(|| {
+                env::var("SCRED_PROXY_LISTEN_PORT")
+                    .ok()
+                    .and_then(|p| p.parse().ok())
+            })
+            .unwrap_or(9999);
+
+        let listen_addr = proxy_cfg
+            .listen
+            .address
+            .unwrap_or_else(|| "0.0.0.0".to_string());
+
+        let upstream_url = proxy_cfg
+            .upstream
+            .url
+            .or_else(|| env::var("SCRED_PROXY_UPSTREAM_URL").ok())
+            .ok_or_else(|| {
+                anyhow!(
+                    "Upstream URL required. \
+                     Set 'scred_proxy.upstream.url' or SCRED_PROXY_UPSTREAM_URL"
+                )
+            })?;
+
+        let upstream = FixedUpstream::parse(&upstream_url)?;
+
+        let mode_str = proxy_cfg.redaction.mode.to_lowercase();
+        let redaction_mode = match mode_str.as_str() {
+            "detect" => RedactionMode::Detect,
+            "redact" => RedactionMode::Redact,
+            "passthrough" | "passive" => RedactionMode::Passthrough,
+            _ => RedactionMode::Redact,
+        };
+
+        let detect_str = proxy_cfg.redaction.patterns.detect.join(",");
+        let redact_str = proxy_cfg.redaction.patterns.redact.join(",");
+
+        let detect_selector = PatternSelector::from_str(&detect_str)
+            .map_err(|e| anyhow!("Invalid detect patterns '{}': {}", detect_str, e))?;
+
+        let redact_selector = PatternSelector::from_str(&redact_str)
+            .map_err(|e| anyhow!("Invalid redact patterns '{}': {}", redact_str, e))?;
+
+        let per_path_rules: Vec<PathRedactionRule> = proxy_cfg
+            .rules
+            .into_iter()
+            .map(|r| PathRedactionRule {
+                path_pattern: r.path,
+                should_redact: r.redact,
+                reason: r.reason,
+            })
+            .collect();
+
+        info!(
+            "Configuration loaded: listen={}:{}",
+            listen_addr, listen_port
+        );
+        info!(
+            "Upstream: {}://{}{}",
+            upstream.scheme,
+            upstream.authority(),
+            upstream.base_path
+        );
+
+        Ok(Self {
+            listen_addr,
+            listen_port,
+            upstream,
+            redaction_mode,
+            detect_selector,
+            redact_selector,
+            per_path_rules,
+        })
+    }
+
+    #[cfg(not(feature = "redaction"))]
+    fn from_config_file() -> Result<Self> {
+        let file_config = ConfigLoader::load()?;
+        ConfigLoader::validate(&file_config)?;
+
+        let proxy_cfg = file_config
+            .scred_proxy
+            .ok_or_else(|| anyhow!("No scred-proxy configuration found"))?;
+
+        let listen_port = proxy_cfg.listen.port.unwrap_or(9999);
+        let listen_addr = proxy_cfg
+            .listen
+            .address
+            .unwrap_or_else(|| "0.0.0.0".to_string());
+
+        let upstream_url = proxy_cfg
+            .upstream
+            .url
+            .or_else(|| env::var("SCRED_PROXY_UPSTREAM_URL").ok())
+            .ok_or_else(|| anyhow!("Upstream URL required"))?;
+
+        let upstream = FixedUpstream::parse(&upstream_url)?;
+
+        info!(
+            "Configuration loaded: listen={}:{}",
+            listen_addr, listen_port
+        );
+        info!(
+            "Upstream: {}://{}{}",
+            upstream.scheme,
+            upstream.authority(),
+            upstream.base_path
+        );
+
+        Ok(Self {
+            listen_addr,
+            listen_port,
+            upstream,
+        })
+    }
+
+    #[cfg(feature = "redaction")]
+    fn from_env() -> Result<Self> {
+        let listen_port = env::var("SCRED_PROXY_LISTEN_PORT")
+            .unwrap_or_else(|_| "9999".to_string())
+            .parse::<u16>()?;
+
+        let upstream_url = env::var("SCRED_PROXY_UPSTREAM_URL")
+            .map_err(|_| anyhow!("SCRED_PROXY_UPSTREAM_URL required"))?;
+
+        let args: Vec<String> = env::args().collect();
+        let detect_mode = args.contains(&"--detect".to_string());
+        let redact_mode = args.contains(&"--redact".to_string());
+
+        let detect_str = env::var("SCRED_DETECT_PATTERNS")
+            .unwrap_or_else(|_| "CRITICAL,API_KEYS,INFRASTRUCTURE".to_string());
+        let redact_str =
+            env::var("SCRED_REDACT_PATTERNS").unwrap_or_else(|_| "CRITICAL,API_KEYS".to_string());
+
+        let detect_selector = PatternSelector::from_str(&detect_str)
+            .map_err(|e| anyhow!("Invalid detect patterns: {}", e))?;
+        let redact_selector = PatternSelector::from_str(&redact_str)
+            .map_err(|e| anyhow!("Invalid redact patterns: {}", e))?;
+
+        info!("Environment configuration: listen_port={}", listen_port);
+
+        let redaction_mode = if detect_mode {
+            RedactionMode::Detect
+        } else if redact_mode {
+            RedactionMode::Redact
+        } else {
+            RedactionMode::Passthrough
+        };
+
+        Ok(Self {
+            listen_addr: "0.0.0.0".to_string(),
+            listen_port,
+            upstream: FixedUpstream::parse(&upstream_url)?,
+            redaction_mode,
+            detect_selector,
+            redact_selector,
+            per_path_rules: vec![],
+        })
+    }
+
+    #[cfg(not(feature = "redaction"))]
+    fn from_env() -> Result<Self> {
+        let listen_port = env::var("SCRED_PROXY_LISTEN_PORT")
+            .unwrap_or_else(|_| "9999".to_string())
+            .parse::<u16>()?;
+
+        let upstream_url = env::var("SCRED_PROXY_UPSTREAM_URL")
+            .map_err(|_| anyhow!("SCRED_PROXY_UPSTREAM_URL required"))?;
+
+        info!("Environment configuration: listen_port={}", listen_port);
+
+        Ok(Self {
+            listen_addr: "0.0.0.0".to_string(),
+            listen_port,
+            upstream: FixedUpstream::parse(&upstream_url)?,
+        })
+    }
+
+    #[cfg(feature = "redaction")]
+    fn should_redact_path(&self, path: &str) -> bool {
+        for rule in &self.per_path_rules {
+            if Self::path_matches(&rule.path_pattern, path) {
+                if let Some(reason) = &rule.reason {
+                    debug!("Path rule matched '{}': {}", rule.path_pattern, reason);
+                }
+                return rule.should_redact;
+            }
+        }
+        true
+    }
+
+    #[cfg(feature = "redaction")]
+    fn path_matches(pattern: &str, path: &str) -> bool {
+        if pattern == "/*" || pattern == "*" {
+            return true;
+        }
+        if pattern.ends_with("/*") {
+            let prefix = &pattern[..pattern.len() - 2];
+            return path.starts_with(prefix);
+        }
+        path == pattern
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let args: Vec<String> = env::args().collect();
+
+    // Help flags (before logging init)
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        return Ok(());
+    }
+
+    if args.contains(&"--config".to_string()) {
+        print_config_help();
+        return Ok(());
+    }
+
+    if args.contains(&"--generate-config".to_string()) {
+        generate_example_config();
+        return Ok(());
+    }
+
+    #[cfg(feature = "redaction")]
+    if args.contains(&"--list-patterns".to_string()) {
+        println!("SCRED Pattern Tiers:");
+        println!();
+        println!("{:<20} {:<10} {}", "Tier", "Risk", "Description");
+        println!("{}", "-".repeat(60));
+        println!(
+            "{:<20} {:<10} {}",
+            "CRITICAL", "95%", "High-value secrets (AWS keys, passwords)"
+        );
+        println!(
+            "{:<20} {:<10} {}",
+            "API_KEYS", "80%", "API tokens (OpenAI, GitHub, Stripe)"
+        );
+        println!(
+            "{:<20} {:<10} {}",
+            "INFRASTRUCTURE", "60%", "Infrastructure secrets (SSH, certificates)"
+        );
+        println!(
+            "{:<20} {:<10} {}",
+            "SERVICES", "40%", "Service tokens (database, cache)"
+        );
+        println!(
+            "{:<20} {:<10} {}",
+            "PATTERNS", "30%", "Generic patterns (JWT, base64)"
+        );
+        println!();
+        return Ok(());
+    }
+
+    logging::init_from_env();
+
+    let config = ProxyConfig::from_config_file().or_else(|_| ProxyConfig::from_env())?;
+
+    let listen_addr = format!("{}:{}", config.listen_addr, config.listen_port);
+    info!("scred-proxy starting");
+    info!("Listening on {}", listen_addr);
+    info!(
+        "Upstream: {}://{}{}",
+        config.upstream.scheme,
+        config.upstream.authority(),
+        config.upstream.base_path
+    );
+
+    #[cfg(feature = "redaction")]
+    info!("Features: redaction enabled");
+
+    #[cfg(not(feature = "redaction"))]
+    info!("Features: redaction disabled (forward-only mode)");
+
+    #[cfg(feature = "policy")]
+    info!("Features: policy enabled");
+
+    let resolver = Arc::new(
+        OptimizedDnsResolverBuilder::new()
+            .dns_ttl(60)
+            .dns_enabled(true)
+            .pool_size(10)
+            .pool_timeout(30)
+            .pool_enabled(true)
+            .build(),
+    );
+
+    info!("DNS resolver: caching (60s), pooling (10 conns)");
+
+    let config = Arc::new(config);
+    let listener = TcpListener::bind(&listen_addr).await?;
+
+    info!("Accepting connections");
+
+    loop {
+        let (stream, peer_addr) = listener.accept().await?;
+        let config = Arc::clone(&config);
+        let resolver = Arc::clone(&resolver);
+
+        tokio::spawn(async move {
+            if let Err(e) = handle_connection(stream, config, resolver, peer_addr).await {
+                warn!("Connection error from {}: {}", peer_addr, e);
+            }
+        });
+    }
+}
+
+async fn handle_connection(
+    stream: TcpStream,
+    config: Arc<ProxyConfig>,
+    resolver: Arc<OptimizedDnsResolver>,
+    peer_addr: std::net::SocketAddr,
+) -> Result<()> {
+    let (client_read, mut client_write) = stream.into_split();
+    let mut client_reader = BufReader::with_capacity(256 * 1024, client_read);
+
+    let mut request_count = 0;
+
+    loop {
+        request_count += 1;
+
+        let mut first_line = String::new();
+        client_reader.read_line(&mut first_line).await?;
+
+        if first_line.is_empty() {
+            if request_count > 1 {
+                debug!("Connection closed after {} requests", request_count - 1);
+            }
+            break;
+        }
+
+        let first_line = first_line.trim().to_string();
+        let request_path = extract_path(&first_line);
+
+        info!(
+            "{} \"{} {}\"",
+            peer_addr.ip(),
+            extract_method(&first_line),
+            request_path
+        );
+
+        #[cfg(feature = "redaction")]
+        let should_redact = config.should_redact_path(&request_path);
+
+        let upstream_addr = config.upstream.authority();
+        let rewritten_request_line = config.upstream.rewrite_request_line(&first_line)?;
+
+        let tcp_stream = resolver.connect_with_retry(&upstream_addr).await?;
+
+        if config.upstream.scheme == "https" {
+            let mut upstream = connect_tls_upstream(tcp_stream, &config.upstream.host).await?;
+
+            #[cfg(feature = "redaction")]
+            {
+                let redaction_config = if !should_redact {
+                    RedactionConfig { enabled: false }
+                } else {
+                    match config.redaction_mode {
+                        RedactionMode::Detect => RedactionConfig { enabled: false },
+                        RedactionMode::Redact => RedactionConfig { enabled: true },
+                        RedactionMode::Passthrough => RedactionConfig { enabled: false },
+                    }
+                };
+
+                let redaction_engine = Arc::new(RedactionEngine::new(redaction_config));
+                let redactor = Arc::new(StreamingRedactor::with_selector(
+                    redaction_engine,
+                    StreamingConfig::default(),
+                    config.redact_selector.clone(),
+                ));
+
+                stream_request_to_upstream(
+                    &mut client_reader,
+                    &mut upstream,
+                    &rewritten_request_line,
+                    redactor.clone(),
+                    StreamingRequestConfig::default(),
+                )
+                .await?;
+
+                let response_line = read_response_line(&mut upstream).await?;
+                if response_line.is_empty() {
+                    return Err(anyhow!("Empty response from upstream"));
+                }
+
+                let mut upstream_buf = BufReader::new(upstream);
+                stream_response_to_client(
+                    &mut upstream_buf,
+                    &mut client_write,
+                    &response_line,
+                    redactor,
+                    StreamingResponseConfig::default(),
+                    Some(&config.upstream.host),
+                    Some(&format!("{}:{}", peer_addr.ip(), config.listen_port)),
+                    Some("http"),
+                )
+                .await?;
+            }
+
+            #[cfg(not(feature = "redaction"))]
+            {
+                use tokio::io::copy;
+
+                let request_bytes = format!("{}\r\n", rewritten_request_line);
+                upstream.write_all(request_bytes.as_bytes()).await?;
+
+                let mut headers_buf = Vec::new();
+                loop {
+                    let mut line = String::new();
+                    client_reader.read_line(&mut line).await?;
+                    headers_buf.extend_from_slice(line.as_bytes());
+                    if line == "\r\n" || line.is_empty() {
+                        break;
+                    }
+                }
+                upstream.write_all(&headers_buf).await?;
+                upstream.flush().await?;
+
+                let mut upstream_buf = BufReader::new(upstream);
+                copy(&mut upstream_buf, &mut client_write).await?;
+            }
+        } else {
+            let mut upstream = tcp_stream;
+
+            #[cfg(feature = "redaction")]
+            {
+                let redaction_config = if !should_redact {
+                    RedactionConfig { enabled: false }
+                } else {
+                    match config.redaction_mode {
+                        RedactionMode::Detect => RedactionConfig { enabled: false },
+                        RedactionMode::Redact => RedactionConfig { enabled: true },
+                        RedactionMode::Passthrough => RedactionConfig { enabled: false },
+                    }
+                };
+
+                let redaction_engine = Arc::new(RedactionEngine::new(redaction_config));
+                let redactor = Arc::new(StreamingRedactor::with_selector(
+                    redaction_engine,
+                    StreamingConfig::default(),
+                    config.redact_selector.clone(),
+                ));
+
+                stream_request_to_upstream(
+                    &mut client_reader,
+                    &mut upstream,
+                    &rewritten_request_line,
+                    redactor.clone(),
+                    StreamingRequestConfig::default(),
+                )
+                .await?;
+
+                let response_line = read_response_line(&mut upstream).await?;
+                if response_line.is_empty() {
+                    return Err(anyhow!("Empty response from upstream"));
+                }
+
+                let mut upstream_buf = BufReader::new(upstream);
+                stream_response_to_client(
+                    &mut upstream_buf,
+                    &mut client_write,
+                    &response_line,
+                    redactor,
+                    StreamingResponseConfig::default(),
+                    Some(&config.upstream.host),
+                    Some(&format!("{}:{}", peer_addr.ip(), config.listen_port)),
+                    Some("http"),
+                )
+                .await?;
+            }
+
+            #[cfg(not(feature = "redaction"))]
+            {
+                use tokio::io::copy;
+
+                let request_bytes = format!("{}\r\n", rewritten_request_line);
+                upstream.write_all(request_bytes.as_bytes()).await?;
+
+                let mut headers_buf = Vec::new();
+                loop {
+                    let mut line = String::new();
+                    client_reader.read_line(&mut line).await?;
+                    headers_buf.extend_from_slice(line.as_bytes());
+                    if line == "\r\n" || line.is_empty() {
+                        break;
+                    }
+                }
+                upstream.write_all(&headers_buf).await?;
+                upstream.flush().await?;
+
+                let mut upstream_buf = BufReader::new(upstream);
+                copy(&mut upstream_buf, &mut client_write).await?;
+            }
+        }
+
+        client_write.flush().await?;
+    }
+
+    Ok(())
+}
+
+async fn connect_tls_upstream<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
+    stream: S,
+    host: &str,
+) -> Result<tokio_rustls::client::TlsStream<S>> {
+    let mut root_store = RootCertStore::empty();
+    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        )
+    }));
+
+    let client_config = ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+
+    let connector = TlsConnector::from(Arc::new(client_config));
+    let server_name =
+        ServerName::try_from(host).map_err(|_| anyhow!("Invalid upstream host: {}", host))?;
+
+    connector
+        .connect(server_name, stream)
+        .await
+        .map_err(|e| anyhow!("TLS handshake failed: {}", e))
+}
+
+fn extract_method(request_line: &str) -> &str {
+    request_line.split(' ').next().unwrap_or("UNKNOWN")
+}
+
+fn extract_path(request_line: &str) -> &str {
+    let parts: Vec<&str> = request_line.split(' ').collect();
+    if parts.len() >= 2 {
+        let path_with_query = parts[1];
+        path_with_query.split('?').next().unwrap_or("/")
+    } else {
+        "/"
+    }
+}

@@ -16,9 +16,8 @@
 /// - Cache values moved (no allocation on hit)
 /// - Pool uses VecDeque (no allocation on reuse)
 /// - Minimal locking (RwLock for concurrent access)
-
-use crate::cached_dns_resolver::{CachedDnsResolver, CachedDnsConfig};
-use crate::pooled_dns_resolver::{PooledDnsResolver, PoolConfig};
+use crate::cached_dns_resolver::{CachedDnsConfig, CachedDnsResolver};
+use crate::pooled_dns_resolver::{PoolConfig, PooledDnsResolver};
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -59,7 +58,10 @@ impl OptimizedDnsResolver {
     /// - First request to upstream: ~206ms (baseline)
     /// - Requests 2-10 to same upstream: <1ms each (pooled + cached)
     /// - Requests 11+ to new upstream: ~5ms (cached DNS, new connection)
-    pub async fn connect_with_retry(&self, addr: &str) -> Result<crate::pooled_dns_resolver::PooledTcpStream> {
+    pub async fn connect_with_retry(
+        &self,
+        addr: &str,
+    ) -> Result<crate::pooled_dns_resolver::PooledTcpStream> {
         // Use pooled resolver which will internally use cached resolver
         // This two-level approach is cleaner: pool manages connection reuse,
         // cache manages DNS resolution
@@ -174,7 +176,7 @@ mod tests {
             .dns_ttl(120)
             .pool_size(20)
             .build();
-        
+
         let stats = resolver.stats();
         assert_eq!(stats.cache_size, 0);
     }
@@ -185,7 +187,7 @@ mod tests {
             .dns_enabled(false)
             .pool_enabled(false)
             .build();
-        
+
         let stats = resolver.stats();
         assert_eq!(stats.cache_size, 0);
     }

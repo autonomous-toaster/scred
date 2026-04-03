@@ -1,5 +1,6 @@
+use anyhow::{anyhow, Result};
 /// Proxy Environment Variable Resolution
-/// 
+///
 /// Respects standard environment variables:
 ///   - http_proxy / HTTP_PROXY
 ///   - https_proxy / HTTPS_PROXY
@@ -7,9 +8,7 @@
 ///
 /// When SCRED connects to upstream servers, it checks these env vars
 /// to determine if it should route through an intermediate proxy.
-
-use tracing::{debug, info, error};
-use anyhow::{Result, anyhow};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone)]
 pub struct MitmConfig {
@@ -24,7 +23,7 @@ enum NoProxyEntry {
     Suffix(String),
     IpRange(String),
     Localhost,
-    All,  // NEW: Matches all hosts (NO_PROXY=*)
+    All, // NEW: Matches all hosts (NO_PROXY=*)
 }
 
 impl MitmConfig {
@@ -48,15 +47,24 @@ impl MitmConfig {
         let no_proxy_list = parse_no_proxy_list(&no_proxy_str);
 
         if http_proxy.is_some() || https_proxy.is_some() {
-            info!("Proxy environment variables detected");
-            if http_proxy.is_some() {
-                debug!("http_proxy: (set)");
+            warn!("Proxy environment variables detected - these will affect upstream routing");
+            if let Some(ref val) = http_proxy {
+                warn!("http_proxy: {}", val);
             }
-            if https_proxy.is_some() {
-                debug!("https_proxy: (set)");
+            if let Some(ref val) = https_proxy {
+                warn!("https_proxy: {}", val);
             }
             if !no_proxy_list.is_empty() {
-                debug!("no_proxy: {} entries", no_proxy_list.len());
+                warn!("no_proxy: {} entries - {}",
+                    no_proxy_list.len(),
+                    no_proxy_list.iter().map(|e| match e {
+                        NoProxyEntry::All => "*".to_string(),
+                        NoProxyEntry::Localhost => "localhost".to_string(),
+                        NoProxyEntry::Host(h) => h.clone(),
+                        NoProxyEntry::Suffix(s) => format!(".{}", s),
+                        NoProxyEntry::IpRange(_) => "<ip_range>".to_string(),
+                    }).collect::<Vec<_>>().join(", ")
+                );
             }
         }
 
@@ -119,7 +127,7 @@ impl MitmConfig {
         } else {
             self.http_proxy.clone()
         };
-        
+
         // Filter out empty strings (happens when env var is set to "")
         match proxy_value {
             Some(val) if val.is_empty() => {
@@ -187,7 +195,7 @@ fn parse_no_proxy_list(no_proxy_str: &str) -> Vec<NoProxyEntry> {
 }
 
 /// Connect to target through upstream proxy using CONNECT method
-/// 
+///
 /// For HTTPS through an HTTP(S) proxy, use CONNECT tunneling:
 /// 1. Connect to proxy
 /// 2. Send: CONNECT target:port HTTP/1.1
@@ -223,7 +231,10 @@ pub async fn connect_through_proxy(
     );
 
     stream.write_all(connect_request.as_bytes()).await?;
-    info!("[SEND] Sent CONNECT {}:{} through proxy", target_host, target_port);
+    info!(
+        "[SEND] Sent CONNECT {}:{} through proxy",
+        target_host, target_port
+    );
 
     // Read response (should be 200)
     let mut response_buf = vec![0u8; 1024];
@@ -242,4 +253,3 @@ pub async fn connect_through_proxy(
     info!("CONNECT tunnel established (200 OK)");
     Ok(stream)
 }
-

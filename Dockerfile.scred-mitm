@@ -1,0 +1,33 @@
+# Dockerfile for scred-mitm
+# Uses musl for static linking (compatible with scratch image)
+FROM rust:1.88 AS builder
+
+# Install musl cross-compiler
+RUN apt-get update && apt-get install -y musl-tools musl-dev
+
+# Add musl target
+RUN rustup target add aarch64-unknown-linux-musl
+
+WORKDIR /app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# Build statically linked binary with musl target
+RUN cargo build -j 1 -p scred-mitm --features policy,traffic-filter --profile docker --target aarch64-unknown-linux-musl
+
+# Runtime stage - minimal scratch image
+FROM scratch
+
+# Copy CA certificates for HTTPS
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy the static binary
+COPY --from=builder /app/target/aarch64-unknown-linux-musl/docker/scred-mitm /scred-mitm
+
+WORKDIR /app/data
+
+EXPOSE 8080 9998
+
+ENTRYPOINT ["/scred-mitm"]

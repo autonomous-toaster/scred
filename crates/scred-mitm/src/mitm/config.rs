@@ -1,8 +1,10 @@
+use scred_http::secrets::SecretsConfig;
+use scred_http::PatternSelector;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use scred_http::secrets::SecretsConfig;
-use scred_http::PatternSelector;
+
+use wax::{Glob, Pattern};
 
 /// Redaction mode for handling detected secrets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,6 +27,37 @@ impl RedactionMode {
     }
 }
 
+/// Traffic policy for domain filtering
+#[derive(Debug, Clone)]
+pub struct TrafficPolicy {
+    /// Enable traffic filtering
+    pub enabled: bool,
+    /// Allowed domains (glob patterns) - stored as strings, matched on demand
+    pub allowed_domains: Vec<String>,
+    /// Block message
+    pub block_message: String,
+}
+
+impl TrafficPolicy {
+    /// Check if a domain is allowed
+    pub fn is_allowed(&self, domain: &str) -> bool {
+        if !self.enabled {
+            return true;
+        }
+        self.allowed_domains.iter().any(|pattern| {
+            // Handle wildcard match-all
+            if pattern == "*" {
+                return true;
+            }
+            // Use wax Glob matching
+            match Glob::new(pattern) {
+                Ok(glob) => glob.is_match(domain),
+                Err(_) => pattern == domain, // Fallback to exact match
+            }
+        })
+    }
+}
+
 /// MITM-specific configuration (TLS + upstream proxy)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -32,6 +65,43 @@ pub struct Config {
     pub tls: TlsConfig,
     pub secrets: SecretsConfig,
     pub logging: LoggingConfig,
+    /// Traffic filtering policy
+    #[serde(default)]
+    pub traffic: TrafficConfig,
+}
+
+/// Traffic configuration (serde-friendly)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct TrafficConfig {
+    /// Enable traffic filtering
+    #[serde(default)]
+    pub enabled: bool,
+    /// Allowed domains (glob patterns)
+    #[serde(default = "default_allowed_domains")]
+    pub allowed_domains: Vec<String>,
+    /// Block message
+    #[serde(default = "default_block_message")]
+    pub block_message: String,
+}
+
+fn default_allowed_domains() -> Vec<String> {
+    vec!["*".to_string()]
+}
+
+fn default_block_message() -> String {
+    "Domain not allowed".to_string()
+}
+
+impl TrafficConfig {
+    /// Compile into TrafficPolicy
+    pub fn into_policy(&self) -> anyhow::Result<TrafficPolicy> {
+        Ok(TrafficPolicy {
+            enabled: self.enabled,
+            allowed_domains: self.allowed_domains.clone(),
+            block_message: self.block_message.clone(),
+        })
+    }
 }
 
 /// Upstream proxy configuration
@@ -92,7 +162,7 @@ pub struct LoggingConfig {
 }
 
 fn default_redaction_mode() -> RedactionMode {
-    RedactionMode::DetectOnly  // Default: detect secrets, don't redact
+    RedactionMode::DetectOnly // Default: detect secrets, don't redact
 }
 
 fn default_h2_redact_headers() -> bool {
@@ -126,6 +196,7 @@ impl Default for Config {
                 format: "json".to_string(),
                 output: "stderr".to_string(),
             },
+            traffic: TrafficConfig::default(),
         };
         config.proxy.init_patterns();
         config
@@ -184,8 +255,7 @@ impl Config {
             };
         }
         if let Ok(h2_redact) = std::env::var("SCRED_H2_REDACT_HEADERS") {
-            self.proxy.h2_redact_headers =
-                h2_redact.to_lowercase() != "false" && h2_redact != "0";
+            self.proxy.h2_redact_headers = h2_redact.to_lowercase() != "false" && h2_redact != "0";
         }
 
         // TLS config overrides
@@ -212,10 +282,7 @@ impl Config {
 
         // Secret patterns override
         if let Ok(patterns) = std::env::var("SCRED_PATTERNS") {
-            self.secrets.patterns = patterns
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect();
+            self.secrets.patterns = patterns.split(',').map(|s| s.trim().to_string()).collect();
         }
     }
 
@@ -293,4 +360,3 @@ fn matches_pattern(pattern: &str, name: &str) -> bool {
 
     true
 }
-

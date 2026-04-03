@@ -1,6 +1,6 @@
 //! Benchmark different chunk sizes to find optimal performance
 
-use scred_redactor::{RedactionEngine, RedactionConfig, StreamingRedactor, StreamingConfig};
+use scred_redactor::{RedactionConfig, RedactionEngine, StreamingConfig, StreamingRedactor};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -35,7 +35,8 @@ fn main() {
         let start = Instant::now();
         for chunk in data.chunks(chunk_size) {
             let is_eof = chunk.len() < chunk_size;
-            let (output, bytes_written, patterns) = redactor.process_chunk(chunk, &mut lookahead, is_eof);
+            let (output, bytes_written, patterns) =
+                redactor.process_chunk(chunk, &mut lookahead, is_eof);
             total_output += bytes_written;
             pattern_count += patterns;
         }
@@ -43,8 +44,11 @@ fn main() {
 
         let throughput = (SIZE as f64) / elapsed.as_secs_f64() / (1024.0 * 1024.0);
 
-        println!("Chunk size: {:6} bytes ({:3}KB)",
-                 chunk_size, chunk_size / 1024);
+        println!(
+            "Chunk size: {:6} bytes ({:3}KB)",
+            chunk_size,
+            chunk_size / 1024
+        );
         println!("  Time:       {:.2}ms", elapsed.as_secs_f64() * 1000.0);
         println!("  Throughput: {:.2} MB/s", throughput);
         println!("  Patterns:   {}", pattern_count);

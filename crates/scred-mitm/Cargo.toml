@@ -4,19 +4,21 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "MITM transparent proxy for secret redaction"
+description = "MITM transparent proxy with unified policy support"
 
 [features]
 default = []
-# Phase 5: Enable dual-mode proxy (streaming handlers alongside buffered)
 streaming_mode = []
 
 [dependencies]
 scred-config = { path = "../scred-config" }
 scred-http = { path = "../scred-http" }
 scred-redactor = { path = "../scred-redactor" }
+scred-policy = { path = "../scred-policy" }
+wax = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
+time = { workspace = true }
 rustls = { workspace = true }
 h2 = "0.4"
 http = "1.0"

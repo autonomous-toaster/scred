@@ -1,11 +1,10 @@
 /// HTTP Request/Response Parser
-/// 
+///
 /// Parses HTTP/1.1 requests and responses with support for:
 /// - Headers (including Content-Length, Transfer-Encoding)
 /// - Request line (method, path, version)
 /// - Status line (version, code, reason)
 /// - Body handling (fixed length, chunked, streaming)
-
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};
@@ -91,7 +90,10 @@ impl HttpResponse {
 
     /// Get all text (headers + body for scanning)
     pub fn all_text(&self) -> String {
-        let mut text = format!("HTTP/{} {} {}\r\n", self.version, self.status_code, self.reason);
+        let mut text = format!(
+            "HTTP/{} {} {}\r\n",
+            self.version, self.status_code, self.reason
+        );
         for (k, v) in &self.headers {
             text.push_str(&format!("{}: {}\r\n", k, v));
         }
@@ -106,7 +108,7 @@ pub async fn parse_request<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<Ht
     // Parse request line
     let mut line = String::new();
     reader.read_line(&mut line).await?;
-    
+
     let line = line.trim();
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.len() < 3 {
@@ -125,7 +127,7 @@ pub async fn parse_request<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<Ht
         let mut header_line = String::new();
         reader.read_line(&mut header_line).await?;
         let header_line = header_line.trim();
-        
+
         if header_line.is_empty() {
             break;
         }
@@ -166,7 +168,7 @@ pub async fn parse_response<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<H
     // Parse status line
     let mut line = String::new();
     reader.read_line(&mut line).await?;
-    
+
     let line = line.trim();
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.len() < 2 {
@@ -177,7 +179,10 @@ pub async fn parse_response<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<H
     let status_code = parts[1].parse::<u16>()?;
     let reason = parts[2..].join(" ");
 
-    debug!("Parsing response: HTTP/{} {} {}", version, status_code, reason);
+    debug!(
+        "Parsing response: HTTP/{} {} {}",
+        version, status_code, reason
+    );
 
     // Parse headers
     let mut headers = HashMap::new();
@@ -185,7 +190,7 @@ pub async fn parse_response<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<H
         let mut header_line = String::new();
         reader.read_line(&mut header_line).await?;
         let header_line = header_line.trim();
-        
+
         if header_line.is_empty() {
             break;
         }
@@ -235,4 +240,3 @@ fn is_chunked(headers: &HashMap<String, String>) -> bool {
     }
     false
 }
-

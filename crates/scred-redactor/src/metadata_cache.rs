@@ -3,7 +3,6 @@
 ///
 /// This module provides thread-safe, lazy-loaded metadata caching for all 274 patterns.
 /// Initialized once at startup via OnceLock singleton.
-
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -18,25 +17,25 @@ pub struct PatternMetadata {
     pub category: PatternCategory,
     pub risk_score: u8,
     pub ffi_path: FFIPath,
-    
+
     // Prefix information
     pub prefix: Option<String>,
     pub prefix_len: u16,
-    
+
     // Charset
     pub charset: Charset,
-    
+
     // Length constraints
     pub min_length: u16,
     pub max_length: u16,
     pub fixed_length: Option<u16>,
-    
+
     // Regex pattern
     pub regex_pattern: Option<String>,
-    
+
     // Example secret
     pub example_secret: String,
-    
+
     // Tags
     pub tags: Vec<String>,
 }
@@ -88,7 +87,7 @@ impl RiskTier {
             _ => false,
         }
     }
-    
+
     pub fn name(&self) -> &'static str {
         match self {
             RiskTier::Critical => "CRITICAL",
@@ -181,13 +180,13 @@ impl Charset {
 pub struct MetadataCache {
     // By-name: HashMap<pattern_name, PatternMetadata> → O(1)
     patterns_by_name: HashMap<String, PatternMetadata>,
-    
+
     // By-tier: HashMap<tier, Vec<pattern_name>> → O(1) list access
     patterns_by_tier: HashMap<RiskTier, Vec<String>>,
-    
+
     // By-tag: HashMap<tag, Vec<pattern_name>> → O(1) list access
     patterns_by_tag: HashMap<String, Vec<String>>,
-    
+
     // Total count
     total_patterns: usize,
 }
@@ -195,11 +194,9 @@ pub struct MetadataCache {
 impl MetadataCache {
     /// Initialize cache from FFI
     pub fn new() -> Self {
-        
-        
         // Load patterns from Zig via FFI (if implemented)
         // For now, this is a template for the integration
-        
+
         MetadataCache {
             patterns_by_name: HashMap::new(),
             patterns_by_tier: HashMap::new(),
@@ -207,27 +204,27 @@ impl MetadataCache {
             total_patterns: 0,
         }
     }
-    
+
     /// Get pattern by name - O(1)
     pub fn get_pattern(&self, name: &str) -> Option<&PatternMetadata> {
         self.patterns_by_name.get(name)
     }
-    
+
     /// Get all patterns in a tier - O(1)
     pub fn get_patterns_by_tier(&self, tier: &RiskTier) -> Option<&[String]> {
         self.patterns_by_tier.get(tier).map(|v| v.as_slice())
     }
-    
+
     /// Get all patterns with a tag - O(1)
     pub fn get_patterns_by_tag(&self, tag: &str) -> Option<&[String]> {
         self.patterns_by_tag.get(tag).map(|v| v.as_slice())
     }
-    
+
     /// Get total pattern count
     pub fn total_patterns(&self) -> usize {
         self.total_patterns
     }
-    
+
     /// Get tier distribution statistics
     pub fn tier_statistics(&self) -> HashMap<RiskTier, usize> {
         let mut stats = HashMap::new();
@@ -236,12 +233,12 @@ impl MetadataCache {
         }
         stats
     }
-    
+
     /// Get all pattern names as iterator (public accessor)
     pub fn all_pattern_names(&self) -> impl Iterator<Item = &String> {
         self.patterns_by_name.keys()
     }
-    
+
     /// Get all patterns as iterator (public accessor)
     pub fn all_patterns(&self) -> impl Iterator<Item = (&String, &PatternMetadata)> {
         self.patterns_by_name.iter()
@@ -267,4 +264,3 @@ pub fn initialize_cache() -> &'static MetadataCache {
 // ============================================================================
 // Tests
 // ============================================================================
-

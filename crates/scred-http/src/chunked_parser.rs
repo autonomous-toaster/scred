@@ -2,11 +2,10 @@
 ///
 /// Parses and redacts chunked HTTP responses without buffering entire response.
 /// Handles pattern boundaries via lookahead buffer.
-
 use anyhow::{anyhow, Result};
 use scred_redactor::StreamingRedactor;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tracing::{debug, warn};
 
 /// Chunk parsing state machine
@@ -81,11 +80,7 @@ impl ChunkedParser {
                     debug!("[chunked] Size line: {:?}", size_line);
 
                     // Parse hex chunk size (before semicolon if extensions present)
-                    let size_str = size_line
-                        .split(';')
-                        .next()
-                        .unwrap_or("")
-                        .trim();
+                    let size_str = size_line.split(';').next().unwrap_or("").trim();
 
                     let chunk_size = usize::from_str_radix(size_str, 16)
                         .map_err(|e| anyhow!("Invalid chunk size '{}': {}", size_str, e))?;
@@ -114,8 +109,11 @@ impl ChunkedParser {
 
                     // Redact chunk with lookahead
                     let is_complete = true; // Will be updated when we handle continuation
-                    let (redacted, _bytes_written, patterns) =
-                        redactor.process_chunk(&chunk_data, &mut self.lookahead_buffer, is_complete);
+                    let (redacted, _bytes_written, patterns) = redactor.process_chunk(
+                        &chunk_data,
+                        &mut self.lookahead_buffer,
+                        is_complete,
+                    );
 
                     stats.total_data_bytes += chunk_data.len() as u64;
                     stats.patterns_found += patterns;
@@ -208,4 +206,3 @@ impl Default for ChunkedParser {
         Self::new()
     }
 }
-

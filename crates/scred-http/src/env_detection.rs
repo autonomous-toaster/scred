@@ -41,14 +41,7 @@ const SECRET_KEYWORDS: &[&str] = &[
 
 // Common environment variable names
 const COMMON_ENV_VARS: &[&str] = &[
-    "PATH",
-    "HOME",
-    "USER",
-    "SHELL",
-    "LANG",
-    "PWD",
-    "HOSTNAME",
-    "TERM",
+    "PATH", "HOME", "USER", "SHELL", "LANG", "PWD", "HOSTNAME", "TERM",
 ];
 
 /// Analyze input and determine if it's environment variable format
@@ -106,7 +99,11 @@ pub fn detect_format(input: &[u8]) -> DetectionResult {
         )
     };
 
-    DetectionResult { mode, score, reason }
+    DetectionResult {
+        mode,
+        score,
+        reason,
+    }
 }
 
 /// Check if content contains null bytes (binary indicator)
@@ -203,4 +200,3 @@ fn calculate_env_score(content: &str) -> f32 {
     // Clamp to 0.0-1.0 range
     score.min(1.0)
 }
-

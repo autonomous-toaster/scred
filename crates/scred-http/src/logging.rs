@@ -13,42 +13,29 @@ pub fn init() -> anyhow::Result<()> {
 
     match log_format.as_str() {
         "json" => {
-            // JSON format
             let fmt_layer = fmt::layer()
                 .json()
                 .with_target(true)
-                .with_thread_ids(true)
-                .with_file(true)
-                .with_line_number(true);
+                .with_thread_ids(false)
+                .with_file(false)
+                .with_line_number(false);
 
             match log_output.as_str() {
                 "stdout" => {
-                    let registry = tracing_subscriber::registry()
+                    tracing_subscriber::registry()
                         .with(env_filter)
-                        .with(fmt_layer.with_writer(std::io::stdout));
-                    registry.init();
+                        .with(fmt_layer.with_writer(std::io::stdout))
+                        .init();
                 }
-                "stderr" => {
-                    let registry = tracing_subscriber::registry()
+                "stderr" | _ => {
+                    tracing_subscriber::registry()
                         .with(env_filter)
-                        .with(fmt_layer.with_writer(std::io::stderr));
-                    registry.init();
-                }
-                path => {
-                    // Try to use as file path
-                    let file = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(path)?;
-                    let registry = tracing_subscriber::registry()
-                        .with(env_filter)
-                        .with(fmt_layer.with_writer(file));
-                    registry.init();
+                        .with(fmt_layer.with_writer(std::io::stderr))
+                        .init();
                 }
             }
         }
-        "text" | "compact" => {
-            // Text/Compact format (single line, human-readable)
+        "text" | "compact" | _ => {
             let fmt_layer = fmt::layer()
                 .compact()
                 .with_target(false)
@@ -56,74 +43,27 @@ pub fn init() -> anyhow::Result<()> {
 
             match log_output.as_str() {
                 "stdout" => {
-                    let registry = tracing_subscriber::registry()
+                    tracing_subscriber::registry()
                         .with(env_filter)
-                        .with(fmt_layer.with_writer(std::io::stdout));
-                    registry.init();
+                        .with(fmt_layer.with_writer(std::io::stdout))
+                        .init();
                 }
-                "stderr" => {
-                    let registry = tracing_subscriber::registry()
+                "stderr" | _ => {
+                    tracing_subscriber::registry()
                         .with(env_filter)
-                        .with(fmt_layer.with_writer(std::io::stderr));
-                    registry.init();
-                }
-                path => {
-                    let file = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(path)?;
-                    let registry = tracing_subscriber::registry()
-                        .with(env_filter)
-                        .with(fmt_layer.with_writer(file));
-                    registry.init();
+                        .with(fmt_layer.with_writer(std::io::stderr))
+                        .init();
                 }
             }
-        }
-        "pretty" => {
-            // Pretty format (human-readable, multi-line)
-            let fmt_layer = fmt::layer()
-                .pretty()
-                .with_target(true)
-                .with_thread_ids(true);
-
-            match log_output.as_str() {
-                "stdout" => {
-                    let registry = tracing_subscriber::registry()
-                        .with(env_filter)
-                        .with(fmt_layer.with_writer(std::io::stdout));
-                    registry.init();
-                }
-                "stderr" => {
-                    let registry = tracing_subscriber::registry()
-                        .with(env_filter)
-                        .with(fmt_layer.with_writer(std::io::stderr));
-                    registry.init();
-                }
-                path => {
-                    let file = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(path)?;
-                    let registry = tracing_subscriber::registry()
-                        .with(env_filter)
-                        .with(fmt_layer.with_writer(file));
-                    registry.init();
-                }
-            }
-        }
-        _ => {
-            // Default to text (compact)
-            let fmt_layer = fmt::layer()
-                .compact()
-                .with_target(false)
-                .with_thread_ids(false);
-
-            let registry = tracing_subscriber::registry()
-                .with(env_filter)
-                .with(fmt_layer.with_writer(std::io::stderr));
-            registry.init();
         }
     }
 
     Ok(())
+}
+
+/// Initialize logging from environment (convenience function)
+pub fn init_from_env() {
+    if let Err(e) = init() {
+        eprintln!("Failed to initialize logging: {}", e);
+    }
 }

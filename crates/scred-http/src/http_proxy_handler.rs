@@ -1,3 +1,6 @@
+use crate::header_rewriter;
+use crate::location_rewriter;
+use crate::proxy_resolver::connect_through_proxy;
 /// Shared HTTP Proxy Handler for Forward and MITM Proxies
 ///
 /// This module handles HTTP proxy requests (non-CONNECT) with:
@@ -10,15 +13,11 @@
 /// Used by:
 /// - scred-mitm: MITM proxy with TLS interception
 /// - scred-proxy: Forward proxy with fixed upstream
-
 use anyhow::{anyhow, Result};
-use scred_redactor::{RedactionEngine, StreamingRedactor, StreamingConfig};
+use scred_redactor::{RedactionEngine, StreamingConfig, StreamingRedactor};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, info, warn};
-use crate::proxy_resolver::connect_through_proxy;
-use crate::header_rewriter;
-use crate::location_rewriter;
 
 /// Configuration for HTTP proxy forwarding
 #[derive(Clone, Debug)]
@@ -75,7 +74,13 @@ pub async fn handle_http_proxy(
     // Parse URL to extract host and path
     let (target_host, target_port, path) = parse_proxy_url(url)?;
 
-    debug!("HTTP proxy: {} {} (target: {} via {})", method, path, format!("{}:{}", target_host, target_port), upstream_addr);
+    debug!(
+        "HTTP proxy: {} {} (target: {} via {})",
+        method,
+        path,
+        format!("{}:{}", target_host, target_port),
+        upstream_addr
+    );
 
     // Read all headers from client
     let mut client_headers = Vec::new();
@@ -100,19 +105,28 @@ pub async fn handle_http_proxy(
     if let Some(upstream_host_name) = upstream_host {
         // Rewrite Host header to upstream target
         header_rewriter::replace_header_value(&mut headers_str, "Host", upstream_host_name);
-        debug!("Rewrote Host header to upstream target: {}", upstream_host_name);
-        
+        debug!(
+            "Rewrote Host header to upstream target: {}",
+            upstream_host_name
+        );
+
         // If Host header was missing (replace_header_value does nothing), inject it
         header_rewriter::inject_header_if_missing(&mut headers_str, "Host", upstream_host_name);
         info!("Host header normalized: {}", upstream_host_name);
     } else {
         // No upstream_host provided, but ensure Host header is present for HTTP/1.1
         if header_rewriter::extract_header_value(&headers_str, "Host").is_none() {
-            debug!("Host header missing, extracting from upstream_addr: {}", upstream_addr);
+            debug!(
+                "Host header missing, extracting from upstream_addr: {}",
+                upstream_addr
+            );
             // Try to extract hostname from upstream_addr (format: "host:port")
             let upstream_hostname = upstream_addr.split(':').next().unwrap_or(upstream_addr);
             header_rewriter::inject_header_if_missing(&mut headers_str, "Host", upstream_hostname);
-            info!("Host header injected from upstream_addr: {}", upstream_hostname);
+            info!(
+                "Host header injected from upstream_addr: {}",
+                upstream_hostname
+            );
         }
     }
 
@@ -135,8 +149,8 @@ pub async fn handle_http_proxy(
         // Use ConfigurableEngine with selector for filtered redaction
         let config_engine = crate::ConfigurableEngine::new(
             redaction_engine.clone(),
-            crate::PatternSelector::All,  // Detect all patterns for statistics
-            selector.clone(),              // But only redact selected patterns
+            crate::PatternSelector::All, // Detect all patterns for statistics
+            selector.clone(),            // But only redact selected patterns
         );
         let result = config_engine.redact_only(&full_request);
         let all_result = redaction_engine.redact(&full_request);
@@ -144,14 +158,11 @@ pub async fn handle_http_proxy(
     } else {
         // No selector: use StreamingRedactor to redact all patterns
         let streaming_config = StreamingConfig::default();
-        let streaming_redactor = StreamingRedactor::new(
-            redaction_engine.clone(),
-            streaming_config,
-        );
+        let streaming_redactor = StreamingRedactor::new(redaction_engine.clone(), streaming_config);
         let (redacted, stats) = streaming_redactor.redact_buffer(full_request.as_bytes());
         (redacted, stats.patterns_found)
     };
-    
+
     let redaction_stats = scred_redactor::streaming::StreamingStats {
         bytes_read: full_request.len() as u64,
         bytes_written: redacted_request.len() as u64,
@@ -160,7 +171,6 @@ pub async fn handle_http_proxy(
         errors: 0,
     };
 
-    
     if redaction_stats.patterns_found > 0 {
         warn!(
             "HTTP proxy request: {} bytes, {} patterns detected (redacted to {} bytes)",
@@ -181,9 +191,11 @@ pub async fn handle_http_proxy(
         Direct(crate::pooled_dns_resolver::PooledTcpStream),
         Proxy(tokio::net::TcpStream),
     }
-    
+
     let conn = if upstream_addr.contains("://") {
-        UpstreamConnection::Proxy(connect_through_proxy(upstream_addr, &target_host, target_port).await?)
+        UpstreamConnection::Proxy(
+            connect_through_proxy(upstream_addr, &target_host, target_port).await?,
+        )
     } else {
         UpstreamConnection::Direct(resolver.connect_with_retry(upstream_addr).await?)
     };
@@ -222,12 +234,14 @@ pub async fn handle_http_proxy(
     let response_str = String::from_utf8_lossy(&response_buf).to_string();
 
     // REDACT response using ConfigurableEngine if selector provided, otherwise StreamingRedactor
-    let (redacted_response, redaction_stats_response_patterns) = if let Some(ref selector) = redact_selector {
+    let (redacted_response, redaction_stats_response_patterns) = if let Some(ref selector) =
+        redact_selector
+    {
         // Use ConfigurableEngine with selector for filtered redaction
         let config_engine = crate::ConfigurableEngine::new(
             redaction_engine.clone(),
-            crate::PatternSelector::All,  // Detect all patterns for statistics
-            selector.clone(),              // But only redact selected patterns
+            crate::PatternSelector::All, // Detect all patterns for statistics
+            selector.clone(),            // But only redact selected patterns
         );
         let result = config_engine.redact_only(&response_str);
         let all_result = redaction_engine.redact(&response_str);
@@ -235,14 +249,11 @@ pub async fn handle_http_proxy(
     } else {
         // No selector: use StreamingRedactor to redact all patterns
         let streaming_config = StreamingConfig::default();
-        let streaming_redactor = StreamingRedactor::new(
-            redaction_engine.clone(),
-            streaming_config,
-        );
+        let streaming_redactor = StreamingRedactor::new(redaction_engine.clone(), streaming_config);
         let (redacted, stats) = streaming_redactor.redact_buffer(response_str.as_bytes());
         (redacted, stats.patterns_found)
     };
-    
+
     let redaction_stats_response = scred_redactor::streaming::StreamingStats {
         bytes_read: response_str.len() as u64,
         bytes_written: redacted_response.len() as u64,
@@ -250,7 +261,6 @@ pub async fn handle_http_proxy(
         patterns_found: redaction_stats_response_patterns,
         errors: 0,
     };
-
 
     if redaction_stats_response.patterns_found > 0 {
         warn!(
@@ -268,12 +278,16 @@ pub async fn handle_http_proxy(
 
     // Rewrite Location headers to point back to proxy (if applicable)
     let mut final_response = redacted_response.clone();
-    
+
     if let Some(upstream_hostname) = upstream_host {
         // Determine client scheme and proxy host for Location rewriting
-        let client_scheme = if first_line.contains("https") { "https" } else { "http" };
+        let client_scheme = if first_line.contains("https") {
+            "https"
+        } else {
+            "http"
+        };
         let proxy_host = upstream_addr; // Use the upstream_addr as proxy_host for rewriting
-        
+
         // Check if response contains a Location header
         if let Some(location) = header_rewriter::extract_header_value(&final_response, "Location") {
             if location_rewriter::should_rewrite_location(&location, upstream_hostname) {
@@ -282,11 +296,21 @@ pub async fn handle_http_proxy(
                     client_scheme,
                     proxy_host,
                 );
-                
-                header_rewriter::replace_header_value(&mut final_response, "Location", &rewritten_location);
-                info!("Rewriting Location header: {} → {}", location, rewritten_location);
+
+                header_rewriter::replace_header_value(
+                    &mut final_response,
+                    "Location",
+                    &rewritten_location,
+                );
+                info!(
+                    "Rewriting Location header: {} → {}",
+                    location, rewritten_location
+                );
             } else {
-                debug!("Location header does not point to upstream, keeping as-is: {}", location);
+                debug!(
+                    "Location header does not point to upstream, keeping as-is: {}",
+                    location
+                );
             }
         }
     } else {
@@ -305,7 +329,10 @@ pub async fn handle_http_proxy(
         final_response
     };
 
-    info!("HTTP proxy completed: response forwarded to client ({} bytes)", final_response.len());
+    info!(
+        "HTTP proxy completed: response forwarded to client ({} bytes)",
+        final_response.len()
+    );
 
     // Send redacted response with detection headers to client
     client_write.write_all(final_response.as_bytes()).await?;
@@ -341,12 +368,10 @@ fn inject_proxy_headers(
             if redacted_count != 0 || redaction_stats.patterns_found > 0 {
                 final_response.push_str(&format!(
                     "X-SCRED-Redacted: true ({} bytes redacted, {} patterns found)\r\n",
-                    redacted_count,
-                    redaction_stats.patterns_found
+                    redacted_count, redaction_stats.patterns_found
                 ));
             } else {
-                final_response
-                    .push_str("X-SCRED-Redacted: false (no secrets found)\r\n");
+                final_response.push_str("X-SCRED-Redacted: false (no secrets found)\r\n");
             }
         }
 
@@ -419,4 +444,3 @@ async fn send_error_response(
     write.flush().await?;
     Ok(())
 }
-

@@ -1,25 +1,33 @@
 //! File-based configuration system for SCRED applications
-//! 
+//!
 //! Supports YAML and TOML configuration files with:
 //! - Multiple file locations with precedence
 //! - Environment variable overrides
 //! - Schema validation
 //! - Hot-reload support
+//! - Policy system (placeholder replacement + redaction)
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
 pub mod hot_reload;
-pub use hot_reload::{HotReloadHandler, setup_sighup_handler};
+pub mod policy;
+
+pub use hot_reload::{setup_sighup_handler, HotReloadHandler};
+pub use policy::*;
 
 /// Configuration file with environment variable interpolation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FileConfig {
+    /// Policy configuration (placeholder replacement + redaction)
+    #[serde(default)]
+    pub policy: PolicyConfig,
+
     /// scred-cli specific configuration
     #[serde(default)]
     pub scred_cli: Option<CliConfig>,
@@ -62,10 +70,6 @@ pub struct ProxyConfig {
     #[serde(default)]
     pub upstream: UpstreamConfig,
 
-    /// Redaction configuration
-    #[serde(default)]
-    pub redaction: RedactionConfig,
-
     /// Per-path rules for selective redaction
     #[serde(default)]
     pub rules: Vec<PathRule>,
@@ -83,13 +87,13 @@ pub struct MitmConfig {
     #[serde(default, rename = "upstream-proxy")]
     pub upstream_proxy: Option<UpstreamProxyConfig>,
 
-    /// Redaction configuration
-    #[serde(default)]
-    pub redaction: RedactionConfig,
-
     /// CA certificate configuration
     #[serde(default, rename = "ca-cert")]
     pub ca_cert: CaCertConfig,
+
+    /// Traffic filtering policy (default-deny with allowed domains)
+    #[serde(default)]
+    pub traffic: TrafficPolicyConfig,
 }
 
 /// Listen address and port configuration
@@ -156,49 +160,59 @@ pub struct UpstreamProxyConfig {
     /// Domains that bypass upstream proxy
     #[serde(default)]
     pub no_proxy: Vec<String>,
+
+    /// Connection pool configuration
+    #[serde(default)]
+    pub pool: ConnectionPoolConfig,
 }
 
-/// Redaction configuration
+/// Connection pool configuration for upstream proxy
+/// Based on industry best practices (nginx, Envoy, Squid)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct RedactionConfig {
-    /// Redaction mode: selective | strict | passive
-    #[serde(default)]
-    pub mode: String,
+pub struct ConnectionPoolConfig {
+    /// Maximum connections in pool (default: 100)
+    /// Recommended: 2 × CPU cores, or 10-100 depending on throughput
+    #[serde(default = "default_max_connections")]
+    pub max_connections: usize,
 
-    /// Pattern configuration
-    #[serde(default)]
-    pub patterns: PatternConfig,
+    /// Idle timeout in seconds before closing unused connections (default: 60)
+    /// Recommended: 30-90 seconds for NAT/firewall cleanup
+    #[serde(default = "default_idle_timeout")]
+    pub idle_timeout_secs: u64,
 
-    /// Redact request bodies (default: true)
+    /// Maximum requests per connection before recycling (default: 1000)
+    /// Prevents long-lived pathological connections
+    #[serde(default = "default_max_requests")]
+    pub max_requests_per_connection: usize,
+
+    /// Wait timeout in seconds when pool is exhausted (default: 30)
+    /// Set to 0 for fail-fast behavior
+    #[serde(default = "default_wait_timeout")]
+    pub wait_timeout_secs: u64,
+
+    /// Enable HTTP/2 multiplexing when upstream supports it (default: true)
+    /// When enabled, uses fewer connections (1-4) with multiple streams
     #[serde(default = "default_true")]
-    pub redact_request_body: bool,
-
-    /// Redact request headers (default: true)
-    #[serde(default = "default_true")]
-    pub redact_request_headers: bool,
-
-    /// Redact response bodies (default: true)
-    #[serde(default = "default_true")]
-    pub redact_response_body: bool,
-
-    /// Redact response headers (default: true)
-    #[serde(default = "default_true")]
-    pub redact_response_headers: bool,
+    pub enable_h2_multiplexing: bool,
 }
 
-impl Default for RedactionConfig {
+impl Default for ConnectionPoolConfig {
     fn default() -> Self {
         Self {
-            mode: "selective".to_string(),
-            patterns: PatternConfig::default(),
-            redact_request_body: true,
-            redact_request_headers: true,
-            redact_response_body: true,
-            redact_response_headers: true,
+            max_connections: default_max_connections(),
+            idle_timeout_secs: default_idle_timeout(),
+            max_requests_per_connection: default_max_requests(),
+            wait_timeout_secs: default_wait_timeout(),
+            enable_h2_multiplexing: true,
         }
     }
 }
+
+fn default_max_connections() -> usize { 100 }
+fn default_idle_timeout() -> u64 { 60 }
+fn default_max_requests() -> usize { 1000 }
+fn default_wait_timeout() -> u64 { 30 }
 
 /// Pattern detection and redaction configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -254,6 +268,18 @@ pub struct CaCertConfig {
     #[serde(default)]
     pub path: Option<String>,
 
+    /// Certificate cache directory
+    #[serde(default = "default_cert_cache_dir")]
+    pub cache_dir: Option<String>,
+
+    /// Certificate organization name
+    #[serde(default = "default_cert_org")]
+    pub organization: String,
+
+    /// Certificate validity in days
+    #[serde(default = "default_cert_validity_days")]
+    pub validity_days: u32,
+
     /// Path to CA private key file
     #[serde(default)]
     pub key_path: Option<String>,
@@ -263,25 +289,19 @@ impl Default for CaCertConfig {
     fn default() -> Self {
         Self {
             generate: true,
-            path: Some("/tmp/scred-ca.pem".to_string()),
+            path: default_ca_cert_path(),
+            cache_dir: default_cert_cache_dir(),
+            organization: default_cert_org(),
+            validity_days: default_cert_validity_days(),
             key_path: Some("/tmp/scred-ca-key.pem".to_string()),
         }
     }
 }
 
 // Default value functions for serde
-fn default_cli_mode() -> String {
-    "auto".to_string()
-}
-
-fn default_streaming() -> bool {
-    false
-}
-
-fn default_true() -> bool {
-    true
-}
-
+fn default_cli_mode() -> String { "auto".to_string() }
+fn default_streaming() -> bool { false }
+fn default_true() -> bool { true }
 fn default_detect_patterns() -> Vec<String> {
     vec![
         "CRITICAL".to_string(),
@@ -289,7 +309,6 @@ fn default_detect_patterns() -> Vec<String> {
         "INFRASTRUCTURE".to_string(),
     ]
 }
-
 fn default_redact_patterns() -> Vec<String> {
     vec!["CRITICAL".to_string(), "API_KEYS".to_string()]
 }
@@ -299,7 +318,7 @@ pub struct ConfigLoader;
 
 impl ConfigLoader {
     /// Load configuration from files with precedence
-    /// 
+    ///
     /// Precedence (highest to lowest):
     /// 1. CLI flags (passed separately)
     /// 2. Environment variables (SCRED_CONFIG_*)
@@ -309,7 +328,7 @@ impl ConfigLoader {
     /// 6. Environment-specific files (based on SCRED_ENV)
     pub fn load() -> Result<FileConfig> {
         let env_mode = env::var("SCRED_ENV").unwrap_or_else(|_| "dev".to_string());
-        
+
         // Build search paths
         let mut search_paths = Vec::new();
 
@@ -334,14 +353,13 @@ impl ConfigLoader {
         }
 
         // Find first existing config file
-        let config_path = search_paths
-            .iter()
-            .find(|p| p.exists())
-            .cloned();
+        let config_path = search_paths.iter().find(|p| p.exists()).cloned();
 
         let config = if let Some(path) = config_path {
             debug!("Loading config from: {}", path.display());
-            Self::load_from_file(&path)?
+            let config = Self::load_from_file(&path)?;
+            info!("Configuration loaded from: {}", path.display());
+            config
         } else {
             info!("No config file found in standard locations, using defaults");
             FileConfig::default()
@@ -349,7 +367,6 @@ impl ConfigLoader {
 
         // Apply environment variable overrides
         let config = Self::apply_env_overrides(config)?;
-
         Ok(config)
     }
 
@@ -375,7 +392,6 @@ impl ConfigLoader {
         // SCRED_PROXY_LISTEN_PORT=9999
         // SCRED_PROXY_UPSTREAM_URL=https://backend.example.com
         // SCRED_CLI_STREAMING=true
-        // SCRED_PROXY_REDACTION_MODE=strict
 
         // Proxy overrides
         if let Ok(port) = env::var("SCRED_PROXY_LISTEN_PORT") {
@@ -383,16 +399,9 @@ impl ConfigLoader {
                 proxy_cfg.listen.port = Some(port.parse()?);
             }
         }
-
         if let Ok(url) = env::var("SCRED_PROXY_UPSTREAM_URL") {
             if let Some(proxy_cfg) = &mut config.scred_proxy {
                 proxy_cfg.upstream.url = Some(url);
-            }
-        }
-
-        if let Ok(mode) = env::var("SCRED_PROXY_REDACTION_MODE") {
-            if let Some(proxy_cfg) = &mut config.scred_proxy {
-                proxy_cfg.redaction.mode = mode;
             }
         }
 
@@ -443,26 +452,25 @@ impl ConfigLoader {
         if let Some(cli_cfg) = &config.scred_cli {
             Self::validate_patterns(&cli_cfg.patterns)?;
         }
-        if let Some(proxy_cfg) = &config.scred_proxy {
-            Self::validate_patterns(&proxy_cfg.redaction.patterns)?;
-        }
-        if let Some(mitm_cfg) = &config.scred_mitm {
-            Self::validate_patterns(&mitm_cfg.redaction.patterns)?;
-        }
 
         Ok(())
     }
 
     /// Validate pattern tier names
     fn validate_patterns(patterns: &PatternConfig) -> Result<()> {
-        let valid_tiers = ["CRITICAL", "API_KEYS", "INFRASTRUCTURE", "SERVICES", "PATTERNS"];
+        let valid_tiers = [
+            "CRITICAL",
+            "API_KEYS",
+            "INFRASTRUCTURE",
+            "SERVICES",
+            "PATTERNS",
+        ];
 
         for tier in &patterns.detect {
             if !valid_tiers.contains(&tier.as_str()) {
                 warn!("Unknown pattern tier in detect config: {}", tier);
             }
         }
-
         for tier in &patterns.redact {
             if !valid_tiers.contains(&tier.as_str()) {
                 warn!("Unknown pattern tier in redact config: {}", tier);
@@ -488,24 +496,31 @@ impl ConfigLoader {
         Self::validate(&config)?;
 
         println!("✓ Config file is valid: {}", path.display());
+
         let sections: Vec<&str> = [
             config.scred_cli.is_some().then_some("scred-cli"),
             config.scred_proxy.is_some().then_some("scred-proxy"),
             config.scred_mitm.is_some().then_some("scred-mitm"),
-        ].iter().filter_map(|x| *x).collect();
-        println!("  Sections: {:?}", sections);
+        ]
+        .iter()
+        .filter_map(|x| *x)
+        .collect();
 
+        println!("  Sections: {:?}", sections);
         Ok(())
     }
 
     /// Find the first existing config file in standard locations
     pub fn find_config_file() -> Result<PathBuf> {
         let env_mode = env::var("SCRED_ENV").unwrap_or_else(|_| "dev".to_string());
-        
+
         let candidates = vec![
             PathBuf::from("./scred.yaml"),
             PathBuf::from(format!("scred-{}.yaml", env_mode)),
-            PathBuf::from(format!("{}/.scred/config.yaml", env::var("HOME").unwrap_or_default())),
+            PathBuf::from(format!(
+                "{}/.scred/config.yaml",
+                env::var("HOME").unwrap_or_default()
+            )),
             PathBuf::from("/etc/scred/config.yaml"),
         ];
 
@@ -519,6 +534,7 @@ impl ConfigLoader {
 impl Default for FileConfig {
     fn default() -> Self {
         Self {
+            policy: PolicyConfig::default(),
             scred_cli: Some(CliConfig {
                 mode: default_cli_mode(),
                 streaming: default_streaming(),
@@ -530,4 +546,51 @@ impl Default for FileConfig {
     }
 }
 
+/// Traffic filtering policy for MITM
+/// Default-deny: block all traffic unless explicitly allowed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct TrafficPolicyConfig {
+    /// Enable traffic filtering (default: false)
+    #[serde(default)]
+    pub enabled: bool,
 
+    /// Allowed domains (glob patterns, e.g., ["*.openai.com", "api.github.com"])
+    /// Use ["*"] to allow all domains
+    #[serde(default = "default_allowed_domains")]
+    pub allowed_domains: Vec<String>,
+
+    /// Block message returned for denied requests
+    #[serde(default = "default_block_message")]
+    pub block_message: String,
+}
+
+fn default_allowed_domains() -> Vec<String> {
+    vec!["*".to_string()]
+}
+fn default_block_message() -> String {
+    "Domain not allowed".to_string()
+}
+
+impl Default for TrafficPolicyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allowed_domains: default_allowed_domains(),
+            block_message: default_block_message(),
+        }
+    }
+}
+
+fn default_ca_cert_path() -> Option<String> {
+    Some("/tmp/scred-ca.pem".to_string())
+}
+fn default_cert_cache_dir() -> Option<String> {
+    Some("/tmp/scred-certs".to_string())
+}
+fn default_cert_org() -> String {
+    "SCRED MITM Proxy".to_string()
+}
+fn default_cert_validity_days() -> u32 {
+    365
+}

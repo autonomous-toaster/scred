@@ -2,7 +2,6 @@
 ///
 /// HTTP protocol selection during TLS handshake.
 /// Both MITM and proxy use this to detect client protocol preference.
-
 use std::fmt;
 
 /// HTTP protocol selected during TLS ALPN negotiation
@@ -76,8 +75,7 @@ impl fmt::Display for HttpProtocol {
 /// ```
 pub fn alpn_protocols() -> Vec<Vec<u8>> {
     vec![
-        b"h2".to_vec(),        // HTTP/2 - Phase 2: Full support with multiplexing
-        b"http/1.1".to_vec(),  // HTTP/1.1 fallback
+        b"h2".to_vec(),       // HTTP/2 - Phase 2: Full support with multiplexing
+        b"http/1.1".to_vec(), // HTTP/1.1 fallback
     ]
 }
-

@@ -27,7 +27,9 @@ impl FixedUpstream {
 
         let (host, port) = match host_port.rsplit_once(':') {
             Some((host, port)) if !host.is_empty() => {
-                let port = port.parse::<u16>().map_err(|_| anyhow!("invalid upstream port"))?;
+                let port = port
+                    .parse::<u16>()
+                    .map_err(|_| anyhow!("invalid upstream port"))?;
                 (host.to_string(), port)
             }
             _ => (host_port.to_string(), default_port),
@@ -51,9 +53,15 @@ impl FixedUpstream {
 
     pub fn rewrite_request_line(&self, request_line: &str) -> Result<String> {
         let mut parts = request_line.split_whitespace();
-        let method = parts.next().ok_or_else(|| anyhow!("invalid request line"))?;
-        let target = parts.next().ok_or_else(|| anyhow!("invalid request line"))?;
-        let version = parts.next().ok_or_else(|| anyhow!("invalid request line"))?;
+        let method = parts
+            .next()
+            .ok_or_else(|| anyhow!("invalid request line"))?;
+        let target = parts
+            .next()
+            .ok_or_else(|| anyhow!("invalid request line"))?;
+        let version = parts
+            .next()
+            .ok_or_else(|| anyhow!("invalid request line"))?;
 
         let rewritten_target = self.join_target(target);
         Ok(format!("{} {} {}", method, rewritten_target, version))
@@ -83,7 +91,10 @@ fn normalize_base_path(path: &str) -> String {
     } else if path.starts_with('/') {
         path.trim_end_matches('/').to_string().if_empty_then_root()
     } else {
-        format!("/{}", path).trim_end_matches('/').to_string().if_empty_then_root()
+        format!("/{}", path)
+            .trim_end_matches('/')
+            .to_string()
+            .if_empty_then_root()
     }
 }
 
@@ -93,7 +104,10 @@ trait RootPathExt {
 
 impl RootPathExt for String {
     fn if_empty_then_root(self) -> String {
-        if self.is_empty() { "/".to_string() } else { self }
+        if self.is_empty() {
+            "/".to_string()
+        } else {
+            self
+        }
     }
 }
-

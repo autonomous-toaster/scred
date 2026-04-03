@@ -12,7 +12,11 @@ pub struct Match {
 
 impl Match {
     pub fn new(start: usize, end: usize, pattern_type: u16) -> Self {
-        Self { start, end, pattern_type }
+        Self {
+            start,
+            end,
+            pattern_type,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -26,7 +30,11 @@ impl Match {
 
 impl fmt::Display for Match {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Match({}..{}, type={})", self.start, self.end, self.pattern_type)
+        write!(
+            f,
+            "Match({}..{}, type={})",
+            self.start, self.end, self.pattern_type
+        )
     }
 }
 
@@ -38,11 +46,15 @@ pub struct DetectionResult {
 
 impl DetectionResult {
     pub fn new() -> Self {
-        Self { matches: Vec::new() }
+        Self {
+            matches: Vec::new(),
+        }
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
-        Self { matches: Vec::with_capacity(capacity) }
+        Self {
+            matches: Vec::with_capacity(capacity),
+        }
     }
 
     pub fn add(&mut self, m: Match) {
@@ -65,9 +77,8 @@ impl DetectionResult {
         }
 
         // Sort by start position, then by end position (longest first)
-        self.matches.sort_by(|a, b| {
-            a.start.cmp(&b.start).then_with(|| b.end.cmp(&a.end))
-        });
+        self.matches
+            .sort_by(|a, b| a.start.cmp(&b.start).then_with(|| b.end.cmp(&a.end)));
 
         let mut result = Vec::with_capacity(self.matches.len());
         let mut last_end = 0;
@@ -107,4 +118,3 @@ impl RedactionResult {
         self.matches.len()
     }
 }
-

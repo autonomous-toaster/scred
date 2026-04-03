@@ -6,11 +6,11 @@
 //! - Support for chunked/pipelined responses
 
 use anyhow::Result;
-use tokio::io::AsyncReadExt;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 
 /// Read complete HTTP response from an async reader with timeout
-/// 
+///
 /// # Benefits
 /// - Starts with empty Vec, only extends with valid data
 /// - No NUL-byte garbage from pre-allocated buffers
@@ -22,16 +22,16 @@ pub async fn read_http_response<R: AsyncReadExt + Unpin>(
 ) -> Result<Vec<u8>> {
     let mut response_data = Vec::new();
     let mut first_chunk = vec![0u8; 65536];
-    
+
     // Read first chunk
     let n = reader.read(&mut first_chunk).await?;
     if n == 0 {
         return Ok(Vec::new()); // Empty response
     }
-    
+
     first_chunk.truncate(n);
     response_data.extend_from_slice(&first_chunk);
-    
+
     // Read additional chunks until EOF or timeout
     let timeout = Duration::from_millis(timeout_ms);
     loop {
@@ -56,7 +56,6 @@ pub async fn read_http_response<R: AsyncReadExt + Unpin>(
             }
         }
     }
-    
+
     Ok(response_data)
 }
-

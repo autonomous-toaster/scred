@@ -1,20 +1,19 @@
 /// TLS Client Acceptor - Accept HTTPS connections from clients
-/// 
+///
 /// Phase 4b: TLS Interception Layer
 /// Accepts client TLS connections and presents generated certificates
 /// Decrypts client traffic for secret redaction
-
 use anyhow::{anyhow, Result};
+use rustls::{Certificate, PrivateKey, ServerConfig};
+use rustls_pemfile;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsStream;
-use rustls::{ServerConfig, Certificate, PrivateKey};
-use rustls_pemfile;
 use tracing::{debug, info};
 
 use super::tls::CertificateGenerator;
+use scred_http::h2::alpn::{alpn_protocols, HttpProtocol};
 use scred_redactor::RedactionEngine;
-use scred_http::h2::alpn::{HttpProtocol, alpn_protocols};
 
 /// Handles TLS client connections with generated certificates
 pub struct TlsClientAcceptor {
@@ -42,7 +41,7 @@ impl TlsClientAcceptor {
     }
 
     /// Accept a TLS client connection
-    /// 
+    ///
     /// Extracts domain from CONNECT request or SNI,
     /// generates/retrieves certificate,
     /// accepts TLS handshake with client,
@@ -55,9 +54,7 @@ impl TlsClientAcceptor {
         debug!("Accepting TLS client connection for domain: {}", domain);
 
         // Get or generate certificate for domain
-        let (cert_pem, key_pem) = self.cert_generator
-            .get_or_generate_cert(domain)
-            .await?;
+        let (cert_pem, key_pem) = self.cert_generator.get_or_generate_cert(domain).await?;
 
         // Parse certificate and key
         let cert = Self::parse_certificate(&cert_pem)?;
@@ -78,15 +75,16 @@ impl TlsClientAcceptor {
 
         // Accept TLS connection with configured certificate
         let acceptor = tokio_rustls::TlsAcceptor::from(config.clone());
-        let tls_stream = acceptor.accept(client_stream)
-            .await
-            .map_err(|e| {
-                debug!("TLS handshake failed for {}: {}", domain, e);
-                anyhow!("TLS handshake failed: {}", e)
-            })?;
+        let tls_stream = acceptor.accept(client_stream).await.map_err(|e| {
+            debug!("TLS handshake failed for {}: {}", domain, e);
+            anyhow!("TLS handshake failed: {}", e)
+        })?;
 
         // Extract negotiated ALPN protocol
-        let negotiated_protocol = tls_stream.get_ref().1.alpn_protocol()
+        let negotiated_protocol = tls_stream
+            .get_ref()
+            .1
+            .alpn_protocol()
             .and_then(HttpProtocol::from_bytes)
             .unwrap_or(HttpProtocol::Http11);
 
@@ -106,7 +104,7 @@ impl TlsClientAcceptor {
     fn parse_certificate(cert_pem: &[u8]) -> Result<Certificate> {
         let mut reader = std::io::Cursor::new(cert_pem);
         let mut certs = Vec::new();
-        
+
         for cert_result in rustls_pemfile::certs(&mut reader) {
             match cert_result {
                 Ok(cert) => certs.push(cert.as_ref().to_vec()),
@@ -122,7 +120,7 @@ impl TlsClientAcceptor {
     }
 
     /// Parse PEM-encoded private key (PKCS8 format)
-    /// 
+    ///
     /// Note: For Phase 4b full implementation, proper key parsing needed
     /// This is a simplified version for testing the structure
     fn parse_private_key(key_pem: &[u8]) -> Result<PrivateKey> {
@@ -141,4 +139,3 @@ impl TlsClientAcceptor {
         self.redaction_engine.clone()
     }
 }
-

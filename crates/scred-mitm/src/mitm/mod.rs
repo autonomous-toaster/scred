@@ -1,5 +1,6 @@
 // SCRED MITM proxy modules
 pub mod config;
+pub mod connection_pool;
 pub mod http_handler;
 pub mod proxy;
 pub mod tls;

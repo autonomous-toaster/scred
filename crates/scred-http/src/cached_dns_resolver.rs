@@ -12,7 +12,6 @@
 /// - Cache values are Vec<SocketAddr> (moved, no cloning on hit)
 /// - Arc<Mutex> for thread-safe sharing
 /// - Minimal contention (fast get/set operations)
-
 use crate::dns_cache::DnsCache;
 use crate::dns_resolver::DnsResolver;
 use anyhow::Result;
@@ -85,8 +84,12 @@ impl CachedDnsResolver {
 
         // Try to get cached addresses
         if let Some(cached_addrs) = self.cache.get(&hostname) {
-            debug!("DNS cache hit for {} ({} addresses)", hostname, cached_addrs.len());
-            
+            debug!(
+                "DNS cache hit for {} ({} addresses)",
+                hostname,
+                cached_addrs.len()
+            );
+
             // Try each cached address
             let mut last_error = None;
             for socket_addr in &cached_addrs {
@@ -103,7 +106,10 @@ impl CachedDnsResolver {
             }
 
             // All cached addresses failed
-            debug!("All cached addresses for {} failed, falling back to fresh DNS lookup", hostname);
+            debug!(
+                "All cached addresses for {} failed, falling back to fresh DNS lookup",
+                hostname
+            );
             if let Some(e) = last_error {
                 debug!("Last error from cached addresses: {}", e);
             }
@@ -111,15 +117,19 @@ impl CachedDnsResolver {
 
         // Cache miss or stale → perform DNS lookup via DnsResolver
         debug!("DNS cache miss for {} - performing lookup", hostname);
-        
+
         // Use DnsResolver with retry logic
         let stream = DnsResolver::connect_with_retry(addr_without_scheme).await?;
-        
+
         // On success, extract and cache the resolved addresses
         // Note: We perform a fresh resolution to get the addresses to cache
         // This is unavoidable with the current DnsResolver API (it doesn't return addresses)
         if let Ok(resolved_addrs) = Self::resolve_addresses(addr_without_scheme) {
-            debug!("Caching {} resolved addresses for {}", resolved_addrs.len(), hostname);
+            debug!(
+                "Caching {} resolved addresses for {}",
+                resolved_addrs.len(),
+                hostname
+            );
             self.cache.set(hostname.clone(), resolved_addrs);
         }
 
@@ -163,11 +173,9 @@ impl CachedDnsResolver {
     /// This is a helper to populate the cache
     fn resolve_addresses(addr: &str) -> Result<Vec<SocketAddr>> {
         use std::net::ToSocketAddrs;
-        
-        let addrs: Vec<SocketAddr> = addr
-            .to_socket_addrs()?
-            .collect();
-        
+
+        let addrs: Vec<SocketAddr> = addr.to_socket_addrs()?.collect();
+
         Ok(addrs)
     }
 
@@ -188,22 +196,43 @@ mod tests {
 
     #[test]
     fn test_strip_scheme() {
-        assert_eq!(CachedDnsResolver::strip_scheme("http://localhost:8080"), "localhost:8080");
-        assert_eq!(CachedDnsResolver::strip_scheme("https://localhost:443"), "localhost:443");
-        assert_eq!(CachedDnsResolver::strip_scheme("localhost:8080"), "localhost:8080");
+        assert_eq!(
+            CachedDnsResolver::strip_scheme("http://localhost:8080"),
+            "localhost:8080"
+        );
+        assert_eq!(
+            CachedDnsResolver::strip_scheme("https://localhost:443"),
+            "localhost:443"
+        );
+        assert_eq!(
+            CachedDnsResolver::strip_scheme("localhost:8080"),
+            "localhost:8080"
+        );
     }
 
     #[test]
     fn test_extract_hostname_ipv4() {
-        assert_eq!(CachedDnsResolver::extract_hostname("127.0.0.1:8080"), "127.0.0.1");
-        assert_eq!(CachedDnsResolver::extract_hostname("localhost:8080"), "localhost");
-        assert_eq!(CachedDnsResolver::extract_hostname("example.com:443"), "example.com");
+        assert_eq!(
+            CachedDnsResolver::extract_hostname("127.0.0.1:8080"),
+            "127.0.0.1"
+        );
+        assert_eq!(
+            CachedDnsResolver::extract_hostname("localhost:8080"),
+            "localhost"
+        );
+        assert_eq!(
+            CachedDnsResolver::extract_hostname("example.com:443"),
+            "example.com"
+        );
     }
 
     #[test]
     fn test_extract_hostname_ipv6() {
         assert_eq!(CachedDnsResolver::extract_hostname("[::1]:8080"), "[::1]");
-        assert_eq!(CachedDnsResolver::extract_hostname("[2001:db8::1]:443"), "[2001:db8::1]");
+        assert_eq!(
+            CachedDnsResolver::extract_hostname("[2001:db8::1]:443"),
+            "[2001:db8::1]"
+        );
     }
 
     #[test]

@@ -92,12 +92,12 @@ impl RedactionEngine {
 
         // Use pure Rust SIMD pattern detection
         use scred_detector::{detect_all, redact_text};
-        
+
         let text_bytes = text.as_bytes();
-        
+
         // Detect all patterns using Rust implementation
         let detection_result = detect_all(text_bytes);
-        
+
         // Redact matched regions
         let redacted_bytes = if detection_result.count() > 0 {
             redact_text(text_bytes, &detection_result.matches)
@@ -108,7 +108,8 @@ impl RedactionEngine {
         let redacted_text = String::from_utf8_lossy(&redacted_bytes).into_owned();
 
         // Map pattern types to tier names for selector filtering
-        let mut tier_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut tier_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
         for m in &detection_result.matches {
             let tier_name = match m.pattern_type {
                 0..=99 => "CRITICAL",          // Simple prefix patterns (AWS, etc.)
@@ -131,27 +132,31 @@ impl RedactionEngine {
 
         // Create match information for each detected pattern
         // Use tier name as pattern_type for proper selector matching
-        let matches = detection_result.matches.iter().map(|m| {
-            let original = &text_bytes[m.start..m.end];
-            let redacted = &redacted_bytes[m.start..m.end];
-            
-            // Map pattern type number to tier name (CRITICAL, API_KEYS, PATTERNS, etc.)
-            let tier_name = match m.pattern_type {
-                0..=99 => "CRITICAL",          // Simple prefix patterns
-                100..=199 => "API_KEYS",       // Validation patterns
-                200..=299 => "PATTERNS",       // JWT and regex patterns
-                300..=399 => "INFRASTRUCTURE", // SSH keys, certificates
-                _ => "SERVICES",               // Other patterns
-            };
-            
-            PatternMatch {
-                position: m.start,
-                pattern_type: tier_name.to_string(),
-                original_text: String::from_utf8_lossy(original).into_owned(),
-                redacted_text: String::from_utf8_lossy(redacted).into_owned(),
-                match_len: m.end - m.start,
-            }
-        }).collect();
+        let matches = detection_result
+            .matches
+            .iter()
+            .map(|m| {
+                let original = &text_bytes[m.start..m.end];
+                let redacted = &redacted_bytes[m.start..m.end];
+
+                // Map pattern type number to tier name (CRITICAL, API_KEYS, PATTERNS, etc.)
+                let tier_name = match m.pattern_type {
+                    0..=99 => "CRITICAL",          // Simple prefix patterns
+                    100..=199 => "API_KEYS",       // Validation patterns
+                    200..=299 => "PATTERNS",       // JWT and regex patterns
+                    300..=399 => "INFRASTRUCTURE", // SSH keys, certificates
+                    _ => "SERVICES",               // Other patterns
+                };
+
+                PatternMatch {
+                    position: m.start,
+                    pattern_type: tier_name.to_string(),
+                    original_text: String::from_utf8_lossy(original).into_owned(),
+                    redacted_text: String::from_utf8_lossy(redacted).into_owned(),
+                    match_len: m.end - m.start,
+                }
+            })
+            .collect();
 
         RedactionResult {
             redacted: redacted_text,
@@ -160,4 +165,3 @@ impl RedactionEngine {
         }
     }
 }
-

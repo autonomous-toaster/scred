@@ -1,5 +1,5 @@
 //! Tests for environment variable KEY=value patterns
-//! 
+//!
 //! Tests that PASSWORD, API_KEY, APIKEY, SECRET, TOKEN are detected
 //! in various forms (exact, prefix, suffix)
 
@@ -16,7 +16,10 @@ fn test_password_exact() {
 fn test_password_with_prefix() {
     let text = "export DB_PASSWORD=short";
     let matches = detect_all(text.as_bytes());
-    assert!(!matches.matches.is_empty(), "Should detect _PASSWORD= with short value");
+    assert!(
+        !matches.matches.is_empty(),
+        "Should detect _PASSWORD= with short value"
+    );
 }
 
 #[test]
@@ -122,15 +125,22 @@ fn test_multiple_env_vars() {
     let text = "PASSWORD=mysecretpass\nAPI_KEY=myapikey456
 SECRET=mysecret789";
     let matches = detect_all(text.as_bytes());
-    
-    assert!(matches.matches.len() >= 1, "Should detect at least one env pattern, found {}", matches.matches.len());
+
+    assert!(
+        matches.matches.len() >= 1,
+        "Should detect at least one env pattern, found {}",
+        matches.matches.len()
+    );
 }
 
 #[test]
 fn test_env_export_format() {
     let text = "export PASSWORD=mysecret\nexport API_KEY=mykey";
     let matches = detect_all(text.as_bytes());
-    assert!(!matches.matches.is_empty(), "Should detect in export format");
+    assert!(
+        !matches.matches.is_empty(),
+        "Should detect in export format"
+    );
 }
 
 #[test]

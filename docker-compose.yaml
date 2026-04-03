@@ -1,0 +1,67 @@
+services:
+  mitmproxy:
+    image: mitmproxy/mitmproxy:latest
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    command: [
+        "mitmweb",
+        "--listen-port",
+        "8080",
+        "--listen-host",
+        "0.0.0.0",
+        "--web-port",
+        "8081",
+        "--web-host",
+        "0.0.0.0",
+        "--set",
+        "web_password=password",
+      ]
+    environment:
+      HTTP_PROXY: $HTTP_PROXY
+      HTTPS_PROXY: $HTTPS_PROXY
+      NO_PROXY: httpbin,mitmproxy
+      SCRED_CONFIG_FILE: /app/config.yaml
+      SCRED_POLICY_SEED: dev-seed
+    volumes:
+      - ./data/mitmproxy:/home/mitmproxy/.mitmproxy
+
+  httpbin:
+    image: kennethreitz/httpbin
+    ports:
+      - "8889:80"
+
+  scred-mitm:
+    build:
+      context: .
+      dockerfile: Dockerfile.scred-mitm
+    ports:
+      - "9999:8080"
+      - "9998:9998"
+    environment:
+      HTTP_PROXY: http://mitmproxy:8080
+      HTTPS_PROXY: http://mitmproxy:8080
+      SCRED_CONFIG_FILE: /app/config.yaml
+      SCRED_POLICY_SEED: dev-seed
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      LITELLM_API_KEY: ${LITELLM_API_KEY}
+    volumes:
+      - ./config/scred-mitm.yaml:/app/config.yaml:ro
+    depends_on: [mitmproxy]
+
+  scred-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.scred-proxy
+    ports:
+      - "9997:9999"
+      - "9996:9998"
+    environment:
+      HTTP_PROXY: http://mitmproxy:8080
+      HTTPS_PROXY: http://mitmproxy:8080
+      SCRED_CONFIG_FILE: /app/config.yaml
+      SCRED_POLICY_SEED: dev-seed
+    volumes:
+      - ./config/scred-proxy.yaml:/app/config.yaml:ro
+    depends_on: [mitmproxy, httpbin]

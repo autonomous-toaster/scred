@@ -20,10 +20,10 @@ use std::sync::OnceLock;
 #[derive(Debug, Clone)]
 pub struct UriPattern {
     pub name: &'static str,
-    pub scheme: &'static str,           // e.g., "mongodb://", "https://"
+    pub scheme: &'static str,            // e.g., "mongodb://", "https://"
     pub credential_type: CredentialType, // How credentials are structured
     pub min_length: usize,               // Minimum credential length
-    pub pattern_id: u16,                // ID for matches (400-420 reserved)
+    pub pattern_id: u16,                 // ID for matches (400-420 reserved)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -143,10 +143,7 @@ static WEBHOOK_AC: OnceLock<AhoCorasick> = OnceLock::new();
 /// Get or initialize database URI automaton
 fn get_database_ac() -> &'static AhoCorasick {
     DATABASE_AC.get_or_init(|| {
-        let schemes: Vec<&str> = DATABASE_URI_PATTERNS
-            .iter()
-            .map(|p| p.scheme)
-            .collect();
+        let schemes: Vec<&str> = DATABASE_URI_PATTERNS.iter().map(|p| p.scheme).collect();
         AhoCorasick::new(schemes).unwrap()
     })
 }
@@ -154,10 +151,7 @@ fn get_database_ac() -> &'static AhoCorasick {
 /// Get or initialize webhook URI automaton
 fn get_webhook_ac() -> &'static AhoCorasick {
     WEBHOOK_AC.get_or_init(|| {
-        let schemes: Vec<&str> = WEBHOOK_URI_PATTERNS
-            .iter()
-            .map(|p| p.scheme)
-            .collect();
+        let schemes: Vec<&str> = WEBHOOK_URI_PATTERNS.iter().map(|p| p.scheme).collect();
         AhoCorasick::new(schemes).unwrap()
     })
 }
@@ -238,7 +232,7 @@ pub fn detect_webhook_uris(text: &[u8]) -> Vec<Match> {
 }
 
 /// Redact credentials from a URI while preserving structure
-/// 
+///
 /// Examples:
 ///   mongodb://user:password@host:27017/db → mongodb://user:[REDACTED]@host:27017/db
 ///   https://hooks.slack.com/services/T00/B00/KEY → https://hooks.slack.com/services/T00/B00/[REDACTED]
@@ -283,4 +277,3 @@ pub fn redact_uri_credentials(uri: &str, credential_type: &CredentialType) -> St
         }
     }
 }
-

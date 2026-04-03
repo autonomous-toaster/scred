@@ -1,4 +1,0 @@
-FROM fedora:42
-RUN dnf -y install rust cargo pkgconf-pkg-config fuse-devel fuse fuse-libs util-linux-core && dnf clean all
-WORKDIR /src
-CMD ["bash"]

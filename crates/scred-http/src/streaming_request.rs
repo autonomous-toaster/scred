@@ -2,7 +2,6 @@
 ///
 /// Streams HTTP requests from client → redactor → upstream server
 /// without buffering the entire request body.
-
 use anyhow::{anyhow, Result};
 use scred_redactor::StreamingRedactor;
 use std::sync::Arc;
@@ -60,13 +59,14 @@ where
     R: AsyncReadExt + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    
-    
-    debug!("[stream_request_to_upstream] ENTRY: request_line={}", request_line);
+    debug!(
+        "[stream_request_to_upstream] ENTRY: request_line={}",
+        request_line
+    );
 
     // 1. Parse headers (non-streaming)
     debug!("[stream_request_to_upstream] STEP 1: Parsing headers from client...");
-    let headers = parse_http_headers(client_reader).await?;
+    let headers = parse_http_headers(client_reader, false).await?;
     debug!("[stream_request_to_upstream] STEP 1 DONE: Parsed {} header lines, content_length={:?}, is_chunked={}", 
         headers.headers.len(), headers.content_length, headers.is_chunked());
 
@@ -76,9 +76,8 @@ where
 
     // 2. Forward request line to upstream
     debug!("[stream_request_to_upstream] STEP 2: Writing request line to upstream...");
-    upstream_writer
-        .write_all(format!("{}\r\n", request_line).as_bytes())
-        .await?;
+    let req_line = format!("{}\r\n", request_line);
+    upstream_writer.write_all(req_line.as_bytes()).await?;
     debug!("[stream_request_to_upstream] STEP 2 DONE: Request line sent");
 
     // 3. Forward headers to upstream (no redaction needed - headers don't contain secrets in body)
@@ -87,8 +86,13 @@ where
     let (redacted_headers, _) = redactor.redact_buffer(headers.raw_headers.as_bytes());
     // NOTE: raw_headers already includes the final \r\n blank line, don't add another!
     let headers_len = redacted_headers.len();
-    upstream_writer.write_all(redacted_headers.as_bytes()).await?;
-    debug!("[stream_request_to_upstream] STEP 3 DONE: Headers sent ({} bytes)", headers_len);
+    upstream_writer
+        .write_all(redacted_headers.as_bytes())
+        .await?;
+    debug!(
+        "[stream_request_to_upstream] STEP 3 DONE: Headers sent ({} bytes)",
+        headers_len
+    );
 
     // 4. Stream body through redactor
     debug!("[stream_request_to_upstream] STEP 4: Processing request body...");
@@ -96,7 +100,10 @@ where
 
     if let Some(content_length) = headers.content_length {
         // Content-Length: stream exactly N bytes
-        debug!("[stream_request_to_upstream] STEP 4a: Streaming body with content-length={}", content_length);
+        debug!(
+            "[stream_request_to_upstream] STEP 4a: Streaming body with content-length={}",
+            content_length
+        );
         stats = stream_request_body_content_length(
             client_reader,
             &mut upstream_writer,
@@ -122,7 +129,10 @@ where
 
     // Report redaction stats at INFO level if anything was redacted
     if stats.patterns_found > 0 {
-        debug!("[REDACTION] Request body: {} patterns found and redacted", stats.patterns_found);
+        debug!(
+            "[REDACTION] Request body: {} patterns found and redacted",
+            stats.patterns_found
+        );
     }
 
     if config.debug {
@@ -132,7 +142,10 @@ where
         );
     }
 
-    debug!("[stream_request_to_upstream] EXIT: SUCCESS (bytes_read={}, bytes_written={})", stats.bytes_read, stats.bytes_written);
+    debug!(
+        "[stream_request_to_upstream] EXIT: SUCCESS (bytes_read={}, bytes_written={})",
+        stats.bytes_read, stats.bytes_written
+    );
     Ok(stats)
 }
 
@@ -148,7 +161,10 @@ where
     R: AsyncReadExt + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    debug!("[streaming] Streaming request body: {} bytes", content_length);
+    debug!(
+        "[streaming] Streaming request body: {} bytes",
+        content_length
+    );
 
     let mut stats = StreamingStats::default();
     let mut remaining = content_length;
@@ -162,7 +178,8 @@ where
 
         // Redact chunk (streaming redaction uses all patterns - selector filtering not supported)
         let is_eof = remaining == chunk_size;
-        let (output, bytes_written, patterns) = redactor.process_chunk(&chunk, &mut lookahead, is_eof);
+        let (output, bytes_written, patterns) =
+            redactor.process_chunk(&chunk, &mut lookahead, is_eof);
 
         // Write redacted chunk (no selector filtering - streaming preserves all redactions)
         upstream_writer.write_all(output.as_bytes()).await?;
@@ -185,4 +202,3 @@ pub struct StreamingStats {
     pub chunks_processed: u64,
     pub patterns_found: u64,
 }
-

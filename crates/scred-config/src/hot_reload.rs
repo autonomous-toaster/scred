@@ -3,10 +3,10 @@
 //! This module provides functionality to reload configuration files
 //! on SIGHUP signal.
 
-use std::sync::Arc;
 use std::path::PathBuf;
-use tracing::info;
+use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::info;
 
 /// Configuration hot-reload handler
 #[derive(Clone)]
@@ -56,7 +56,7 @@ where
     tokio::spawn(async move {
         let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
             .expect("Failed to create SIGHUP handler");
-        
+
         while sigterm.recv().await.is_some() {
             info!("[hot-reload] SIGHUP received, reloading configuration...");
             on_reload();
@@ -76,5 +76,3 @@ where
     debug!("[hot-reload] SIGHUP handler not available on this platform");
     Ok(())
 }
-
-

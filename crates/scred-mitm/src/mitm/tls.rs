@@ -1,24 +1,25 @@
-/// TLS Certificate Generation and Caching (Phase 4a)
-/// 
-/// Implements certificate generation using rcgen for:
-/// - CA certificate (generated once and persisted)
-/// - Per-connection certificates (signed by CA)
-/// - Two-level caching: memory (hot path) + disk (persistence)
-///
-/// Architecture:
-/// 1. CA Generation: Create or load existing CA key/cert
-/// 2. Per-Connection: Generate certificates on-demand with SAN extensions
-/// 3. Memory Cache: LRU-style caching for frequently accessed domains
-/// 4. Disk Cache: Persist generated certs for faster startup
+//! TLS Certificate Generation and Caching
+//!
+//! Implements certificate generation using rcgen for:
+//! - CA certificate (generated once and persisted)
+//! - Per-connection certificates (signed by CA)
+//! - Two-level caching: memory (hot path) + disk (persistence)
+//!
+//! Uses ECDSA P-256 with proper validity periods for LibreSSL compatibility.
 
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::RwLock;
-use anyhow::{anyhow, Result};
 use tracing::{debug, info};
+use time::{Duration, OffsetDateTime};
+
+// Certificate validity: CA lives 10 years, domain certs 1 year
+const CA_VALIDITY_YEARS: i64 = 10;
+const DOMAIN_VALIDITY_DAYS: i64 = 365;
 
 /// Represents a cached certificate with metadata
 #[derive(Clone, Debug)]
@@ -41,7 +42,6 @@ pub struct CertificateGenerator {
 impl CertificateGenerator {
     /// Generate a self-signed CA certificate and key if they don't exist
     pub fn generate_ca_if_missing(ca_key_path: &Path, ca_cert_path: &Path) -> Result<()> {
-        // If both files exist, nothing to do
         if ca_key_path.exists() && ca_cert_path.exists() {
             debug!("CA certificate and key already exist");
             return Ok(());
@@ -49,16 +49,44 @@ impl CertificateGenerator {
 
         debug!("Generating self-signed CA certificate");
 
-        // Create parent directory if needed
         if let Some(parent) = ca_key_path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| anyhow!("Failed to create CA directory: {}", e))?;
         }
 
-        // Generate a self-signed CA certificate using rcgen
-        let mut params = rcgen::CertificateParams::new(vec!["scred-ca".to_string()]);
+        // Use ECDSA P-256 - widely supported including LibreSSL
+        let alg = &rcgen::PKCS_ECDSA_P256_SHA256;
+        
+        // Generate CA with proper attributes
+        let mut params = rcgen::CertificateParams::new(vec![]);
+        
+        // Set proper distinguished name
+        params.distinguished_name = rcgen::DistinguishedName::new();
+        params.distinguished_name.push(rcgen::DnType::CommonName, "scred-mitm-ca");
+        params.distinguished_name.push(rcgen::DnType::OrganizationName, "SCRED");
+        
+        // Mark as CA with no constraints
         params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
         
+        // Set key usage for CA (keyCertSign and cRLSign)
+        params.key_usages = vec![
+            rcgen::KeyUsagePurpose::KeyCertSign,
+            rcgen::KeyUsagePurpose::CrlSign,
+        ];
+        
+        // Use ECDSA P-256 algorithm
+        params.alg = alg;
+        
+        // Set validity period (10 years, starting 24h ago for clock skew)
+        let now = OffsetDateTime::now_utc();
+        params.not_before = now - Duration::days(1);
+        params.not_after = now + Duration::days(CA_VALIDITY_YEARS * 365);
+
+        // Generate key pair (ECDSA P-256 is supported by rcgen)
+        let key_pair = rcgen::KeyPair::generate(alg)
+            .map_err(|e| anyhow!("Failed to generate ECDSA key pair: {}", e))?;
+        params.key_pair = Some(key_pair);
+
         let cert = rcgen::Certificate::from_params(params)
             .map_err(|e| anyhow!("Failed to generate CA: {}", e))?;
 
@@ -66,21 +94,17 @@ impl CertificateGenerator {
             .map_err(|e| anyhow!("Failed to serialize CA cert: {}", e))?;
         let key_pem = cert.serialize_private_key_pem();
 
-        // Write key
         fs::write(ca_key_path, key_pem.as_bytes())
             .map_err(|e| anyhow!("Failed to write CA key: {}", e))?;
-
-        // Write certificate
         fs::write(ca_cert_path, cert_pem.as_bytes())
             .map_err(|e| anyhow!("Failed to write CA cert: {}", e))?;
 
-        info!("Generated self-signed CA at {:?} and {:?}", ca_key_path, ca_cert_path);
+        info!("Generated ECDSA P-256 CA certificate at {:?} and {:?}", ca_key_path, ca_cert_path);
         Ok(())
     }
 
     /// Create a new certificate generator with CA key/cert
     pub fn new(ca_key_path: &Path, ca_cert_path: &Path, cache_dir: &Path) -> Result<Self> {
-        // Verify CA files exist
         if !ca_key_path.exists() {
             return Err(anyhow!("CA key file not found: {:?}", ca_key_path));
         }
@@ -88,13 +112,11 @@ impl CertificateGenerator {
             return Err(anyhow!("CA cert file not found: {:?}", ca_cert_path));
         }
 
-        // Load CA key and cert
         let ca_key_pem = fs::read(ca_key_path)
             .map_err(|e| anyhow!("Failed to read CA key: {}", e))?;
         let ca_cert_pem = fs::read(ca_cert_path)
             .map_err(|e| anyhow!("Failed to read CA cert: {}", e))?;
 
-        // Create cache directory if it doesn't exist
         if !cache_dir.exists() {
             fs::create_dir_all(cache_dir)
                 .map_err(|e| anyhow!("Failed to create cache dir: {}", e))?;
@@ -107,18 +129,13 @@ impl CertificateGenerator {
             ca_cert_pem,
             cache_dir: cache_dir.to_path_buf(),
             in_memory_cache: Arc::new(RwLock::new(HashMap::new())),
-            max_cache_size: 1000, // Max certificates in memory
+            max_cache_size: 1000,
         })
     }
 
     /// Generate or retrieve a cached certificate for a domain
-    /// 
-    /// Priority:
-    /// 1. In-memory cache (fastest)
-    /// 2. Disk cache (medium)
-    /// 3. Generate new (slowest)
     pub async fn get_or_generate_cert(&self, domain: &str) -> Result<(Vec<u8>, Vec<u8>)> {
-        // Check in-memory cache first
+        // Check in-memory cache (async, no blocking)
         {
             let cache = self.in_memory_cache.read().await;
             if let Some(cached) = cache.get(domain) {
@@ -129,60 +146,56 @@ impl CertificateGenerator {
 
         debug!("Certificate cache miss for domain: {}", domain);
 
-        // Check disk cache
-        let cache_path = self.cache_dir.join(format!("{}.pem", domain));
-        let key_path = self.cache_dir.join(format!("{}.key", domain));
+        // Move blocking operations to spawn_blocking
+        let cache_dir = self.cache_dir.clone();
+        let ca_key_pem = self.ca_key_pem.clone();
+        let ca_cert_pem = self.ca_cert_pem.clone();
+        let domain_owned = domain.to_string();
 
-        if cache_path.exists() && key_path.exists() {
-            if let Ok((cert_pem, key_pem)) = self.load_cached_cert(&cache_path, &key_path) {
-                debug!("Loaded certificate from disk cache for domain: {}", domain);
-                
-                // Load into memory cache
-                let mut in_mem = self.in_memory_cache.write().await;
-                if in_mem.len() >= self.max_cache_size {
-                    // Simple eviction: remove oldest entry
-                    if let Some((oldest_key, _)) = in_mem.iter()
-                        .min_by_key(|(_, cached)| cached.generated_at)
-                        .map(|(k, v)| (k.clone(), v.clone())) {
-                        in_mem.remove(&oldest_key);
-                    }
+        let result = tokio::task::spawn_blocking(move || {
+            // All blocking I/O and CPU-heavy operations here
+            let cache_path = cache_dir.join(format!("{}.pem", domain_owned));
+            let key_path = cache_dir.join(format!("{}.key", domain_owned));
+
+            // Check disk cache
+            if cache_path.exists() && key_path.exists() {
+                if let (Ok(cert), Ok(key)) = (fs::read(&cache_path), fs::read(&key_path)) {
+                    return Ok::<_, anyhow::Error>((cert, key, true)); // true = from cache
                 }
-                
-                in_mem.insert(
-                    domain.to_string(),
-                    CachedCert {
-                        cert_pem: cert_pem.clone(),
-                        key_pem: key_pem.clone(),
-                        generated_at: SystemTime::now(),
-                    },
-                );
-                
-                return Ok((cert_pem, key_pem));
             }
+
+            // Generate new certificate (CPU-heavy + uses loaded CA)
+            let (cert, key) = generate_cert_signed_by_ca(&domain_owned, &ca_key_pem, &ca_cert_pem)?;
+            Ok((cert, key, false)) // false = newly generated
+        })
+        .await
+        .map_err(|e| anyhow!("spawn_blocking error: {}", e))??;
+
+        let (cert_pem, key_pem, from_cache) = result;
+
+        // Only write to disk if newly generated
+        if !from_cache {
+            let cache_path = self.cache_dir.join(format!("{}.pem", domain));
+            let key_path = self.cache_dir.join(format!("{}.key", domain));
+            
+            tokio::fs::write(&cache_path, &cert_pem).await
+                .map_err(|e| anyhow!("Failed to write cert cache: {}", e))?;
+            tokio::fs::write(&key_path, &key_pem).await
+                .map_err(|e| anyhow!("Failed to write key cache: {}", e))?;
         }
-
-        // Generate new certificate
-        info!("Generating new certificate for domain: {}", domain);
-        let (cert_pem, key_pem) = self.generate_new_cert(domain)?;
-
-        // Cache to disk
-        fs::write(&cache_path, &cert_pem)
-            .map_err(|e| anyhow!("Failed to write cert cache: {}", e))?;
-        fs::write(&key_path, &key_pem)
-            .map_err(|e| anyhow!("Failed to write key cache: {}", e))?;
 
         // Cache to memory
         {
             let mut cache = self.in_memory_cache.write().await;
             if cache.len() >= self.max_cache_size {
-                // Evict oldest
-                if let Some((key, _)) = cache.iter()
+                if let Some((key, _)) = cache
+                    .iter()
                     .min_by_key(|(_, cached)| cached.generated_at)
-                    .map(|(k, v)| (k.clone(), v.clone())) {
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                {
                     cache.remove(&key);
                 }
             }
-            
             cache.insert(
                 domain.to_string(),
                 CachedCert {
@@ -193,45 +206,10 @@ impl CertificateGenerator {
             );
         }
 
+        if !from_cache {
+            info!("Generated CA-signed ECDSA P-256 certificate for domain: {}", domain);
+        }
         Ok((cert_pem, key_pem))
-    }
-
-    /// Generate a new certificate signed by the CA
-    /// 
-    /// Uses rcgen to create a proper X.509 certificate with:
-    /// - Subject CN matching the domain
-    /// - SAN (Subject Alternative Name) extension
-    /// - Signed by the loaded CA certificate
-    fn generate_new_cert(&self, domain: &str) -> Result<(Vec<u8>, Vec<u8>)> {
-        // For Phase 4b: Full rcgen implementation with CA signing
-        // Currently returns self-signed cert as placeholder
-        
-        let domain_vec = vec![domain.to_string()];
-        
-        // Create certificate parameters with SAN extension
-        let mut params = rcgen::CertificateParams::new(domain_vec);
-        params.subject_alt_names = vec![rcgen::SanType::DnsName(domain.to_string())];
-        
-        // Generate certificate (self-signed; Phase 4b will sign with CA)
-        let cert = rcgen::Certificate::from_params(params)
-            .map_err(|e| anyhow!("Failed to generate certificate: {}", e))?;
-        
-        let cert_pem = cert.serialize_pem()
-            .map_err(|e| anyhow!("Failed to serialize certificate: {}", e))?;
-        let key_pem = cert.serialize_private_key_pem();
-        
-        info!("Generated X.509 certificate for domain: {}", domain);
-        
-        Ok((cert_pem.into_bytes(), key_pem.into_bytes()))
-    }
-
-    /// Load certificate from cache files
-    fn load_cached_cert(&self, cert_path: &Path, key_path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
-        let cert = fs::read(cert_path)
-            .map_err(|e| anyhow!("Failed to read cached cert: {}", e))?;
-        let key = fs::read(key_path)
-            .map_err(|e| anyhow!("Failed to read cached key: {}", e))?;
-        Ok((cert, key))
     }
 
     /// Get CA certificate PEM
@@ -263,8 +241,8 @@ impl CertificateGenerator {
     /// Get cache statistics
     pub async fn cache_stats(&self) -> CacheStats {
         let in_mem = self.in_memory_cache.read().await;
-        let mut disk_count = 0;
 
+        let mut disk_count = 0;
         if self.cache_dir.exists() {
             if let Ok(entries) = fs::read_dir(&self.cache_dir) {
                 for entry in entries.flatten() {
@@ -283,14 +261,78 @@ impl CertificateGenerator {
     }
 }
 
+/// Generate a certificate signed by CA (blocking operation)
+/// Uses ECDSA P-256 for LibreSSL compatibility
+fn generate_cert_signed_by_ca(domain: &str, ca_key_pem: &[u8], ca_cert_pem: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+    let ca_key_str = String::from_utf8_lossy(ca_key_pem);
+    let ca_cert_str = String::from_utf8_lossy(ca_cert_pem);
+
+    // Use ECDSA P-256 algorithm
+    let alg = &rcgen::PKCS_ECDSA_P256_SHA256;
+
+    // Create KeyPair from CA private key
+    let ca_keypair = rcgen::KeyPair::from_pem(&ca_key_str)
+        .map_err(|e| anyhow!("Failed to parse CA key: {}", e))?;
+
+    // Parse CA certificate
+    let ca_params = rcgen::CertificateParams::from_ca_cert_pem(&ca_cert_str, ca_keypair)
+        .map_err(|e| anyhow!("Failed to parse CA cert: {}", e))?;
+
+    let ca_cert = rcgen::Certificate::from_params(ca_params)
+        .map_err(|e| anyhow!("Failed to create CA cert object: {}", e))?;
+
+    // Create domain certificate
+    let mut params = rcgen::CertificateParams::new(vec![domain.to_string()]);
+    
+    // Set distinguished name
+    params.distinguished_name = rcgen::DistinguishedName::new();
+    params.distinguished_name.push(rcgen::DnType::CommonName, domain);
+    
+    // Set SAN extension
+    params.subject_alt_names = vec![rcgen::SanType::DnsName(domain.to_string())];
+    
+    // Not a CA
+    params.is_ca = rcgen::IsCa::NoCa;
+    
+    // Key usage for server certificate
+    params.key_usages = vec![
+        rcgen::KeyUsagePurpose::DigitalSignature,
+        rcgen::KeyUsagePurpose::KeyEncipherment,
+    ];
+    
+    // Extended key usage for TLS server
+    params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+    
+    // Use ECDSA P-256 (same as CA)
+    params.alg = alg;
+    
+    // Set validity period (1 year, starting 24h ago for clock skew)
+    let now = OffsetDateTime::now_utc();
+    params.not_before = now - Duration::days(1);
+    params.not_after = now + Duration::days(DOMAIN_VALIDITY_DAYS);
+    
+    // Generate ECDSA key pair for domain cert
+    let domain_key_pair = rcgen::KeyPair::generate(alg)
+        .map_err(|e| anyhow!("Failed to generate domain ECDSA key pair: {}", e))?;
+    params.key_pair = Some(domain_key_pair);
+
+    // Generate domain certificate
+    let domain_cert = rcgen::Certificate::from_params(params)
+        .map_err(|e| anyhow!("Failed to generate domain certificate: {}", e))?;
+    
+    // Sign with CA
+    let cert_pem = domain_cert
+        .serialize_pem_with_signer(&ca_cert)
+        .map_err(|e| anyhow!("Failed to sign certificate: {}", e))?;
+    
+    let key_pem = domain_cert.serialize_private_key_pem();
+
+    Ok((cert_pem.into_bytes(), key_pem.into_bytes()))
+}
+
 #[derive(Debug, Clone)]
 pub struct CacheStats {
     pub memory_cached: usize,
     pub disk_cached: usize,
     pub cache_dir: PathBuf,
 }
-
-// Tests disabled - require tempfile dependency not in workspace
-// Run integration tests via Docker instead
-/*
-*/

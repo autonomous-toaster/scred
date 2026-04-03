@@ -1,13 +1,12 @@
 /// Phase 1B Benchmark: Compare regular vs in-place redaction
-/// 
+///
 /// Measures the performance improvement from:
 /// - Phase 1B.1: Buffer pooling infrastructure
 /// - Phase 1B.2: In-place redaction API
 ///
 /// Expected improvement: +15% (120 → 138 MB/s)
-
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use scred_redactor::{RedactionEngine, RedactionConfig, StreamingRedactor, StreamingConfig};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use scred_redactor::{RedactionConfig, RedactionEngine, StreamingConfig, StreamingRedactor};
 use std::sync::Arc;
 
 fn create_test_data_with_secrets(size: usize) -> Vec<u8> {
@@ -36,7 +35,7 @@ fn create_test_data_mixed(size: usize) -> Vec<u8> {
     let with_secrets = b"AKIAIOSFODNN7EXAMPLE,ghp_1234567890abcdefghijklmnopqrstuvwxyz,";
     let without_secrets = b"normal_data,regular_value,no_secrets,";
     let mut toggle = true;
-    
+
     while data.len() < size {
         if toggle {
             data.extend_from_slice(with_secrets);
@@ -51,14 +50,14 @@ fn create_test_data_mixed(size: usize) -> Vec<u8> {
 
 fn benchmark_streaming_variants(c: &mut Criterion) {
     let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
-    
+
     let mut group = c.benchmark_group("phase1_comparison");
     group.sample_size(10);
     group.measurement_time(std::time::Duration::from_secs(10));
 
     // Test 1: 10MB with secrets (highest throughput stress)
     let data_10mb = black_box(create_test_data_with_secrets(10 * 1024 * 1024));
-    
+
     group.bench_with_input(
         BenchmarkId::new("10mb_with_secrets", "process_chunk"),
         &data_10mb,
@@ -74,7 +73,7 @@ fn benchmark_streaming_variants(c: &mut Criterion) {
 
     // Test 2: 10MB without secrets (minimum work)
     let data_no_sec = black_box(create_test_data_no_secrets(10 * 1024 * 1024));
-    
+
     group.bench_with_input(
         BenchmarkId::new("10mb_no_secrets", "process_chunk"),
         &data_no_sec,
@@ -90,7 +89,7 @@ fn benchmark_streaming_variants(c: &mut Criterion) {
 
     // Test 3: 50MB with secrets (sustained throughput)
     let data_50mb = black_box(create_test_data_with_secrets(50 * 1024 * 1024));
-    
+
     group.bench_with_input(
         BenchmarkId::new("50mb_with_secrets", "process_chunk"),
         &data_50mb,
@@ -106,7 +105,7 @@ fn benchmark_streaming_variants(c: &mut Criterion) {
 
     // Test 4: 1MB mixed (realistic workload)
     let data_mixed = black_box(create_test_data_mixed(1024 * 1024));
-    
+
     group.bench_with_input(
         BenchmarkId::new("1mb_mixed", "process_chunk"),
         &data_mixed,

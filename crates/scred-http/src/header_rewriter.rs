@@ -78,7 +78,10 @@ pub fn replace_header_value(headers: &mut String, name: &str, value: &str) {
     let mut found = false;
 
     for line in &mut lines {
-        if !found && !line.is_empty() && line.to_lowercase().starts_with(&format!("{}:", name_lower)) {
+        if !found
+            && !line.is_empty()
+            && line.to_lowercase().starts_with(&format!("{}:", name_lower))
+        {
             // Replace the header value
             *line = format!("{}: {}", name, value);
             found = true;
@@ -137,4 +140,3 @@ pub fn inject_header_if_missing(headers: &mut String, name: &str, value: &str) {
         headers.push_str(&format!("{}: {}\r\n\r\n", name, value));
     }
 }
-

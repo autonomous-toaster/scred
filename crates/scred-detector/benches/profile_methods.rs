@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use scred_detector::{detect_simple_prefix, detect_validation, detect_jwt};
+use scred_detector::{detect_jwt, detect_simple_prefix, detect_validation};
 
 fn benchmark_individual_methods(c: &mut Criterion) {
     let mut data = Vec::new();
@@ -12,19 +12,17 @@ fn benchmark_individual_methods(c: &mut Criterion) {
         data.extend_from_slice(b"normal text content here ");
         data.extend_from_slice(b"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U ");
     }
-    
+
     c.bench_function("simple_prefix", |b| {
         b.iter(|| detect_simple_prefix(black_box(&data)))
     });
-    
+
     c.bench_function("validation", |b| {
         b.iter(|| detect_validation(black_box(&data)))
     });
-    
-    c.bench_function("jwt", |b| {
-        b.iter(|| detect_jwt(black_box(&data)))
-    });
-    
+
+    c.bench_function("jwt", |b| b.iter(|| detect_jwt(black_box(&data))));
+
     c.bench_function("all_methods", |b| {
         b.iter(|| {
             let mut result = scred_detector::DetectionResult::new();

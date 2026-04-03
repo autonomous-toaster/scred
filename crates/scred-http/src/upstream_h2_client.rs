@@ -1,11 +1,10 @@
+use crate::h2::alpn::HttpProtocol;
 /// Upstream protocol extraction utilities
 ///
 /// NOTE: This is a minimal utility module retained for compatibility
 /// The actual HTTP/2 handling is now done by the h2 crate + H2MitmAdapter
-
 use anyhow::Result;
 use tracing::debug;
-use crate::h2::alpn::HttpProtocol;
 
 /// Information about upstream connection
 #[derive(Debug, Clone)]
@@ -31,4 +30,3 @@ pub fn extract_upstream_protocol(alpn_protocol: Option<&[u8]>) -> Result<HttpPro
         }
     }
 }
-

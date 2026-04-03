@@ -10,7 +10,10 @@ fn main() {
     let test_data = generate_test_data();
     let data_size_bytes = test_data.len();
     let data_size_mb = data_size_bytes / (1024 * 1024);
-    println!("Test Data Size: {} MB ({} bytes)", data_size_mb, data_size_bytes);
+    println!(
+        "Test Data Size: {} MB ({} bytes)",
+        data_size_mb, data_size_bytes
+    );
     println!("Content: Mix of AWS keys, GitHub tokens, API keys, JWT tokens\n");
 
     // Pattern detection benchmark
@@ -44,7 +47,7 @@ fn main() {
     println!("│ Average: {:.2} MB/s", avg_mb_s);
     println!("│ Min:     {:.2} MB/s", min_mb_s);
     println!("│ Max:     {:.2} MB/s", max_mb_s);
-    println!("│ Target:  65-75 MB/s (currently 35-40 MB/s baseline)", );
+    println!("│ Target:  65-75 MB/s (currently 35-40 MB/s baseline)",);
     println!("└───────────────────────────────────────────────────────────┘\n");
 
     if avg_mb_s >= 35.0 {
@@ -59,11 +62,12 @@ fn main() {
 fn generate_test_data() -> String {
     let mut data = String::new();
 
-    let aws_keys = ["AKIAIOSFODNN7EXAMPLE",
-        "ASIAIOSFODNN7EXAMPLE"];
+    let aws_keys = ["AKIAIOSFODNN7EXAMPLE", "ASIAIOSFODNN7EXAMPLE"];
 
-    let github_tokens = ["ghp_1234567890abcdefghijklmnopqrstuvwxyz",
-        "gho_1234567890abcdefghijklmnopqrstuvwxyz"];
+    let github_tokens = [
+        "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+        "gho_1234567890abcdefghijklmnopqrstuvwxyz",
+    ];
 
     let openai_keys = ["sk-proj-1234567890abcdefghijklmnopqrstuvwxyz"];
 

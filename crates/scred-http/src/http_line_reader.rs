@@ -9,7 +9,6 @@
 /// - Handles CRLF line endings (\r\n)
 /// - Async-compatible with tokio
 /// - Zero-copy line reading
-
 use tokio::io::AsyncReadExt;
 
 /// Read a single HTTP request line from an async reader
@@ -76,9 +75,11 @@ pub async fn read_request_line<R: AsyncReadExt + Unpin>(reader: &mut R) -> std::
 /// let line = read_response_line(&mut stream).await?;
 /// // line = "HTTP/1.1 200 OK"
 /// ```
-pub async fn read_response_line<R: AsyncReadExt + Unpin>(reader: &mut R) -> std::io::Result<String> {
+pub async fn read_response_line<R: AsyncReadExt + Unpin>(
+    reader: &mut R,
+) -> std::io::Result<String> {
     use tracing::debug;
-    
+
     debug!("[read_response_line] Starting to read response line");
     let mut line = String::new();
     let mut byte = [0u8; 1];
@@ -88,7 +89,10 @@ pub async fn read_response_line<R: AsyncReadExt + Unpin>(reader: &mut R) -> std:
         match reader.read_exact(&mut byte).await {
             Ok(0) => {
                 // EOF reached
-                debug!("[read_response_line] EOF reached after {} bytes", bytes_read);
+                debug!(
+                    "[read_response_line] EOF reached after {} bytes",
+                    bytes_read
+                );
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "EOF while reading response line",
@@ -101,16 +105,21 @@ pub async fn read_response_line<R: AsyncReadExt + Unpin>(reader: &mut R) -> std:
                     if line.ends_with('\r') {
                         line.pop();
                     }
-                    debug!("[read_response_line] Got response line after {} bytes: '{}'", bytes_read, line);
+                    debug!(
+                        "[read_response_line] Got response line after {} bytes: '{}'",
+                        bytes_read, line
+                    );
                     return Ok(line);
                 }
                 line.push(ch);
             }
             Err(e) => {
-                debug!("[read_response_line] Error reading after {} bytes: {}", bytes_read, e);
+                debug!(
+                    "[read_response_line] Error reading after {} bytes: {}",
+                    bytes_read, e
+                );
                 return Err(e);
             }
         }
     }
 }
-

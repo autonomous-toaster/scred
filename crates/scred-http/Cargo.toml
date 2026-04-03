@@ -7,7 +7,8 @@ license.workspace = true
 description = "Shared HTTP library for SCRED proxies"
 
 [dependencies]
-scred-redactor = { path = "../scred-redactor" }
+scred-redactor = { path = "../scred-redactor", optional = true }
+scred-policy = { path = "../scred-policy", optional = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
@@ -19,11 +20,17 @@ thiserror = { workspace = true }
 rustls = { workspace = true }
 tokio-rustls = { workspace = true }
 webpki-roots = "0.25"
+rustls-pemfile = "2"
 http2 = { workspace = true }
 http = "0.2"
 bytes = "1.0"
 h2 = "0.4"
 once_cell = "1.20"
+
+[features]
+default = ["redaction"]
+redaction = ["scred-redactor"]
+policy = ["scred-policy"]
 
 [lib]
 name = "scred_http"

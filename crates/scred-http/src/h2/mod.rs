@@ -17,8 +17,7 @@
 /// - Kept only ALPN for protocol detection
 /// - All frame/stream/connection handling moved to h2 crate
 /// - Result: 86% code reduction (4,400 LOC → 650 LOC)
-
 pub mod alpn;
 
 // Re-export ALPN types only
-pub use alpn::{HttpProtocol, alpn_protocols};
+pub use alpn::{alpn_protocols, HttpProtocol};

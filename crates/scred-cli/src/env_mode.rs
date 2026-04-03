@@ -1,5 +1,5 @@
 /// CLI-specific environment variable redaction
-/// 
+///
 /// Intelligently detects KEY=VALUE format and redacts:
 /// - Values for any KEY (secret or not)
 /// - Patterns in values are detected by the underlying redactor
@@ -11,11 +11,10 @@
 ///   env | scred --env-mode
 ///   aws_access_key_id=AKIA...
 ///   SECRET_TOKEN=sk-...
-
 use scred_http::ConfigurableEngine;
 
 /// Generic environment line parser
-/// 
+///
 /// Parses KEY=VALUE format and delegates redaction to provided function.
 /// This shared implementation eliminates code duplication while supporting
 /// both trait-based and concrete redactors.
@@ -29,8 +28,10 @@ fn redact_env_line_generic<F: Fn(&str) -> String>(line: &str, redact_fn: F) -> S
         (Some(pos), '=')
     } else if let Some(pos) = line.find(':') {
         // Check if it's not a URL-like colon (://)
-        if pos == 0 || pos == line.len() - 1 || 
-           (line.chars().nth(pos - 1) == Some('/') && line.chars().nth(pos + 1) == Some('/')) {
+        if pos == 0
+            || pos == line.len() - 1
+            || (line.chars().nth(pos - 1) == Some('/') && line.chars().nth(pos + 1) == Some('/'))
+        {
             (None, ':')
         } else {
             (Some(pos), ':')
@@ -47,7 +48,6 @@ fn redact_env_line_generic<F: Fn(&str) -> String>(line: &str, redact_fn: F) -> S
         Some(sep) => {
             let key = line[..sep].trim();
             let value = line[sep + 1..].trim();
-
 
             // Build result
             let mut result = String::new();
@@ -68,7 +68,7 @@ fn redact_env_line_generic<F: Fn(&str) -> String>(line: &str, redact_fn: F) -> S
 }
 
 /// Redact an environment variable line using ConfigurableEngine
-/// 
+///
 /// This is the main entry point for CLI env-mode processing.
 /// Ensures all redaction goes through the same engine for consistency.
 ///
@@ -79,4 +79,3 @@ fn redact_env_line_generic<F: Fn(&str) -> String>(line: &str, redact_fn: F) -> S
 pub fn redact_env_line_configurable(line: &str, config_engine: &ConfigurableEngine) -> String {
     redact_env_line_generic(line, |v| config_engine.redact_only(v))
 }
-

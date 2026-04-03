@@ -6,12 +6,11 @@
 /// - Fallback to localhost for testing
 /// - Detailed logging for debugging
 /// - Support for both IPv4 and IPv6
-
 use anyhow::{anyhow, Result};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 use tokio::net::TcpStream;
-use tracing::{debug, warn, error};
+use tracing::{debug, error, warn};
 
 /// Maximum number of DNS resolution attempts
 const MAX_RETRIES: u32 = 3;
@@ -63,19 +62,30 @@ impl DnsResolver {
     pub async fn connect_with_retry(addr: &str) -> Result<TcpStream> {
         // Strip scheme if present (http://, https://, etc)
         let addr_without_scheme = Self::strip_scheme(addr);
-        debug!("DNS: Connecting to {} with retry strategy", addr_without_scheme);
+        debug!(
+            "DNS: Connecting to {} with retry strategy",
+            addr_without_scheme
+        );
 
         let mut attempt = 0;
         let mut backoff_ms = INITIAL_BACKOFF_MS;
 
         loop {
             attempt += 1;
-            debug!("DNS: Attempt {} of {}: connecting to {}", attempt, MAX_RETRIES + 1, addr_without_scheme);
+            debug!(
+                "DNS: Attempt {} of {}: connecting to {}",
+                attempt,
+                MAX_RETRIES + 1,
+                addr_without_scheme
+            );
 
             // Attempt to resolve and connect
             match Self::try_connect(addr_without_scheme).await {
                 Ok(stream) => {
-                    debug!("DNS: Connected to {} on attempt {}", addr_without_scheme, attempt);
+                    debug!(
+                        "DNS: Connected to {} on attempt {}",
+                        addr_without_scheme, attempt
+                    );
                     return Ok(stream);
                 }
                 Err(e) => {
@@ -116,10 +126,7 @@ impl DnsResolver {
             .collect();
 
         if socket_addrs.is_empty() {
-            return Err(anyhow!(
-                "DNS: No addresses resolved for '{}'",
-                addr
-            ));
+            return Err(anyhow!("DNS: No addresses resolved for '{}'", addr));
         }
 
         debug!("DNS: Resolved {} to {} addresses", addr, socket_addrs.len());
@@ -127,7 +134,12 @@ impl DnsResolver {
         // Try each resolved address
         let mut last_error = None;
         for (idx, socket_addr) in socket_addrs.iter().enumerate() {
-            debug!("DNS: Trying address {}/{}: {}", idx + 1, socket_addrs.len(), socket_addr);
+            debug!(
+                "DNS: Trying address {}/{}: {}",
+                idx + 1,
+                socket_addrs.len(),
+                socket_addr
+            );
 
             match TcpStream::connect(*socket_addr).await {
                 Ok(stream) => {
@@ -153,4 +165,3 @@ impl DnsResolver {
         }
     }
 }
-

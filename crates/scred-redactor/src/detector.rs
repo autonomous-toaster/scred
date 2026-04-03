@@ -24,7 +24,11 @@ impl StreamingDetector {
     }
 
     /// Process input and detect secrets
-    pub fn process(&mut self, _input: &[u8], _is_eof: bool) -> Result<Vec<SecretDetectionEvent>, String> {
+    pub fn process(
+        &mut self,
+        _input: &[u8],
+        _is_eof: bool,
+    ) -> Result<Vec<SecretDetectionEvent>, String> {
         Ok(Vec::new())
     }
 }

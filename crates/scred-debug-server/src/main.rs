@@ -1,5 +1,7 @@
 use anyhow::Result;
-use axum::{extract::ConnectInfo, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use axum::{
+    extract::ConnectInfo, http::StatusCode, response::IntoResponse, routing::get, Json, Router,
+};
 use clap::Parser;
 use serde_json::json;
 use std::net::SocketAddr;
@@ -40,9 +42,7 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     let log_level = if args.debug { "debug" } else { "info" };
-    tracing_subscriber::fmt()
-        .with_env_filter(log_level)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(log_level).init();
 
     let addr = format!("{}:{}", args.addr, args.port);
     let socket_addr: SocketAddr = addr.parse()?;

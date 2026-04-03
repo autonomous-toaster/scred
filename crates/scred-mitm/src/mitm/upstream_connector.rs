@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::{TlsConnector, TlsStream};
 use rustls::ServerName;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use scred_http::dns_resolver::DnsResolver;
 use scred_http::proxy_resolver::connect_through_proxy;
@@ -43,7 +43,6 @@ pub async fn connect_to_upstream(
         debug!("Direct connection to upstream: {}:443", target_host);
         DnsResolver::connect_with_retry(&format!("{}:443", target_host)).await?
     };
-
     info!("TCP connected to upstream");
 
     // Step 2: Set up TLS ClientConfig with ALPN support
@@ -95,7 +94,5 @@ pub async fn connect_to_upstream(
     let connection_info = UpstreamConnectionInfo {
         protocol: negotiated_protocol,
     };
-
-    Ok((tls_stream, connection_info))
+    Ok((TlsStream::Client(tls_stream), connection_info))
 }
-

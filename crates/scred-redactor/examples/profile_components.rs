@@ -1,5 +1,5 @@
 //! Profile individual components of the redaction pipeline
-//! 
+//!
 //! Measures time spent in:
 //! - Pattern detection (overall)
 //! - Character-preserving redaction
@@ -56,22 +56,37 @@ fn main() {
         let redaction_pct = (redaction_elapsed.as_secs_f64() / total_elapsed.as_secs_f64()) * 100.0;
         let overhead_pct = 100.0 - detection_pct - redaction_pct;
 
-        println!("Run {}: {:.2}ms total", run, total_elapsed.as_secs_f64() * 1000.0);
-        println!("  Detection:     {:.2}ms ({:.1}%)", 
-                 detection_elapsed.as_secs_f64() * 1000.0, detection_pct);
-        println!("  Redaction:     {:.2}ms ({:.1}%)", 
-                 redaction_elapsed.as_secs_f64() * 1000.0, redaction_pct);
+        println!(
+            "Run {}: {:.2}ms total",
+            run,
+            total_elapsed.as_secs_f64() * 1000.0
+        );
+        println!(
+            "  Detection:     {:.2}ms ({:.1}%)",
+            detection_elapsed.as_secs_f64() * 1000.0,
+            detection_pct
+        );
+        println!(
+            "  Redaction:     {:.2}ms ({:.1}%)",
+            redaction_elapsed.as_secs_f64() * 1000.0,
+            redaction_pct
+        );
         println!("  Other:         {:.2}% (overhead)", overhead_pct);
-        println!("  Throughput:    {:.2} MB/s", 
-                 (SIZE as f64) / total_elapsed.as_secs_f64() / (1024.0 * 1024.0));
+        println!(
+            "  Throughput:    {:.2} MB/s",
+            (SIZE as f64) / total_elapsed.as_secs_f64() / (1024.0 * 1024.0)
+        );
         println!("  Matches found: {}", matches.matches.len());
         println!();
     }
 
     // Summary
-    let avg_detection = detection_times.iter().map(|d| d.as_secs_f64()).sum::<f64>() / detection_times.len() as f64;
-    let avg_redaction = redaction_times.iter().map(|d| d.as_secs_f64()).sum::<f64>() / redaction_times.len() as f64;
-    let avg_total = total_times.iter().map(|d| d.as_secs_f64()).sum::<f64>() / total_times.len() as f64;
+    let avg_detection =
+        detection_times.iter().map(|d| d.as_secs_f64()).sum::<f64>() / detection_times.len() as f64;
+    let avg_redaction =
+        redaction_times.iter().map(|d| d.as_secs_f64()).sum::<f64>() / redaction_times.len() as f64;
+    let avg_total =
+        total_times.iter().map(|d| d.as_secs_f64()).sum::<f64>() / total_times.len() as f64;
 
     println!("════════════════════════════════════════════════");
     println!("  SUMMARY (5-run average)");
@@ -81,10 +96,20 @@ fn main() {
     let redaction_pct = (avg_redaction / avg_total) * 100.0;
 
     println!("Total Time:        {:.2} ms", avg_total * 1000.0);
-    println!("  Detection ({:.1}%): {:.2} ms", detection_pct, avg_detection * 1000.0);
-    println!("  Redaction ({:.1}%): {:.2} ms", redaction_pct, avg_redaction * 1000.0);
-    println!("\nThroughput:        {:.2} MB/s", 
-             (SIZE as f64) / avg_total / (1024.0 * 1024.0));
+    println!(
+        "  Detection ({:.1}%): {:.2} ms",
+        detection_pct,
+        avg_detection * 1000.0
+    );
+    println!(
+        "  Redaction ({:.1}%): {:.2} ms",
+        redaction_pct,
+        avg_redaction * 1000.0
+    );
+    println!(
+        "\nThroughput:        {:.2} MB/s",
+        (SIZE as f64) / avg_total / (1024.0 * 1024.0)
+    );
 
     println!("\n════════════════════════════════════════════════");
     println!("  Bottleneck Analysis");
@@ -97,15 +122,17 @@ fn main() {
         println!("⚠️  BOTTLENECK: Redaction ({:.1}%)", redaction_pct);
         println!("   Recommendation: Optimize character-preserving redaction");
     } else {
-        println!("✅ Time well distributed (detection {:.1}%, redaction {:.1}%)", 
-                 detection_pct, redaction_pct);
+        println!(
+            "✅ Time well distributed (detection {:.1}%, redaction {:.1}%)",
+            detection_pct, redaction_pct
+        );
         println!("   Recommendation: Focus on parallelization or algorithmic changes");
     }
 }
 
 fn generate_test_data(size: usize) -> Vec<u8> {
     let mut data = Vec::with_capacity(size);
-    
+
     // Mix of patterns
     let patterns: &[&[u8]] = &[
         b"This is normal text with AWS key AKIAIOSFODNN7EXAMPLE in middle.\n",

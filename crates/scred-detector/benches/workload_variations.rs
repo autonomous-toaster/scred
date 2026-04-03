@@ -35,5 +35,10 @@ fn workload_mixed_realistic(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, workload_no_secrets, workload_many_matches, workload_mixed_realistic);
+criterion_group!(
+    benches,
+    workload_no_secrets,
+    workload_many_matches,
+    workload_mixed_realistic
+);
 criterion_main!(benches);
