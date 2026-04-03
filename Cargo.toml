@@ -9,7 +9,7 @@ members = [
     "crates/scred-http",
     "crates/scred-mitm",
     "crates/scred-proxy",
-    "crates/scred-redactor",
+    "crates/scred-redactor", "crates/scred-bin-printf-wrapper",
 ]
 resolver = "2"
 

@@ -1,0 +1,13 @@
+{
+  global:
+    write;
+    writev;
+    fwrite;
+    puts;
+    dup2;
+    dup;
+    dup3;
+    __write_chk;
+    fork;
+    fcntl;
+};

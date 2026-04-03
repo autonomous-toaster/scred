@@ -5,9 +5,26 @@ use std::process::{Command, ExitCode};
 
 fn main() -> Result<ExitCode> {
     if env::args().any(|a| a == "-h" || a == "--help") {
-        eprintln!("usage: scred-bin [--stdout|--no-stdout] [--stderr|--no-stderr] [--network] [--debug-hooks] [--] <program> [args...]");
-        eprintln!("linux/glibc-first LD_PRELOAD output redaction PoC; musl/alpine is experimental");
-        eprintln!("non-Linux platforms are not currently supported by this PoC");
+        eprintln!("usage: scred-bin [OPTIONS] [--] <program> [args...]");
+        eprintln!();
+        eprintln!("Output redaction options:");
+        eprintln!("  --stdout          Hook stdout (default: yes)");
+        eprintln!("  --no-stdout       Don't hook stdout");
+        eprintln!("  --stderr          Hook stderr (default: yes)");
+        eprintln!("  --no-stderr       Don't hook stderr");
+        eprintln!("  --network         Hook network sockets (default: no)");
+        eprintln!();
+        eprintln!("Redaction configuration:");
+        eprintln!("  --lookahead <N>   Buffer size for pattern matching (default: 4096 bytes)");
+        eprintln!("  --redact <TYPES>  Pattern types to redact (passed to scred-detector)");
+        eprintln!();
+        eprintln!("Debugging:");
+        eprintln!("  --debug-hooks     Log hook invocations to stderr");
+        eprintln!();
+        eprintln!("Notes:");
+        eprintln!("  - Linux/glibc-first LD_PRELOAD output redaction");
+        eprintln!("  - musl/alpine is experimental");
+        eprintln!("  - macOS/BSD not supported (LD_PRELOAD limitation)");
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -28,6 +45,8 @@ fn run_platform() -> Result<ExitCode> {
     let mut hook_stderr = true;
     let mut hook_network = false;
     let mut debug_hooks = false;
+    let mut lookahead: Option<usize> = None;
+    let mut redact_patterns: Option<String> = None;
     let mut passthrough = Vec::new();
 
     while let Some(arg) = args.next() {
@@ -38,6 +57,16 @@ fn run_platform() -> Result<ExitCode> {
             "--no-stderr" => hook_stderr = false,
             "--network" => hook_network = true,
             "--debug-hooks" => debug_hooks = true,
+            "--lookahead" => {
+                let val = args.next()
+                    .ok_or_else(|| anyhow::anyhow!("--lookahead requires a numeric argument"))?
+                    .parse::<usize>()
+                    .context("--lookahead value must be a valid number")?;
+                lookahead = Some(val);
+            }
+            "--redact" => {
+                redact_patterns = args.next();
+            }
             "--" => {
                 passthrough.extend(args);
                 break;
@@ -52,7 +81,7 @@ fn run_platform() -> Result<ExitCode> {
     }
 
     let program = passthrough.first().cloned().context(
-        "usage: scred-bin [--stdout|--no-stdout] [--stderr|--no-stderr] [--network] [--debug-hooks] <program> [args...]",
+        "usage: scred-bin [OPTIONS] [--] <program> [args...]",
     )?;
     let child_args: Vec<String> = passthrough.into_iter().skip(1).collect();
 
@@ -72,15 +101,24 @@ fn run_platform() -> Result<ExitCode> {
         _ => preload.to_string_lossy().to_string(),
     };
 
-    let status = Command::new(&program)
-        .args(&child_args)
+    let mut cmd = Command::new(&program);
+    cmd.args(&child_args)
         .env("LD_PRELOAD", merged_ld_preload)
         .env("SCRED_BIN_ACTIVE", "1")
         .env("SCRED_BIN_HOOK_STDOUT", if hook_stdout { "1" } else { "0" })
         .env("SCRED_BIN_HOOK_STDERR", if hook_stderr { "1" } else { "0" })
         .env("SCRED_BIN_HOOK_NETWORK", if hook_network { "1" } else { "0" })
-        .env("SCRED_BIN_DEBUG_HOOKS", if debug_hooks { "1" } else { "0" })
-        .status()
+        .env("SCRED_BIN_DEBUG_HOOKS", if debug_hooks { "1" } else { "0" });
+
+    // Pass through optional configuration
+    if let Some(la) = lookahead {
+        cmd.env("SCRED_LOOKAHEAD", la.to_string());
+    }
+    if let Some(patterns) = redact_patterns {
+        cmd.env("SCRED_REDACT_PATTERNS", patterns);
+    }
+
+    let status = cmd.status()
         .with_context(|| format!("failed to spawn program: {program}"))?;
 
     Ok(match status.code() {

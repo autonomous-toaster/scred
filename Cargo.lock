@@ -1726,6 +1726,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "scred-bin-printf-wrapper"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "scred-config"
 version = "0.1.0"
 dependencies = [

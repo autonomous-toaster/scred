@@ -1,0 +1,12 @@
+[package]
+name = "scred-bin-printf-wrapper"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[build-dependencies]
+cc = "1.0"
+
+[dependencies]
+libc = "0.2"

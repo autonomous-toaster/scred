@@ -8,7 +8,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends pkg-config build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-RUN cargo build --release -p scred-bin -p scred-bin-preload
+RUN cargo build --release -p scred-bin -p scred-bin-preload -p scred-bin-printf-wrapper
 
 FROM debian:bookworm-slim
 WORKDIR /app
@@ -18,9 +18,22 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/scred-bin /usr/local/bin/scred-bin
-COPY --from=builder /app/target/release/libscred_bin_preload.so /usr/local/lib/libscred_bin_preload.so
+
+# Copy preload library (dylib format, named .so on Linux, .dylib on macOS)
+RUN if [ -f /app/target/release/libscred_bin_preload.so ]; then \
+    cp /app/target/release/libscred_bin_preload.so /usr/local/lib/; \
+    elif [ -f /app/target/release/libscred_bin_preload.dylib ]; then \
+    cp /app/target/release/libscred_bin_preload.dylib /usr/local/lib/libscred_bin_preload.so; \
+    fi || true
+
+# Copy printf wrapper if it exists (Linux-only build artifact)
+# On macOS, this file won't exist, which is okay
+RUN if [ -f /app/target/release/libscred_bin_printf_wrapper.so ]; then \
+    cp /app/target/release/libscred_bin_printf_wrapper.so /usr/local/lib/; \
+    fi || true
 
 ENV SCRED_BIN_PRELOAD_LIB=/usr/local/lib/libscred_bin_preload.so
+ENV SCRED_BIN_PRINTF_LIB=/usr/local/lib/libscred_bin_printf_wrapper.so
 
 ENTRYPOINT ["/usr/local/bin/scred-bin"]
 CMD ["--help"]
