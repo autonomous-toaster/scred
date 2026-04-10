@@ -1,8 +1,0 @@
-FROM rust:latest
-
-WORKDIR /build
-COPY Cargo.toml Cargo.lock ./
-COPY crates ./crates
-
-RUN cargo build --release --package scred-proxy -j 1 && \
-    cargo build --release --package scred-mitm -j 1

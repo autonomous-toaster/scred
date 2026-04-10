@@ -15,7 +15,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 
 # Build statically linked binary with musl target
-RUN cargo build -j 1 -p scred-proxy --features policy --profile docker --target aarch64-unknown-linux-musl
+RUN cargo build -j 1 -p scred-proxy --profile docker --target aarch64-unknown-linux-musl
 
 # Runtime stage - minimal scratch image
 FROM scratch

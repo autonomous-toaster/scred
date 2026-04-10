@@ -14,14 +14,21 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 
-# Build statically linked binary with musl target
-RUN cargo build -j 1 -p scred-mitm --features policy,traffic-filter --profile docker --target aarch64-unknown-linux-musl
+# Build statically linked binary with musl target (no feature flags - everything compiled)
+RUN cargo build -j 1 -p scred-mitm --profile docker --target aarch64-unknown-linux-musl
+
+# Create runtime directories
+RUN mkdir -p /app/data /tmp/scred-certs
 
 # Runtime stage - minimal scratch image
 FROM scratch
 
 # Copy CA certificates for HTTPS
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Create directories in builder and copy
+COPY --from=builder /app/data /app/data
+COPY --from=builder /tmp/scred-certs /tmp/scred-certs
 
 # Copy the static binary
 COPY --from=builder /app/target/aarch64-unknown-linux-musl/docker/scred-mitm /scred-mitm

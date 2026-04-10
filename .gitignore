@@ -1,31 +1,4 @@
-# Build artifacts - Zig
-crates/scred-pattern-detector/.zig-cache/
-crates/scred-pattern-detector/__.SYMDEF
-crates/scred-pattern-detector/*.o
-scred-zig/zig-cache/
-scred-zig/zig-out/
-scred-zig/.zig-cache/
-scred-zig/build.zig.zon.example
-scred-zig/main_final
-scred-zig/main_optimized
-scred-zig/main.o
-scred-zig/*.a
-
-
-# Build artifacts - Rust
-scred-rust/target/
-scred-rust/Cargo.lock
-scred-rust/*.rlib
-scred-rust/*.so
-scred-rust/*.dylib
-
-# Build artifacts - Go
-scred-go/scred
-scred-go/scred_new
-scred-go/*.exe
-scred-go/*.test
-scred-go/*.prof
-
+data/
 # Binaries
 *.exe
 *.dll

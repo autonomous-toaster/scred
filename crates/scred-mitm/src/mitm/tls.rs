@@ -4,6 +4,7 @@
 //! - CA certificate (generated once and persisted)
 //! - Per-connection certificates (signed by CA)
 //! - Two-level caching: memory (hot path) + disk (persistence)
+//! - Automatic expiry detection and regeneration
 //!
 //! Uses ECDSA P-256 with proper validity periods for LibreSSL compatibility.
 
@@ -14,12 +15,48 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use time::{Duration, OffsetDateTime};
+use ::pem;
+use x509_parser::parse_x509_certificate;
 
 // Certificate validity: CA lives 10 years, domain certs 1 year
 const CA_VALIDITY_YEARS: i64 = 10;
 const DOMAIN_VALIDITY_DAYS: i64 = 365;
+
+/// Check if a PEM-encoded certificate is still valid (not expired)
+/// Returns true if the certificate is valid, false if expired or unparseable
+fn is_cert_valid(cert_pem: &[u8]) -> bool {
+    // Parse PEM to extract the DER-encoded certificate
+    let pem = match ::pem::parse(cert_pem) {
+        Ok(p) => p,
+        Err(e) => {
+            warn!("Failed to parse PEM: {}", e);
+            return false;
+        }
+    };
+
+    // Parse X.509 certificate
+    let cert = match parse_x509_certificate(&pem.contents()) {
+        Ok((_, cert)) => cert,
+        Err(e) => {
+            warn!("Failed to parse X.509 certificate: {}", e);
+            return false;
+        }
+    };
+
+    // Check validity period using ASN1Time
+    let now = x509_parser::time::ASN1Time::now();
+    cert.validity().is_valid_at(now)
+}
+
+/// Extract the expiration time from a PEM-encoded certificate
+fn get_cert_expiry(cert_pem: &[u8]) -> Option<OffsetDateTime> {
+    let pem = ::pem::parse(cert_pem).ok()?;
+    let (_, cert) = parse_x509_certificate(&pem.contents()).ok()?;
+    // to_datetime returns OffsetDateTime directly
+    Some(cert.validity().not_after.to_datetime())
+}
 
 /// Represents a cached certificate with metadata
 #[derive(Clone, Debug)]
@@ -27,6 +64,7 @@ struct CachedCert {
     cert_pem: Vec<u8>,
     key_pem: Vec<u8>,
     generated_at: SystemTime,
+    expires_at: Option<OffsetDateTime>, // Parsed expiry time for quick checks
 }
 
 /// Certificate generator with CA support and caching
@@ -139,8 +177,25 @@ impl CertificateGenerator {
         {
             let cache = self.in_memory_cache.read().await;
             if let Some(cached) = cache.get(domain) {
-                debug!("Certificate cache hit for domain: {}", domain);
-                return Ok((cached.cert_pem.clone(), cached.key_pem.clone()));
+                // Check if certificate is still valid
+                if let Some(expires_at) = cached.expires_at {
+                    let now = OffsetDateTime::now_utc();
+                    if now < expires_at {
+                        debug!("Certificate cache hit for domain: {}", domain);
+                        return Ok((cached.cert_pem.clone(), cached.key_pem.clone()));
+                    } else {
+                        debug!("Cached certificate expired for domain: {} (expired at {:?})", domain, expires_at);
+                        // Don't return here - will regenerate below
+                    }
+                } else {
+                    // No expiry info parsed, validate with is_cert_valid
+                    if is_cert_valid(&cached.cert_pem) {
+                        debug!("Certificate cache hit for domain: {}", domain);
+                        return Ok((cached.cert_pem.clone(), cached.key_pem.clone()));
+                    } else {
+                        debug!("Cached certificate invalid for domain: {}", domain);
+                    }
+                }
             }
         }
 
@@ -157,10 +212,18 @@ impl CertificateGenerator {
             let cache_path = cache_dir.join(format!("{}.pem", domain_owned));
             let key_path = cache_dir.join(format!("{}.key", domain_owned));
 
-            // Check disk cache
+            // Check disk cache with expiry validation
             if cache_path.exists() && key_path.exists() {
                 if let (Ok(cert), Ok(key)) = (fs::read(&cache_path), fs::read(&key_path)) {
-                    return Ok::<_, anyhow::Error>((cert, key, true)); // true = from cache
+                    // Validate certificate before using
+                    if is_cert_valid(&cert) {
+                        return Ok::<_, anyhow::Error>((cert, key, true)); // true = from cache
+                    } else {
+                        debug!("Disk cached certificate expired for domain: {}", domain_owned);
+                        // Delete expired files to clean up
+                        let _ = fs::remove_file(&cache_path);
+                        let _ = fs::remove_file(&key_path);
+                    }
                 }
             }
 
@@ -202,6 +265,7 @@ impl CertificateGenerator {
                     cert_pem: cert_pem.clone(),
                     key_pem: key_pem.clone(),
                     generated_at: SystemTime::now(),
+                    expires_at: get_cert_expiry(&cert_pem),
                 },
             );
         }

@@ -132,7 +132,6 @@ pub async fn handle_tls_mitm(
     //    YES → Scenario 3: H2 client via proxy → transcode via H2UpstreamClient
     //    NO → Scenario 4: H2 client direct → use frame_forwarder for H2↔H2
 
-let automaton = policy.as_ref().map(|p| p.automaton().clone());
     if negotiated_protocol.is_h2() {
         // Client negotiated HTTP/2 - use h2_mitm_handler (Phase 1.2)
         info!("H2 Client detected - using h2_mitm_handler");
@@ -334,18 +333,36 @@ where
     // 4. Stream body with placeholder replacement
     let mut stats = scred_redactor::StreamingStats::default();
     if let Some(content_length) = headers.content_length {
-        // Read and replace in body
         let mut body = vec![0u8; content_length];
         client_reader.read_exact(&mut body).await?;
-        let (_, body_count) = engine
-            .create_placeholder_automaton()
-            .replace_placeholders(&mut body, domain, |_, _| true);
-        if body_count > 0 {
-            tracing::info!("[policy] Replaced {} placeholders in request body", body_count);
+
+        // Step 4a: REDACT secrets in request body FIRST
+        let body_str = String::from_utf8_lossy(&body);
+        let redacted = engine.redaction_engine().redact(&body_str);
+        if !redacted.matches.is_empty() {
+            tracing::info!(
+                "[policy] Redacted {} secret(s) in request body",
+                redacted.matches.len()
+            );
         }
-        upstream_writer.write_all(&body).await?;
-        stats.bytes_written = body.len() as u64;
+        let mut processed_body = redacted.redacted.into_bytes();
+
+        // Step 4b: REPLACE placeholders in request body (after redaction)
+        let (_, placeholder_count) = engine
+            .create_placeholder_automaton()
+            .replace_placeholders(&mut processed_body, domain, |_, _| true);
+
+        if placeholder_count > 0 {
+            tracing::info!(
+                "[policy] Replaced {} placeholder(s) in request body",
+                placeholder_count
+            );
+        }
+
+        upstream_writer.write_all(&processed_body).await?;
+        stats.bytes_written = processed_body.len() as u64;
     }
+
     upstream_writer.flush().await?;
     Ok(stats)
 }

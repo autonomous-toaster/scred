@@ -197,7 +197,7 @@ where
 
     // 4. Stream body through redactor
     let mut stats = StreamingStats::default();
-    let should_have_no_body = response_is_head_or_bodyless(response_line, &headers);
+    let should_have_no_body = response_is_head_or_bodyless(response_line);
 
     if should_have_no_body {
         debug!("[streaming] Response has no body by status/method semantics");
@@ -343,7 +343,6 @@ pub struct StreamingStats {
 
 fn response_is_head_or_bodyless(
     response_line: &str,
-    headers: &crate::http_headers::HttpHeaders,
 ) -> bool {
     let mut parts = response_line.split_whitespace();
     let _http_version = parts.next();
@@ -351,13 +350,7 @@ fn response_is_head_or_bodyless(
         .next()
         .and_then(|s| s.parse::<u16>().ok())
         .unwrap_or(0);
-
-    if (100..200).contains(&status_code) || status_code == 204 || status_code == 304 {
-        return true;
-    }
-
-    matches!(
-        headers.content_type.as_deref(),
-        Some(ct) if ct.eq_ignore_ascii_case("text/event-stream")
-    )
+    // 1xx (informational), 204 (no content), 304 (not modified) have no body
+    // Note: text/event-stream (SSE) and streaming responses DO have a body!
+    (100..200).contains(&status_code) || status_code == 204 || status_code == 304
 }

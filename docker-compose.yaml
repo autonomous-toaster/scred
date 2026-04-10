@@ -1,67 +1,93 @@
 services:
-  mitmproxy:
-    image: mitmproxy/mitmproxy:latest
-    ports:
-      - "8080:8080"
-      - "8081:8081"
-    command: [
-        "mitmweb",
-        "--listen-port",
-        "8080",
-        "--listen-host",
-        "0.0.0.0",
-        "--web-port",
-        "8081",
-        "--web-host",
-        "0.0.0.0",
-        "--set",
-        "web_password=password",
-      ]
-    environment:
-      HTTP_PROXY: $HTTP_PROXY
-      HTTPS_PROXY: $HTTPS_PROXY
-      NO_PROXY: httpbin,mitmproxy
-      SCRED_CONFIG_FILE: /app/config.yaml
-      SCRED_POLICY_SEED: dev-seed
-    volumes:
-      - ./data/mitmproxy:/home/mitmproxy/.mitmproxy
+ mitmproxy:
+  image: mitmproxy/mitmproxy:latest
+  ports:
+   - "8080:8080"
+   - "8081:8081"
+  command:
+   [
+    "mitmweb",
+    "--listen-port",
+    "8080",
+    "--listen-host",
+    "0.0.0.0",
+    "--web-port",
+    "8081",
+    "--web-host",
+    "0.0.0.0",
+    "--set",
+    "web_password=password",
+   ]
+  environment:
+   HTTP_PROXY: $HTTP_PROXY
+   HTTPS_PROXY: $HTTPS_PROXY
+   NO_PROXY: httpbin,mitmproxy
+   SCRED_CONFIG_FILE: /app/config.yaml
+   SCRED_POLICY_SEED: dev-seed
+   SCRED_CA_CERT: /app/data/ca-cert.pem
+   SCRED_CA_KEY: /app/data/ca-key.pem 
+  volumes:
+   - ./data/mitmproxy:/home/mitmproxy/.mitmproxy
+  healthcheck:
+   test: ["CMD", "curl", "-f", "http://localhost:8081"]
+   interval: 5s
+   timeout: 3s
+   retries: 10
 
-  httpbin:
-    image: kennethreitz/httpbin
-    ports:
-      - "8889:80"
+ httpbin:
+  image: kennethreitz/httpbin
+  ports:
+   - "8889:80"
 
-  scred-mitm:
-    build:
-      context: .
-      dockerfile: Dockerfile.scred-mitm
-    ports:
-      - "9999:8080"
-      - "9998:9998"
-    environment:
-      HTTP_PROXY: http://mitmproxy:8080
-      HTTPS_PROXY: http://mitmproxy:8080
-      SCRED_CONFIG_FILE: /app/config.yaml
-      SCRED_POLICY_SEED: dev-seed
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      LITELLM_API_KEY: ${LITELLM_API_KEY}
-    volumes:
-      - ./config/scred-mitm.yaml:/app/config.yaml:ro
-    depends_on: [mitmproxy]
+ scred-mitm:
+  build:
+   context: .
+   dockerfile: Dockerfile.scred-mitm
+  ports:
+   - "9999:8080"
+   - "9998:9998"
+  environment:
+   RUST_LOG: debug
+   HTTP_PROXY: http://mitmproxy:8080
+   HTTPS_PROXY: http://mitmproxy:8080
+   SCRED_CONFIG_FILE: /app/config.yaml
+   SCRED_POLICY_SEED: dev-seed
+   SCRED_CA_CERT: /app/data/ca-cert.pem
+   SCRED_CA_KEY: /app/data/ca-key.pem   
+   OPENAI_API_KEY: ${PERSO_OPENAI_API_KEY}
+  #  OPENAI_API_KEY: ${OPENAI_API_KEY}
+  #  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  #  LITELLM_API_KEY: ${LITELLM_API_KEY}
+   # Trust mitmproxy CA certificate
+   SSL_CERT_FILE: /etc/ssl/certs/mitmproxy-ca.pem
+   NODE_EXTRA_CA_CERTS: /etc/ssl/certs/mitmproxy-ca.pem
+  volumes:
+   - ./data/scred-mitm:/app/data
+   - ./config/scred-mitm.yaml:/app/config.yaml:ro
+   - ./data/mitmproxy/mitmproxy-ca-cert.pem:/etc/ssl/certs/mitmproxy-ca.pem:ro
+  depends_on: [mitmproxy]
 
-  scred-proxy:
-    build:
-      context: .
-      dockerfile: Dockerfile.scred-proxy
-    ports:
-      - "9997:9999"
-      - "9996:9998"
-    environment:
-      HTTP_PROXY: http://mitmproxy:8080
-      HTTPS_PROXY: http://mitmproxy:8080
-      SCRED_CONFIG_FILE: /app/config.yaml
-      SCRED_POLICY_SEED: dev-seed
-    volumes:
-      - ./config/scred-proxy.yaml:/app/config.yaml:ro
-    depends_on: [mitmproxy, httpbin]
+#  scred-proxy:
+#   build:
+#    context: .
+#    dockerfile: Dockerfile.scred-proxy
+#   ports:
+#    - "9997:9999"
+#    - "9996:9998"
+#   environment:
+#    RUST_LOG: debug
+#    HTTP_PROXY: http://mitmproxy:8080
+#    HTTPS_PROXY: http://mitmproxy:8080
+#    SCRED_CONFIG_FILE: /app/config.yaml
+#    SCRED_POLICY_SEED: dev-seed
+#    SCRED_CA_CERT: /app/data/ca-cert.pem
+#    SCRED_CA_KEY: /app/data/ca-key.pem
+#   #  OPENAI_API_KEY: ${OPENAI_API_KEY}
+#   #  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+#   #  LITELLM_API_KEY: ${LITELLM_API_KEY}
+#    # Trust mitmproxy CA certificate
+#    SSL_CERT_FILE: /etc/ssl/certs/mitmproxy-ca.pem
+#   volumes:
+#    - ./config/scred-proxy.yaml:/app/config.yaml:ro
+#    - ./data/mitmproxy/mitmproxy-ca-cert.pem:/etc/ssl/certs/mitmproxy-ca.pem:ro
+#   depends_on: [mitmproxy, httpbin]

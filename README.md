@@ -1,6 +1,16 @@
 # SCRED - Secret Detection and Redaction Engine
 
-Fast, safe secret detection and redaction for logs, configs, and network traffic.
+Best effort secret redaction system without regex and streaming in mind.
+
+## Features
+
+- **raw string redaction**
+- **Unified Policy System**: Per-header action control (replace, redact, detect, passthrough)
+- **Placeholder Replacement**: Never expose real secrets - use deterministic placeholders
+- **Secret Redaction**: Detect and redact 52+ secret patterns (AWS, GitHub, OpenAI, etc.)
+- **Host-Specific Rules**: Different policies for different domains
+- **Streaming Performance**: O(n) processing with bounded memory
+- **Discovery API**: Containers fetch placeholders via HTTP
 
 ## Components
 
@@ -9,6 +19,9 @@ Fast, safe secret detection and redaction for logs, configs, and network traffic
 | `scred` | CLI tool for redacting files and streams |
 | `scred-proxy` | Reverse proxy with secret detection/redaction |
 | `scred-mitm` | MITM proxy for TLS interception and filtering |
+
+
+The goal of `scred-mitm` is to avoid accidental secret leaks by an AI agent, not to fight against data exfiltraion.
 
 ## Quick Start
 
@@ -22,88 +35,149 @@ cat secrets.txt | scred
 # Generate TLS certificates for MITM
 scred-mitm --generate-certs
 
-# Run MITM proxy
+# Run MITM proxy with unified policy
+export OPENAI_API_KEY=sk-proj-xxx
+export SCRED_POLICY_SEED=my-seed
 scred-mitm
-
-# Run reverse proxy
-SCRED_PROXY_UPSTREAM_URL=https://api.openai.com scred-proxy
 ```
+
+## Unified Policy System
+
+SCRED uses a unified policy system that combines:
+
+1. **Placeholder Replacement**: Replace `{prefix}-scrd-{hex}` with real secrets
+2. **Secret Redaction**: Detect and redact secrets in HTTP traffic
+
+### Per-Header Action Control
+
+Different actions for different headers:
+
+```yaml
+policy:
+  defaults:
+    headers:
+      Authorization: replace      # Placeholder → secret
+      "X-Api-Key": replace        # Placeholder → secret
+      "X-Public-*": passthrough   # Don't touch public headers
+      "*": redact                 # Redact all other headers
+    body:
+      request: redact
+      response: redact
+```
+
+### Actions
+
+| Action | Headers | Body | Description |
+|--------|---------|------|-------------|
+| `replace` | ✅ | ❌ | Replace placeholders with real secrets |
+| `redact` | ✅ | ✅ | Replace detected secrets with `[REDACTED]` |
+| `detect` | ✅ | ✅ | Log detections without modifying |
+| `passthrough` | ✅ | ✅ | No processing |
+
+## Configuration
+
+### Minimal Configuration
+
+```yaml
+# scred-mitm.yaml
+policy:
+  enabled: true
+  seed: "${SCRED_POLICY_SEED}"
+  
+  providers:
+    - type: env
+      keys: ["*_API_KEY", "*_SECRET", "*_TOKEN"]
+  
+  discovery:
+    enabled: true
+    port: 9998
+```
+
+### Host-Specific Rules
+
+```yaml
+policy:
+  defaults:
+    headers:
+      Authorization: replace
+      "*": redact
+    body:
+      request: redact
+      response: redact
+
+hosts:
+  "*.openai.com":
+    headers:
+      Authorization: replace  # sk-scred-xxx → sk-proj-xxx
+      "*": redact
+  
+  "*.internal.company.com":
+    merge: replace
+    headers:
+      "*": passthrough  # Trust internal services
+```
+
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for full reference.
 
 ## Compilation Options
 
 ### scred-proxy
 
 ```bash
-# Default: redaction enabled
 cargo build -p scred-proxy --release
-
-# Forward-only (no detection, minimal overhead)
-cargo build -p scred-proxy --release --no-default-features
-
-# With policy (placeholder-based secret injection)
-cargo build -p scred-proxy --release --features policy
-```
 
 ### scred-mitm
 
 ```bash
-# Default: redaction + traffic filtering
 cargo build -p scred-mitm --release
-
-# No redaction (forward-only MITM)
-cargo build -p scred-mitm --release --no-default-features
-
-# With policy
-cargo build -p scred-mitm --release --features policy
-
-# Without traffic filtering
-cargo build -p scred-mitm --release --no-default-features --features redaction
 ```
 
-### Feature Summary
+## Security
 
-| Feature | scred-proxy | scred-mitm | Description |
-|---------|-------------|------------|-------------|
-| `redaction` | default | default | Secret detection and redaction |
-| `policy` | optional | optional | Placeholder-based secret injection |
-| `traffic-filter` | - | default | Domain whitelist/blacklist |
+### Host Validation
 
-## Configuration
+- CONNECT destination is authoritative for domain restrictions
+- Host header is NOT used for policy matching
+- This prevents spoofing attacks
 
-### Unified Configuration Structure
+### Audit Trail
 
-```yaml
-# scred.yaml
+All actions are logged:
 
-# Global Policy Configuration (Placeholder Replacement)
-policy:
-  enabled: true
-  seed: "${SCRED_POLICY_SEED}"  # Env var expansion
+```
+[unified] Replaced 1 placeholder(s) in header: Authorization
+[unified] Redacted 2 secret(s) in header: X-Custom
+[unified] Detected AWS_SECRET in header: X-Debug
+```
 
-  # Discovery API for containers
-  discovery:
-    enabled: true
-    port: 9998
-    path: /placeholders
+## Development
 
-  # Default providers
-  providers:
-    - type: env
-      keys: ["*_API_KEY", "*_SECRET", "*_TOKEN"]
+### Run Tests
 
-  # Which patterns get placeholders
-  patterns: ["*"]
+```bash
+# All tests
+cargo test --all
 
-  # WHERE to replace placeholders with real secrets
-  location:
-    request_body: true
-    request_headers: true
-    response_body: true
-    response_headers: true
-    keep_headers: []      # Headers to keep as placeholders
-    replace_headers: []   # Headers to force replace
+# Unified policy tests
+cargo test -p scred-config unified_policy
+cargo test -p scred-policy unified_engine
+cargo test -p scred-mitm --features policy unified_integration
+```
+
+### Build Docker Images
+
+```bash
+# Build minimal scratch images
+podman build -f Dockerfile.scred-mitm -t scred-mitm:latest .
+podman build -f Dockerfile.scred-proxy -t scred-proxy:latest .
+```
+
+## License
+
+MIT
 
 # Global Redaction Configuration
+```yaml
 redaction:
   mode: redact  # detect | redact | passthrough
 
