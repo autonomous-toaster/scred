@@ -106,6 +106,7 @@ async fn handle_connection(
     mut stream: tokio::net::TcpStream,
     server: &DiscoveryServer,
 ) -> Result<()> {
+    debug!("Discovery API: handling new connection");
     let mut buffer = [0u8; 4096];
     let n = stream.read(&mut buffer).await?;
     if n == 0 {
@@ -164,12 +165,12 @@ async fn send_text_response(
 
     for key in keys {
         if let Some(placeholder) = placeholders.get(key) {
-            body.push_str(&format!("{}={}\\n", key, placeholder.value));
+            body.push_str(&format!("{}={}\n", key, placeholder.value));
         }
     }
 
     let response = format!(
-        "HTTP/1.1 200 OK\\r\\nContent-Type: text/plain\\r\\nContent-Length: {}\\r\\n\\r\\n{}",
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
         body.len(),
         body
     );
@@ -197,7 +198,7 @@ async fn send_json_response(
     )?;
 
     let response = format!(
-        "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\n\\r\\n{}",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
         json.len(),
         json
     );
@@ -208,9 +209,9 @@ async fn send_json_response(
 }
 
 async fn send_error(stream: &mut tokio::net::TcpStream, code: u16, message: &str) -> Result<()> {
-    let body = format!("{} {}\\n", code, message);
+    let body = format!("{} {}\n", code, message);
     let response = format!(
-        "HTTP/1.1 {} {}\\r\\nContent-Type: text/plain\\r\\nContent-Length: {}\\r\\n\\r\\n{}",
+        "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
         code,
         message,
         body.len(),
