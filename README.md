@@ -1,6 +1,8 @@
 # SCRED - Secret Detection and Redaction Engine
 
-Best effort secret redaction system without regex and streaming in mind.
+Best effort secret redaction system without regex, lenght preservation, and streaming in mind.
+
+Totally vibe coded, don't use it if your life depend on it.
 
 ## Features
 
@@ -11,6 +13,122 @@ Best effort secret redaction system without regex and streaming in mind.
 - **Host-Specific Rules**: Different policies for different domains
 - **Streaming Performance**: O(n) processing with bounded memory
 - **Discovery API**: Containers fetch placeholders via HTTP
+
+
+## scred-cli
+
+Read stdin, redact, write stdout.
+
+```sh
+env | grep API | scred
+
+AZURE_OPENAI_API_KEY=ex0wxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+CONTEXT7_API_KEY=ctx7xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+EXA_API_KEY=71b3xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+LANGSMITH_API_KEY=lsv2xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+LITELLM_API_KEY=sk-Exxxxxxxxxxxxxxxxxxxxx
+MCP_OPEN_API_KEY=sk-Cxxxxxxxxxxxxxxxxxxxxx
+METABASE_ADMIN_API_KEY=mb_Dxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+METABASE_API_KEY=mb_Dxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+MISTRAL_API_KEY=YV3Sxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NVIDIA_NIM_API_KEY=nvapxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OPENAI_API_KEY=sk-fxxxxxxxxxxxxxxxxxxx
+SOME_OTHER_OPENAI_API_KEY=sk-pxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SERPER_API_KEY=b087xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TAVILY_API_KEY=tvlyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+## mitm lab
+
+```sh
+podman compose build
+podman compose up
+```
+
+
+Use `127.0.0.1:9999` as proxy for curl.
+
+Example :
+
+export OPENAI_API_KEY="sk-fake-key-for-testing"
+
+curl --cacert ./data/scred-mitm/ca-cert.pem -x 127.0.0.1:9999 https://httpbin.org/anything -H "x-something: $OPENAI_API_KEY" -H "Authorization: $OPENAI_API_KEY"
+
+
+```json
+{
+  "args": {},
+  "data": "",
+  "files": {},
+  "form": {
+    "some": "sk-fxxxxxxxxxxxxxxxxxxx" # Secret is redacted from body form data
+  },
+  "headers": {
+    "Accept": "*/*",
+    "Authorization": "sk-fxxxxxxxxxxxxxxxxxxx", # Authorization header is REDACTED (per-host override)
+    "Host": "httpbin.org",
+    "User-Agent": "curl/8.7.1",
+    "X-Amzn-Trace-Id": "Root=1-69d903ea-7ef9e2cd1528443b3fb34073",
+    "X-Something": "sk-fxxxxxxxxxxxxxxxxxxx" # All headers are redacted
+  },
+  "json": null,
+  "method": "GET",
+  "origin": "x.y.z.a",
+  "url": "https://httpbin.org/anything"
+}
+```
+
+Open `http://localhost:8081` to inspect the proper redaction in `mitmweb` (pasword: `password`)
+
+## Policy-Based Secret Injection
+
+scred-mitm expose the placeholders for known secrets that will be visible bu the agent as placeholder, and replaced on the fly while streaming the request to the upstream
+
+```sh
+# expose real key to scred-mitm
+export OPENAI_API_KEY="sk-fake-key-for-testing"
+podman compose up
+```
+
+```sh
+curl -s http://127.0.0.1:9998/placeholders
+OPENAI_API_KEY=sk-fake-scrd-7566da4420
+```
+
+```sh
+export $(curl -s http://127.0.0.1:9998/placeholders)
+
+echo $OPENAI_API_KEY
+# same length placeholder
+echo $OPENAI_API_KEY
+sk-fake-scrd-7566da4420
+
+curl --cacert ./data/scred-mitm/ca-cert.pem -x 127.0.0.1:9999 https://httpbin.org/anything -H "x-something: $OPENAI_API_KEY" -H "Authorization: $OPENAI_API_KEY"
+```
+
+```json
+{
+  "args": {},
+  "data": "",
+  "files": {},
+  "form": {},
+  "headers": {
+    "Accept": "*/*",
+    "Authorization": "sk-fake-key-for-testing",
+    "Host": "httpbin.org",
+    "User-Agent": "curl/8.7.1",
+    "X-Amzn-Trace-Id": "Root=1-69d93a99-2966910a60dcef0066bc84e0",
+    "X-Something": "sk-fxxxxxxxxxxxxxxxxxxx"
+  },
+  "json": null,
+  "method": "GET",
+  "origin": "x.y.z.a",
+  "url": "https://httpbin.org/anything"
+}
+```
+
+Open `http://localhost:8081` to inspect the proper redaction / placeholder replacements in `mitmweb` (pasword: `password`)
+
 
 ## Components
 
@@ -172,65 +290,54 @@ podman build -f Dockerfile.scred-mitm -t scred-mitm:latest .
 podman build -f Dockerfile.scred-proxy -t scred-proxy:latest .
 ```
 
-## License
-
-MIT
-
 # Global Redaction Configuration
 ```yaml
-redaction:
-  mode: redact  # detect | redact | passthrough
+policy:
+  enabled: true
+  seed: "${SCRED_POLICY_SEED}"
+  
+  # Secret providers - glob patterns match environment variables
+  providers:
+    - type: env
+      keys: ["*_API_KEY", "*_SECRET", "*_TOKEN"]
+  
+  # Discovery API - containers fetch their placeholders
+  # Endpoint: http://proxy:9998/placeholders
+  discovery:
+    enabled: true
+    port: 9998
+  
+  # Default processing rules
+  defaults:
+    headers:
+      Authorization: replace    # Replace placeholders with real secrets
+      "X-Api-Key": replace
+      "*": redact               # Redact detected secrets in other headers
+    body:
+      request: redact
+      response: redact
+    patterns:
+      redact: ["*"]
+      keep: []
 
-  patterns:
-    redact: ["*"]         # Redact all
-    keep: ["public-*"]    # Keep public patterns visible
-
-# Per-Host Policies
-policies:
-  # OpenAI: Replace in body, keep headers as placeholders
-  - hosts: ["*.openai.com"]
-    policy:
-      providers:
-        - type: env
-          keys: ["OPENAI_API_KEY"]
-      patterns: ["openai-*"]
-      location:
-        request_body: true
-        request_headers: false  # Keep Authorization header as placeholder
-        keep_headers: ["Authorization"]
-
-  # AWS: Replace everywhere
-  - hosts: ["*.amazonaws.com"]
-    policy:
-      providers:
-        - type: env
-          keys: ["AWS_*"]
-      patterns: ["aws-*"]
-    redaction:
-      patterns:
-        redact: ["*"]
-        keep: []
-
-  # Development: No redaction
-  - hosts: ["localhost", "*.local"]
-    redaction:
-      mode: passthrough
-
+# MITM Proxy Configuration
 scred-mitm:
   listen:
     port: 8080
-  traffic:
-    enabled: false
-    allowed-domains: ["*"]
+    address: "0.0.0.0"
+  
+  # CA certificate for TLS interception
   ca-cert:
-    generate: true
-    cache-dir: /tmp/scred-certs
-
-scred-proxy:
-  listen:
-    port: 9999
-  upstream:
-    url: "https://api.openai.com"
+    cert-path: ./data/ca-cert.pem
+    key-path: ./data/ca-key.pem
+  
+  # Traffic filtering (default-deny)
+  traffic:
+    mode: allow-list
+    allowed-domains:
+      - "*.openai.com"
+      - "*.anthropic.com"
+      - "*.api.nvidia.com"
 ```
 
 ### Pattern Filter Semantics
@@ -281,19 +388,6 @@ patterns:
 
 ## Secret Patterns
 
-| Pattern Name | Description |
-|--------------|-------------|
-| `aws-access-key` | AWS Access Key ID |
-| `aws-secret-key` | AWS Secret Access Key |
-| `github-token` | GitHub Personal Access Token |
-| `gitlab-token` | GitLab Personal Access Token |
-| `openai-api-key` | OpenAI API Key |
-| `stripe-api-key` | Stripe API Key |
-| `jwt-secret` | JWT Secret Key |
-| `private-key` | Private Key (PEM format) |
-| `password` | Password in config files |
-| `api-key` | Generic API Key |
-
 ```bash
 # List all patterns
 scred --list-patterns
@@ -312,20 +406,6 @@ patterns:
 | `redact` | ✓ | ✓ | Production, security |
 | `passthrough` | ✗ | ✗ | Debugging, trusted networks |
 
-## Policy-Based Secret Injection
-
-Containers receive placeholders instead of real secrets:
-
-```bash
-# 1. Set secrets in proxy environment
-export OPENAI_API_KEY=sk-proj-xxx
-
-# 2. Container fetches placeholders
-curl http://scred-policy:9998/placeholders
-# Returns: OPENAI_API_KEY=<placeholder-OPENAI_API_KEY>
-
-# 3. Proxy replaces placeholders with real values
-```
 
 ## Generate Configuration
 
@@ -398,6 +478,7 @@ cargo test --all
 cargo test -p scred-policy
 cargo test -p scred-proxy --features policy
 ```
+
 
 ## License
 

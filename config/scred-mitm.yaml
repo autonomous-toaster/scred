@@ -36,16 +36,29 @@ scred-mitm:
   listen:
     port: 8080
     address: "0.0.0.0"
-  
+     
   # CA certificate for TLS interception
   ca-cert:
     cert-path: ./data/ca-cert.pem
     key-path: ./data/ca-key.pem
-  
+     
   # Traffic filtering (default-deny)
   traffic:
     mode: allow-list
     allowed-domains:
       - "*.openai.com"
       - "*.anthropic.com"
-      - "*.api.nvidia.com"
+      - "*.litelm.com"
+      - "httpbin.org" # uncomment for testing with httpbin
+      # Allow all by default - restrict in production!
+
+  # Per-host policy overrides (optional)
+  # Uncomment to customize behavior per domain:
+  # hosts:
+  #   "api.openai.com":
+  #     headers:
+  #       Authorization: replace
+  #       "*": redact
+    "httpbin.org":
+      headers:
+        "*": redact

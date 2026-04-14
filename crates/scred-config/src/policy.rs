@@ -437,7 +437,15 @@ impl HostPolicy {
                 let headers = if self.headers.rules.is_empty() {
                     defaults.headers.clone()
                 } else {
-                    defaults.headers.merge(&self.headers)
+                    // If per-host has wildcard, it should override defaults completely
+                    // Otherwise, merge per-host rules into defaults
+                    if self.headers.rules.contains_key("*") {
+                        // Per-host has wildcard: use per-host rules only
+                        self.headers.clone()
+                    } else {
+                        // No wildcard in per-host: merge with defaults
+                        defaults.headers.merge(&self.headers)
+                    }
                 };
                 
                 HostPolicy {
@@ -875,5 +883,56 @@ hosts:
         assert_eq!(rules.resolve("authorization"), HeaderAction::Replace);
         assert_eq!(rules.resolve("AUTHORIZATION"), HeaderAction::Replace);
         assert_eq!(rules.resolve("Authorization"), HeaderAction::Replace);
+    }
+
+    #[test]
+    fn test_per_host_wildcard_overrides_defaults() {
+        // BUG FIX: Per-host wildcard should completely override defaults
+        let defaults = HostPolicy::new()
+            .with_header("Authorization", HeaderAction::Replace)
+            .with_header("X-Api-Key", HeaderAction::Replace)
+            .with_header("*", HeaderAction::Redact);
+
+        let mut per_host_headers = HeaderRules::new();
+        per_host_headers.add("*", HeaderAction::Redact);
+        
+        let per_host = HostPolicy {
+            merge: MergeStrategy::Merge,
+            headers: per_host_headers,
+            body: BodyRules::default(),
+            patterns: PatternFilter::default(),
+        };
+
+        let resolved = per_host.resolve(&defaults);
+
+        // All headers should be redacted, not replaced
+        assert_eq!(resolved.headers.resolve("Authorization"), HeaderAction::Redact);
+        assert_eq!(resolved.headers.resolve("X-Api-Key"), HeaderAction::Redact);
+        assert_eq!(resolved.headers.resolve("X-Something"), HeaderAction::Redact);
+    }
+
+    #[test]
+    fn test_per_host_specific_rules_merge_with_defaults() {
+        // Per-host with specific rules (no wildcard) should merge with defaults
+        let defaults = HostPolicy::new()
+            .with_header("Authorization", HeaderAction::Replace)
+            .with_header("*", HeaderAction::Redact);
+
+        let mut per_host_headers = HeaderRules::new();
+        per_host_headers.add("X-Custom", HeaderAction::Passthrough);
+        
+        let per_host = HostPolicy {
+            merge: MergeStrategy::Merge,
+            headers: per_host_headers,
+            body: BodyRules::default(),
+            patterns: PatternFilter::default(),
+        };
+
+        let resolved = per_host.resolve(&defaults);
+
+        // Should have both default and per-host rules
+        assert_eq!(resolved.headers.resolve("Authorization"), HeaderAction::Replace);
+        assert_eq!(resolved.headers.resolve("X-Custom"), HeaderAction::Passthrough);
+        assert_eq!(resolved.headers.resolve("Content-Type"), HeaderAction::Redact);
     }
 }

@@ -54,8 +54,7 @@ services:
    SCRED_POLICY_SEED: dev-seed
    SCRED_CA_CERT: /app/data/ca-cert.pem
    SCRED_CA_KEY: /app/data/ca-key.pem   
-   OPENAI_API_KEY: ${PERSO_OPENAI_API_KEY}
-  #  OPENAI_API_KEY: ${OPENAI_API_KEY}
+   OPENAI_API_KEY: ${OPENAI_API_KEY}
   #  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
   #  LITELLM_API_KEY: ${LITELLM_API_KEY}
    # Trust mitmproxy CA certificate

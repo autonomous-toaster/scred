@@ -124,21 +124,32 @@ scred-mitm:
   listen:
     port: 8080
     address: "0.0.0.0"
-  
+     
   # CA certificate for TLS interception
   ca-cert:
     cert-path: ./data/ca-cert.pem
     key-path: ./data/ca-key.pem
-  
+     
   # Traffic filtering (default-deny)
   traffic:
     mode: allow-list
     allowed-domains:
-      - "*.openai.com"
-      - "*.anthropic.com"
-"#;
-    println!("{}", config.trim());
-}
+      - "*"
+      # Allow all by default - restrict in production!
+
+  # Per-host policy overrides (optional)
+  # Uncomment to customize behavior per domain:
+  # hosts:
+  #   "api.openai.com":
+  #     headers:
+  #       Authorization: replace
+  #       "*": redact
+  #   "*.anthropic.com":
+  #     headers:
+  #       "X-Api-Key": replace
+   "#;
+       println!("{}", config.trim());
+   }
 
 fn generate_certificates() -> anyhow::Result<()> {
     use scred_mitm::mitm::tls::CertificateGenerator;
@@ -176,12 +187,12 @@ fn generate_certificates() -> anyhow::Result<()> {
 }
 
 fn load_mitm_config_from_file() -> anyhow::Result<Option<Config>> {
-    let file_config = match ConfigLoader::load() {
+    let mut file_config = match ConfigLoader::load() {
         Ok(fc) => fc,
         Err(_) => return Ok(None),
     };
 
-    ConfigLoader::validate(&file_config)?;
+    ConfigLoader::validate(&mut file_config)?;
 
     if let Some(mitm_cfg) = file_config.scred_mitm {
         let mut config = Config::default();

@@ -423,7 +423,17 @@ impl ConfigLoader {
     }
 
     /// Validate configuration
-    pub fn validate(config: &FileConfig) -> Result<()> {
+    pub fn validate(config: &mut FileConfig) -> Result<()> {
+        // Validate and normalize traffic mode
+        if let Some(mitm_cfg) = &mut config.scred_mitm {
+            // If mode is "allow-list", enable traffic filtering
+            if let Some(mode) = &mitm_cfg.traffic.mode {
+                if mode == "allow-list" {
+                    mitm_cfg.traffic.enabled = true;
+                }
+            }
+        }
+        
         // Validate proxy config
         if let Some(proxy_cfg) = &config.scred_proxy {
             if proxy_cfg.upstream.url.is_none() {
@@ -492,8 +502,8 @@ impl ConfigLoader {
             return Err(anyhow!("Config file not found: {}", path.display()));
         }
 
-        let config = Self::load_from_file(&path)?;
-        Self::validate(&config)?;
+        let mut config = Self::load_from_file(&path)?;
+        Self::validate(&mut config)?;
 
         println!("✓ Config file is valid: {}", path.display());
 
@@ -551,7 +561,12 @@ impl Default for FileConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct TrafficPolicyConfig {
+    /// Traffic filtering mode: "allow-list" enables filtering, "disabled" disables it
+    /// Setting mode to "allow-list" automatically enables filtering
+    #[serde(default)]
+    pub mode: Option<String>,
     /// Enable traffic filtering (default: false)
+    /// Automatically set to true when mode is "allow-list"
     #[serde(default)]
     pub enabled: bool,
 
@@ -575,6 +590,7 @@ fn default_block_message() -> String {
 impl Default for TrafficPolicyConfig {
     fn default() -> Self {
         Self {
+            mode: None,
             enabled: false,
             allowed_domains: default_allowed_domains(),
             block_message: default_block_message(),

@@ -133,8 +133,8 @@ struct ProxyConfig {
 
 impl ProxyConfig {
     fn from_config_file() -> Result<Self> {
-        let file_config = ConfigLoader::load()?;
-        ConfigLoader::validate(&file_config)?;
+        let mut file_config = ConfigLoader::load()?;
+        ConfigLoader::validate(&mut file_config)?;
         
         let proxy_cfg = file_config.scred_proxy.ok_or_else(|| {
             anyhow!(
@@ -225,7 +225,7 @@ async fn main() -> Result<()> {
     logging::init_from_env();
 
     // Load config file for policy initialization
-    let file_config = ConfigLoader::load().ok();
+    let mut file_config = ConfigLoader::load().ok();
 
     // Initialize policy engine (starts discovery server if enabled)
     let policy: Option<Arc<PolicyEngine>> = if let Some(ref fc) = file_config {
