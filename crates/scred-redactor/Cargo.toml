@@ -11,6 +11,8 @@ description = "Core secret pattern redaction engine (244+ patterns)"
 serde = { workspace = true }
 lazy_static = "1.4"
 scred-detector = { path = "../scred-detector" }
+tokio = { workspace = true, features = ["io-util"] }
+tracing = { workspace = true }
 
 [dependencies.aho-corasick]
 version = "1.1"

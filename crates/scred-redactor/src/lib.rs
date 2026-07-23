@@ -44,7 +44,10 @@ pub use pattern_selector::{CompositePatternSelector, PatternFilter, PatternSelec
 // NOTE: Pattern info function removed - now using Rust SIMD, not Zig FFI
 // pub fn get_all_patterns() -> Vec<scred_detector::PatternInfo> { ... }
 
-pub use streaming::{FrameRingRedactor, StreamingConfig, StreamingRedactor, StreamingStats};
+pub use streaming::{
+    AsyncRedactionReader, DetectionStream, FrameRingRedactor, Match, RedactionStream,
+    StreamingConfig, StreamingRedactor, StreamingStats,
+};
 
 pub use buffer_pool::{BufferPool, BufferPoolStats};
 

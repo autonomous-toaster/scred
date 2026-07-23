@@ -3,7 +3,7 @@
 /// Streams HTTP requests from client → redactor → upstream server
 /// without buffering the entire request body.
 use anyhow::{anyhow, Result};
-use scred_redactor::StreamingRedactor;
+use scred_redactor::{RedactionStream, StreamingRedactor};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::debug;
@@ -166,9 +166,10 @@ where
         content_length
     );
 
+    let engine = redactor.engine().clone();
+    let mut stream = RedactionStream::new(engine);
     let mut stats = StreamingStats::default();
     let mut remaining = content_length;
-    let mut lookahead = Vec::new();
 
     while remaining > 0 {
         // Read chunk
@@ -176,21 +177,26 @@ where
         let mut chunk = vec![0u8; chunk_size];
         client_reader.read_exact(&mut chunk).await?;
 
-        // Redact chunk (streaming redaction uses all patterns - selector filtering not supported)
-        let is_eof = remaining == chunk_size;
-        let (output, bytes_written, patterns) =
-            redactor.process_chunk(&chunk, &mut lookahead, is_eof);
+        // Redact chunk via RedactionStream (lookahead managed internally)
+        let output = stream.feed(&chunk);
 
-        // Write redacted chunk (no selector filtering - streaming preserves all redactions)
-        upstream_writer.write_all(output.as_bytes()).await?;
+        // Write redacted chunk
+        upstream_writer.write_all(&output).await?;
 
         stats.bytes_read += chunk.len() as u64;
-        stats.bytes_written += bytes_written;
-        stats.patterns_found += patterns;
+        stats.bytes_written += output.len() as u64;
         remaining -= chunk_size;
     }
 
+    // Finalize to flush lookahead
+    let (final_output, final_stats) = stream.finalize();
+    if !final_output.is_empty() {
+        upstream_writer.write_all(&final_output).await?;
+    }
+    stats.bytes_written += final_output.len() as u64;
+    stats.patterns_found = final_stats.patterns_found;
     stats.chunks_processed = (content_length / (64 * 1024)) as u64 + 1;
+
     Ok(stats)
 }
 

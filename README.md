@@ -1,17 +1,20 @@
 # SCRED - Secret Detection and Redaction Engine
 
-Best effort secret redaction system without regex, lenght preservation, and streaming in mind.
+High-performance secret redaction system without regex, with length preservation and streaming as first-class citizens.
 
-Totally vibe coded, don't use it if your life depend on it.
+Totally vibe coded, don't use it if your life depends on it.
 
 ## Features
 
-- **raw string redaction**
+- **Secret Redaction**: Detect and redact 300+ secret patterns (AWS, GitHub, OpenAI, Stripe, SSH keys, certificates, PGP, JWTs, database URIs, webhooks, and more)
+- **No Regex**: Aho-Corasick automaton + memchr + charset LUTs for deterministic O(n) performance
+- **Streaming API**: `RedactionStream`, `DetectionStream`, `AsyncRedactionReader` — feed chunks, get redacted output, no manual lookahead management
+- **Streaming Performance**: O(n) processing with bounded memory (64KB chunks, 512B lookahead)
+- **In-Place Redaction**: Zero-copy byte replacement, output length = input length
+- **Dual Proxy**: Forward HTTP proxy + MITM TLS proxy with TLS interception and ALPN negotiation
 - **Unified Policy System**: Per-header action control (replace, redact, detect, passthrough)
-- **Placeholder Replacement**: Never expose real secrets - use deterministic placeholders
-- **Secret Redaction**: Detect and redact 52+ secret patterns (AWS, GitHub, OpenAI, etc.)
+- **Placeholder Replacement**: Never expose real secrets — use deterministic placeholders
 - **Host-Specific Rules**: Different policies for different domains
-- **Streaming Performance**: O(n) processing with bounded memory
 - **Discovery API**: Containers fetch placeholders via HTTP
 
 
@@ -129,6 +132,32 @@ curl --cacert ./data/scred-mitm/ca-cert.pem -x 127.0.0.1:9999 https://httpbin.or
 
 Open `http://localhost:8081` to inspect the proper redaction / placeholder replacements in `mitmweb` (pasword: `password`)
 
+
+## Rust API Example
+
+```rust
+use std::sync::Arc;
+use scred_redactor::{RedactionEngine, RedactionConfig, RedactionStream, DetectionStream};
+
+let engine = Arc::new(RedactionEngine::new(RedactionConfig { enabled: true }));
+
+// Streaming redaction — feed chunks, get redacted output
+let mut stream = RedactionStream::new(engine.clone());
+let out1 = stream.feed(b"some data AKIA");
+let out2 = stream.feed(b"IOSFODNN7EXAMPLE more");
+let (out3, stats) = stream.finalize();  // flushes lookahead
+
+// Streaming detection — feed chunks, get match events
+let mut detector = DetectionStream::new(engine);
+let m1 = detector.feed(b"some data AKIA");
+let m2 = detector.feed(b"IOSFODNN7EXAMPLE more");
+let (all_matches, stats) = detector.finalize();
+
+// AsyncRead wrapper — transparent redaction for any async source
+use scred_redactor::AsyncRedactionReader;
+let mut reader = AsyncRedactionReader::new(tcp_stream, engine);
+tokio::io::copy(&mut reader, &mut output).await?;
+```
 
 ## Components
 

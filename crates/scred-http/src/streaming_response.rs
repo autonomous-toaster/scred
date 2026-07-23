@@ -4,7 +4,7 @@
 /// without buffering the entire response body.
 /// Now with support for chunked transfer-encoding.
 use anyhow::Result;
-use scred_redactor::StreamingRedactor;
+use scred_redactor::{RedactionStream, StreamingRedactor};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::debug;
@@ -268,28 +268,32 @@ where
         content_length
     );
 
+    let engine = redactor.engine().clone();
+    let mut stream = RedactionStream::new(engine);
     let mut stats = StreamingStats::default();
     let mut remaining = content_length;
-    let mut lookahead = Vec::new();
 
     while remaining > 0 {
         let chunk_size = std::cmp::min(remaining, 64 * 1024);
         let mut chunk = vec![0u8; chunk_size];
         upstream_reader.read_exact(&mut chunk).await?;
 
-        let is_eof = remaining == chunk_size;
-        let (output, _bytes_written, patterns) =
-            redactor.process_chunk(&chunk, &mut lookahead, is_eof);
-
-        client_writer.write_all(output.as_bytes()).await?;
+        let output = stream.feed(&chunk);
+        client_writer.write_all(&output).await?;
 
         stats.bytes_read += chunk.len() as u64;
         stats.bytes_written += output.len() as u64;
-        stats.patterns_found += patterns;
         remaining -= chunk_size;
     }
 
+    let (final_output, final_stats) = stream.finalize();
+    if !final_output.is_empty() {
+        client_writer.write_all(&final_output).await?;
+    }
+    stats.bytes_written += final_output.len() as u64;
+    stats.patterns_found = final_stats.patterns_found;
     stats.chunks_processed = (content_length / (64 * 1024)) as u64 + 1;
+
     Ok(stats)
 }
 
@@ -308,6 +312,7 @@ where
     debug!("[streaming] Streaming chunked response body with connection-close framing");
 
     let mut parser = ChunkedParser::new();
+    parser.init_stream(redactor.engine().clone());
     let mut total_stats = StreamingStats::default();
 
     loop {

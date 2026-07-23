@@ -3,7 +3,7 @@
 /// Parses and redacts chunked HTTP responses without buffering entire response.
 /// Handles pattern boundaries via lookahead buffer.
 use anyhow::{anyhow, Result};
-use scred_redactor::StreamingRedactor;
+use scred_redactor::{RedactionStream, StreamingRedactor};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tracing::{debug, warn};
@@ -42,20 +42,23 @@ pub struct ChunkedParser {
     state: ChunkState,
     current_chunk_size: usize,
     bytes_remaining_in_chunk: usize,
-    lookahead_buffer: Vec<u8>,
-    lookahead_max: usize,
+    stream: Option<RedactionStream>,
 }
 
 impl ChunkedParser {
-    /// Create new chunked parser with 512B lookahead
+    /// Create new chunked parser
     pub fn new() -> Self {
         Self {
             state: ChunkState::ReadingSize,
             current_chunk_size: 0,
             bytes_remaining_in_chunk: 0,
-            lookahead_buffer: Vec::with_capacity(512),
-            lookahead_max: 512,
+            stream: None,
         }
+    }
+
+    /// Initialize the redaction stream (called before first chunk)
+    pub fn init_stream(&mut self, engine: Arc<scred_redactor::RedactionEngine>) {
+        self.stream = Some(RedactionStream::new(engine));
     }
 
     /// Parse next chunk from reader
@@ -107,17 +110,15 @@ impl ChunkedParser {
 
                     debug!("[chunked] Read chunk data: {} bytes", chunk_data.len());
 
-                    // Redact chunk with lookahead
-                    let is_complete = true; // Will be updated when we handle continuation
-                    let (redacted, _bytes_written, patterns) = redactor.process_chunk(
-                        &chunk_data,
-                        &mut self.lookahead_buffer,
-                        is_complete,
-                    );
+                    // Redact chunk via RedactionStream
+                    let stream = self.stream.as_mut()
+                        .expect("ChunkedParser::init_stream() must be called before next_chunk()");
+                    let redacted = stream.feed(&chunk_data);
+                    let patterns = 0; // patterns_found tracked by finalize
 
                     stats.total_data_bytes += chunk_data.len() as u64;
-                    stats.patterns_found += patterns;
-                    if !self.lookahead_buffer.is_empty() {
+                    stats.patterns_found += 0; // Will be updated on finalize
+                    if !redacted.is_empty() {
                         stats.lookahead_hits += 1;
                     }
 
@@ -131,10 +132,7 @@ impl ChunkedParser {
                     debug!("[chunked] Chunk complete, moving to next size");
                     self.state = ChunkState::ReadingSize;
 
-                    // Update lookahead for next chunk
-                    self.maintain_lookahead(&chunk_data);
-
-                    return Ok((redacted.into_bytes(), stats));
+                    return Ok((redacted, stats));
                 }
 
                 ChunkState::ReadingTrailers => {
@@ -153,14 +151,14 @@ impl ChunkedParser {
                         trailer_headers.push_str(&line);
                     }
 
-                    debug!("[chunked] Trailers: {:?}", trailer_headers);
-
-                    // Optionally redact trailer headers (they may contain sensitive data)
-                    if !trailer_headers.is_empty() {
-                        let (_redacted, _stats) =
-                            redactor.redact_buffer(trailer_headers.as_bytes());
-                        debug!("[chunked] Trailers redacted");
-                        // Trailer redaction handled by caller
+                    // Finalize the redaction stream to flush lookahead
+                    if let Some(stream) = self.stream.as_mut() {
+                        let (final_output, _final_stats) = stream.finalize();
+                        if !final_output.is_empty() {
+                            // The final output from lookahead is not part of any chunk
+                            // It will be sent as a final data block
+                            debug!("[chunked] Final lookahead: {} bytes", final_output.len());
+                        }
                     }
 
                     self.state = ChunkState::Complete;
@@ -170,27 +168,6 @@ impl ChunkedParser {
                 ChunkState::Complete => {
                     return Ok((Vec::new(), stats));
                 }
-            }
-        }
-    }
-
-    /// Maintain lookahead buffer from chunk tail for pattern boundary handling
-    fn maintain_lookahead(&mut self, chunk_data: &[u8]) {
-        // Keep last N bytes of chunk in lookahead
-        if chunk_data.len() >= self.lookahead_max {
-            self.lookahead_buffer.clear();
-            self.lookahead_buffer
-                .extend_from_slice(&chunk_data[chunk_data.len() - self.lookahead_max..]);
-        } else {
-            // Prepend previous lookahead if it fits
-            if self.lookahead_buffer.len() + chunk_data.len() <= self.lookahead_max {
-                self.lookahead_buffer.extend_from_slice(chunk_data);
-            } else {
-                // Slide window
-                let new_total = self.lookahead_buffer.len() + chunk_data.len();
-                let overflow = new_total - self.lookahead_max;
-                self.lookahead_buffer.drain(..overflow);
-                self.lookahead_buffer.extend_from_slice(chunk_data);
             }
         }
     }

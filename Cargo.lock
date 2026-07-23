@@ -2146,6 +2146,8 @@ dependencies = [
  "lazy_static",
  "scred-detector",
  "serde",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

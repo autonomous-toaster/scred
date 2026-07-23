@@ -68,3 +68,7 @@ Cargo.lock
 *.pdb
 
 # End of https://www.toptal.com/developers/gitignore/api/rust
+
+# veriplan init — SPIN model checker artifacts
+*.trail
+pan.*
