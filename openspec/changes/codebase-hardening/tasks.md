@@ -1,20 +1,20 @@
 ## 1. CI Quality Gates (P0)
 
-- [ ] 1.1 Fix Justfile check-file-sizes path (sift/src → crates/)
-- [ ] 1.2 Add bench recipe to Justfile
-- [ ] 1.3 Add --all-features to check recipe
-- [ ] 1.4 Add workspace lints to Cargo.toml
-- [ ] 1.5 Fix .expect()/.unwrap() in production code
-- [ ] 1.6 Remove REGEX_PATTERN_COUNT dead code, compute counts from arrays
-- [ ] 1.7 Consolidate pattern selector parsing — CLI uses library function
-- [ ] 1.8 Add fmt check to Justfile
+- [x] 1.1 Fix Justfile check-file-sizes path (sift/src → crates/)
+- [x] 1.2 Add bench recipe to Justfile
+- [x] 1.3 Add --all-features to check recipe
+- [x] 1.4 Add workspace lints to Cargo.toml
+- [x] 1.5 Fix .expect()/.unwrap() in production code
+- [x] 1.6 Remove REGEX_PATTERN_COUNT dead code, compute counts from arrays
+- [x] 1.7 Consolidate pattern selector parsing — CLI uses library function
+- [x] 1.8 Add fmt check to Justfile
 
 ## 2. Benchmark Suite
 
 - [ ] 2.1 Rewrite scaling benchmark — data outside b.iter(), cover all 5 tiers
 - [ ] 2.2 Rewrite realistic benchmark — data outside b.iter(), cover all pattern types
 - [ ] 2.3 Add RedactionStream benchmark
-- [ ] 2.4 Remove broken pattern_frequency and empty simd_benchmark
+- [x] 2.4 Remove broken pattern_frequency and empty simd_benchmark
 - [ ] 2.5 Add CI benchmark gate to Justfile
 - [ ] 2.6 Add benchmark regression threshold (5%)
 

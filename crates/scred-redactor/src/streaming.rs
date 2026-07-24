@@ -1,5 +1,4 @@
 use crate::RedactionEngine;
-use std::mem::ManuallyDrop;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -88,11 +87,7 @@ impl RedactionStream {
 
         // Calculate output boundaries
         let redacted_len = redacted.len();
-        let output_end = if redacted_len > LOOKAHEAD_SIZE {
-            redacted_len - LOOKAHEAD_SIZE
-        } else {
-            0
-        };
+        let output_end = redacted_len.saturating_sub(LOOKAHEAD_SIZE);
 
         // Prepare output
         let output = if output_end > 0 {
@@ -315,7 +310,7 @@ const MAX_ITERATIONS_PER_POLL: u32 = 8;
 /// tokio::io::copy(&mut reader, &mut output).await?;
 /// ```
 pub struct AsyncRedactionReader<R> {
-    inner: ManuallyDrop<Option<R>>,
+    inner: Option<R>,
     stream: RedactionStream,
     read_buf: Vec<u8>,
     output_buf: Vec<u8>,
@@ -326,7 +321,7 @@ impl<R> AsyncRedactionReader<R> {
     /// Create a new AsyncRedactionReader wrapping an AsyncRead source.
     pub fn new(inner: R, engine: Arc<RedactionEngine>) -> Self {
         Self {
-            inner: ManuallyDrop::new(Some(inner)),
+            inner: Some(inner),
             stream: RedactionStream::new(engine),
             read_buf: vec![0u8; CHUNK_SIZE],
             output_buf: Vec::new(),
@@ -336,18 +331,26 @@ impl<R> AsyncRedactionReader<R> {
 
     /// Get a reference to the inner reader.
     pub fn inner(&self) -> &R {
-        self.inner.as_ref().unwrap()
+        match self.inner.as_ref() {
+            Some(r) => r,
+            None => unreachable!("AsyncRedactionReader inner should always be Some"),
+        }
     }
 
     /// Get a mutable reference to the inner reader.
     pub fn inner_mut(&mut self) -> &mut R {
-        self.inner.as_mut().unwrap()
+        match self.inner.as_mut() {
+            Some(r) => r,
+            None => unreachable!("AsyncRedactionReader inner should always be Some"),
+        }
     }
 
     /// Consume the reader and return the inner reader and any unread redacted data.
     pub fn into_inner(mut self) -> (R, Vec<u8>) {
-        // Safety: we take ownership before Drop runs
-        let inner = unsafe { ManuallyDrop::take(&mut self.inner) }.unwrap();
+        let inner = match self.inner.take() {
+            Some(r) => r,
+            None => unreachable!("AsyncRedactionReader inner should always be Some"),
+        };
         // Drain remaining output buffer
         let mut remaining = Vec::new();
         if self.output_pos < self.output_buf.len() {
@@ -397,7 +400,11 @@ impl<R: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for AsyncRedactionRea
             }
 
             let mut inner_buf = tokio::io::ReadBuf::new(&mut this.read_buf);
-            match Pin::new(this.inner.as_mut().unwrap()).poll_read(cx, &mut inner_buf) {
+            let inner_pin = match this.inner.as_mut() {
+                Some(r) => r,
+                None => unreachable!("AsyncRedactionReader inner should always be Some"),
+            };
+            match Pin::new(inner_pin).poll_read(cx, &mut inner_buf) {
                 Poll::Ready(Ok(())) => {
                     let n = inner_buf.filled().len();
                     if n == 0 {
@@ -441,20 +448,6 @@ impl<R> AsyncRedactionReader<R> {
             this.output_pos = to_copy;
         }
         Poll::Ready(Ok(()))
-    }
-}
-
-impl<R> Drop for AsyncRedactionReader<R> {
-    fn drop(&mut self) {
-        if !self.stream.is_finalized() {
-            let pending = (self.output_buf.len() - self.output_pos) + self.stream.pending_lookahead();
-            if pending > 0 {
-                warn!(
-                    "AsyncRedactionReader dropped without consuming all data — {} bytes lost",
-                    pending
-                );
-            }
-        }
     }
 }
 
@@ -916,6 +909,7 @@ impl FrameRingRedactor {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::{RedactionConfig, RedactionEngine};
 

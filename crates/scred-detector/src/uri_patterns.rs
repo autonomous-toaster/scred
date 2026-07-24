@@ -144,7 +144,12 @@ static WEBHOOK_AC: OnceLock<AhoCorasick> = OnceLock::new();
 fn get_database_ac() -> &'static AhoCorasick {
     DATABASE_AC.get_or_init(|| {
         let schemes: Vec<&str> = DATABASE_URI_PATTERNS.iter().map(|p| p.scheme).collect();
-        AhoCorasick::new(schemes).unwrap()
+        match AhoCorasick::new(schemes) {
+            Ok(ac) => ac,
+            Err(e) => {
+                unreachable!("AhoCorasick construction failed: {}", e)
+            }
+        }
     })
 }
 
@@ -152,7 +157,12 @@ fn get_database_ac() -> &'static AhoCorasick {
 fn get_webhook_ac() -> &'static AhoCorasick {
     WEBHOOK_AC.get_or_init(|| {
         let schemes: Vec<&str> = WEBHOOK_URI_PATTERNS.iter().map(|p| p.scheme).collect();
-        AhoCorasick::new(schemes).unwrap()
+        match AhoCorasick::new(schemes) {
+            Ok(ac) => ac,
+            Err(e) => {
+                unreachable!("AhoCorasick construction failed: {}", e)
+            }
+        }
     })
 }
 

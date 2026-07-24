@@ -23,3 +23,6 @@ tempfile = "3.0"
 [lib]
 name = "scred_config"
 path = "src/lib.rs"
+
+[lints]
+workspace = true

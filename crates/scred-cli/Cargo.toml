@@ -17,3 +17,6 @@ libc = "0.2"
 [[bin]]
 name = "scred"
 path = "src/main.rs"
+
+[lints]
+workspace = true

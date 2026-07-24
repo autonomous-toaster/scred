@@ -74,7 +74,10 @@ impl PlaceholderAutomaton {
     /// Used when policy is disabled or no secrets are loaded.
     pub fn empty() -> Self {
         Self {
-            ac: AhoCorasick::new(&[""]).unwrap(),
+            ac: match AhoCorasick::new(&[""]) {
+                Ok(ac) => ac,
+                Err(e) => unreachable!("AhoCorasick with empty pattern failed: {}", e),
+            },
             replacements: Vec::new(),
             placeholder_values: Vec::new(),
         }
@@ -486,6 +489,7 @@ impl ReplacementTracker {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     fn test_generator() -> PlaceholderGenerator {

@@ -216,7 +216,13 @@ fn get_simple_prefix_automaton() -> &'static AhoCorasick {
         // Build automaton from all SIMPLE_PREFIX_PATTERNS prefixes
         let prefixes: Vec<&str> = SIMPLE_PREFIX_PATTERNS.iter().map(|p| p.prefix).collect();
 
-        AhoCorasick::new(&prefixes).expect("Valid Aho-Corasick automaton")
+        match AhoCorasick::new(&prefixes) {
+            Ok(ac) => ac,
+            Err(e) => {
+                // Unreachable: our patterns are compile-time constants
+                unreachable!("AhoCorasick construction failed: {}", e)
+            }
+        }
     })
 }
 
@@ -318,7 +324,13 @@ fn get_validation_automaton() -> &'static AhoCorasick {
             .map(|p| p.prefix)
             .collect();
 
-        AhoCorasick::new(&prefixes).expect("Valid Aho-Corasick automaton")
+        match AhoCorasick::new(&prefixes) {
+            Ok(ac) => ac,
+            Err(e) => {
+                // Unreachable: our patterns are compile-time constants
+                unreachable!("AhoCorasick construction failed: {}", e)
+            }
+        }
     })
 }
 

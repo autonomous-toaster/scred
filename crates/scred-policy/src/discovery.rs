@@ -54,13 +54,13 @@ impl DiscoveryServer {
 
     /// Update placeholders
     pub fn update_placeholders(&self, placeholders: HashMap<String, Placeholder>) {
-        let mut current = self.placeholders.lock().unwrap();
+        let mut current = self.placeholders.lock().unwrap_or_else(|e| e.into_inner());
         *current = placeholders;
     }
 
     /// Get a clone of current placeholders
     fn get_placeholders(&self) -> HashMap<String, Placeholder> {
-        self.placeholders.lock().unwrap().clone()
+        self.placeholders.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Run the discovery server
@@ -97,7 +97,7 @@ pub struct DiscoveryUpdater {
 impl DiscoveryUpdater {
     /// Update all placeholders
     pub fn update(&self, placeholders: HashMap<String, Placeholder>) {
-        let mut current = self.placeholders.lock().unwrap();
+        let mut current = self.placeholders.lock().unwrap_or_else(|e| e.into_inner());
         *current = placeholders;
     }
 }
@@ -249,7 +249,7 @@ mod tests {
         updater.update(placeholders);
 
         // Verify placeholders are stored
-        let retrieved = server.placeholders.lock().unwrap();
+        let retrieved = server.placeholders.lock().unwrap_or_else(|e| e.into_inner());
         assert!(retrieved.contains_key("TEST_KEY"));
     }
 }

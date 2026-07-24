@@ -91,7 +91,7 @@ async fn handler(
         "client": peer_addr.to_string(),
         "timestamp": std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs_f64(),
         // Pad response to desired size
         "data": "x".repeat(state.response_size.saturating_sub(200))

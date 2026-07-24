@@ -33,7 +33,7 @@ impl DnsCache {
 
     /// Try to get cached addresses for a hostname
     pub fn get(&self, hostname: &str) -> Option<Vec<SocketAddr>> {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
 
         if let Some(entry) = cache.get(hostname) {
             if Instant::now() < entry.expires_at {
@@ -50,7 +50,7 @@ impl DnsCache {
     /// Store addresses in cache
     pub fn set(&self, hostname: String, addresses: Vec<SocketAddr>) {
         if !addresses.is_empty() {
-            let mut cache = self.cache.lock().unwrap();
+            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
             cache.insert(
                 hostname,
                 CachedDnsEntry {
@@ -63,17 +63,18 @@ impl DnsCache {
 
     /// Clear all cache entries
     pub fn clear(&self) {
-        self.cache.lock().unwrap().clear();
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Get cache size
     pub fn size(&self) -> usize {
-        self.cache.lock().unwrap().len()
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

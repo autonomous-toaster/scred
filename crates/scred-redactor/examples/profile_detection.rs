@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 /// Comprehensive detection profiling to identify bottleneck
 use scred_detector::{detect_all, detect_jwt, detect_simple_prefix, detect_validation};
 use std::time::Instant;

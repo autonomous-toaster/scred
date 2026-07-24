@@ -60,9 +60,12 @@ impl<const FRAME_SIZE: usize, const NUM_FRAMES: usize> FrameRing<FRAME_SIZE, NUM
         }
 
         // Convert to array (we know exactly NUM_FRAMES, so safe)
-        let frames_array: [Vec<u8>; NUM_FRAMES] = frames
-            .try_into()
-            .expect("frames vec should have exactly NUM_FRAMES elements");
+        let frames_array: [Vec<u8>; NUM_FRAMES] = match frames.try_into() {
+            Ok(arr) => arr,
+            Err(_) => {
+                unreachable!("frames vec should have exactly NUM_FRAMES elements")
+            }
+        };
 
         Self {
             frames: frames_array,

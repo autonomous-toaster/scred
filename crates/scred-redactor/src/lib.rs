@@ -74,7 +74,7 @@ pub fn get_all_patterns() -> Vec<PatternInfo> {
     let mut patterns = Vec::new();
 
     // FastPrefix patterns (type 0)
-    for (_idx, p) in scred_detector::SIMPLE_PREFIX_PATTERNS.iter().enumerate() {
+    for p in scred_detector::SIMPLE_PREFIX_PATTERNS.iter() {
         patterns.push(PatternInfo {
             name: p.name.to_string(),
             pattern_type: 0,
@@ -85,10 +85,7 @@ pub fn get_all_patterns() -> Vec<PatternInfo> {
     }
 
     // PrefixValidation patterns (type 0, same category)
-    for (_idx, p) in scred_detector::PREFIX_VALIDATION_PATTERNS
-        .iter()
-        .enumerate()
-    {
+    for p in scred_detector::PREFIX_VALIDATION_PATTERNS.iter() {
         patterns.push(PatternInfo {
             name: p.name.to_string(),
             pattern_type: 0,
@@ -99,7 +96,7 @@ pub fn get_all_patterns() -> Vec<PatternInfo> {
     }
 
     // JWT patterns (type 1)
-    for (_idx, p) in scred_detector::JWT_PATTERNS.iter().enumerate() {
+    for p in scred_detector::JWT_PATTERNS.iter() {
         patterns.push(PatternInfo {
             name: p.name.to_string(),
             pattern_type: 1,

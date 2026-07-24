@@ -263,7 +263,10 @@ impl H2MitmHandler {
                 );
 
                 // Build HTTP/2 response
-                let response = Response::builder().status(200).body(()).unwrap();
+                let response = match Response::builder().status(200).body(()) {
+                    Ok(r) => r,
+                    Err(e) => unreachable!("valid HTTP status: {}", e),
+                };
                 let mut send = respond.send_response(response, false)?;
 
                 if !response_bytes.is_empty() {
@@ -285,7 +288,10 @@ impl H2MitmHandler {
                 let error_msg = format!("502 Bad Gateway: {}", e);
                 tracing::error!("[H2] Sending {} to client", error_msg);
 
-                let response = Response::builder().status(502).body(()).unwrap();
+                let response = match Response::builder().status(502).body(()) {
+                    Ok(r) => r,
+                    Err(e) => unreachable!("valid HTTP status: {}", e),
+                };
                 let _send = respond.send_response(response, true)?;
 
                 Ok(())

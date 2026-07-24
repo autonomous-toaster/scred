@@ -1,5 +1,5 @@
 use std::env;
-use std::io::{self, Read};
+use std::io::{self, Read, IsTerminal};
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 use std::time::Instant;
@@ -12,8 +12,7 @@ use tracing::{debug, info};
 /// Returns true if stdin is a terminal, false if piped/redirected
 #[cfg(unix)]
 fn stdin_is_tty() -> bool {
-    use libc::isatty;
-    unsafe { isatty(io::stdin().as_raw_fd()) == 1 }
+    std::io::stdin().is_terminal()
 }
 
 #[cfg(not(unix))]

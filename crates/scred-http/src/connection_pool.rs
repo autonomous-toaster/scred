@@ -38,7 +38,7 @@ impl ConnectionPool {
 
     /// Try to get a reusable connection from the pool
     pub fn get(&self) -> Option<TcpStream> {
-        let mut pool = self.pool.lock().unwrap();
+        let mut pool = self.pool.lock().unwrap_or_else(|e| e.into_inner());
 
         // Remove idle connections
         pool.retain(|conn| !conn.is_idle_timeout(self.max_idle_time));
@@ -55,7 +55,7 @@ impl ConnectionPool {
 
     /// Return a connection to the pool for reuse
     pub fn put(&self, stream: TcpStream) {
-        let mut pool = self.pool.lock().unwrap();
+        let mut pool = self.pool.lock().unwrap_or_else(|e| e.into_inner());
 
         // Only keep if pool not full
         if pool.len() < self.max_connections {
@@ -68,12 +68,12 @@ impl ConnectionPool {
 
     /// Clear all connections
     pub fn clear(&self) {
-        self.pool.lock().unwrap().clear();
+        self.pool.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Get pool size
     pub fn size(&self) -> usize {
-        self.pool.lock().unwrap().len()
+        self.pool.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 

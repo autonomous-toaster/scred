@@ -121,7 +121,10 @@ impl ConnectionPool {
             // Find matching connection (same target host)
             idle.iter().position(|c| c.target_host == target_host)
                 .and_then(|idx| {
-                    let conn = idle.remove(idx).unwrap();
+                    let conn = match idle.remove(idx) {
+                        Some(c) => c,
+                        None => unreachable!("idx from position() is always valid"),
+                    };
                     // Check if still valid
                     if !conn.should_recycle(self.config.max_requests_per_connection)
                         && !conn.is_idle_too_long(Duration::from_secs(self.config.idle_timeout_secs))
@@ -238,12 +241,18 @@ pub struct PooledConnectionGuard {
 impl PooledConnectionGuard {
     /// Get mutable reference to the connection
     pub fn connection_mut(&mut self) -> &mut PooledConnection {
-        self.connection.as_mut().unwrap()
+        match self.connection.as_mut() {
+            Some(c) => c,
+            None => unreachable!("PooledConnectionGuard always has a connection"),
+        }
     }
 
     /// Get reference to the connection
     pub fn connection(&self) -> &PooledConnection {
-        self.connection.as_ref().unwrap()
+        match self.connection.as_ref() {
+            Some(c) => c,
+            None => unreachable!("PooledConnectionGuard always has a connection"),
+        }
     }
 
     /// Mark connection as non-reusable (will be dropped instead of returned to pool)

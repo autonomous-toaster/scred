@@ -153,6 +153,7 @@ fn parse_headers_from_text(text: &str, has_status_line: bool) -> Result<HttpHead
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[tokio::test]

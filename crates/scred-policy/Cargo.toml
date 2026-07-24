@@ -23,3 +23,6 @@ scred-redactor = { path = "../scred-redactor" }
 
 [dev-dependencies]
 tokio-test = "0.4"
+
+[lints]
+workspace = true

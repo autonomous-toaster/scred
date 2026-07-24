@@ -25,3 +25,6 @@ bytes = "1"
 [[bin]]
 name = "scred-proxy"
 path = "src/main.rs"
+
+[lints]
+workspace = true

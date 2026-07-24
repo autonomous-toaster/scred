@@ -498,6 +498,7 @@ fn glob_match(pattern: &str, name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

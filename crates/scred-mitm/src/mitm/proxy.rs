@@ -111,14 +111,19 @@ async fn handle_client(
 ) -> Result<()> {
     let (mut socket_read, mut socket_write) = socket.into_split();
 
-    // Keep-alive loop: handle multiple requests on same connection
-    loop {
+    // Handle a single request. Keep-alive is not supported because
+    // TLS MITM and HTTP handlers consume the socket.
+    {
         // Read first line manually WITHOUT buffering
         let mut first_line_buf = Vec::new();
         let mut byte = [0u8; 1];
+        let mut connection_closed = false;
         loop {
             match socket_read.read_exact(&mut byte).await {
-                Ok(0) => return Ok(()), // Connection closed gracefully
+                Ok(0) => {
+                    connection_closed = true;
+                    break;
+                }
                 Ok(_) => {
                     first_line_buf.push(byte[0]);
                     if byte[0] == b'\n' {
@@ -127,14 +132,20 @@ async fn handle_client(
                     if first_line_buf.len() > 1024 {
                         let _ = send_error_response(&mut socket_write, 413, "Request Line Too Long")
                             .await;
-                        return Ok(()); // Exit gracefully on oversized line
+                        connection_closed = true;
+                        break;
                     }
                 }
                 Err(e) => {
                     debug!("Client connection closed or error: {}", e);
-                    return Ok(()); // Exit gracefully
+                    connection_closed = true;
+                    break;
                 }
             }
+        }
+
+        if connection_closed {
+            return Ok(());
         }
 
         let line = String::from_utf8_lossy(&first_line_buf).trim().to_string();
@@ -240,7 +251,7 @@ async fn handle_client(
                 warn!("TLS MITM error: {}", e);
             }
 
-            // After TLS MITM, connection is consumed, exit loop
+            // After TLS MITM, connection is consumed, exit
             return Ok(());
         } else {
             // Handle HTTP proxy requests (non-CONNECT)
@@ -277,6 +288,8 @@ async fn handle_client(
             return Ok(()); // Connection consumed by HTTP handler
         }
     }
+
+    Ok(())
 }
 
 fn extract_host_from_request(request_line: &str) -> Option<String> {

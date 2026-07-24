@@ -111,8 +111,10 @@ impl ChunkedParser {
                     debug!("[chunked] Read chunk data: {} bytes", chunk_data.len());
 
                     // Redact chunk via RedactionStream
-                    let stream = self.stream.as_mut()
-                        .expect("ChunkedParser::init_stream() must be called before next_chunk()");
+                    let stream = match self.stream.as_mut() {
+                        Some(s) => s,
+                        None => unreachable!("ChunkedParser::init_stream() must be called before next_chunk()"),
+                    };
                     let redacted = stream.feed(&chunk_data);
                     let patterns = 0; // patterns_found tracked by finalize
 

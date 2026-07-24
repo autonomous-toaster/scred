@@ -57,7 +57,9 @@ impl PlaceholderGenerator {
             let placeholder = self.generate_placeholder(name, value);
             self.cache.insert(name.to_string(), placeholder);
         }
-        self.cache.get(name).unwrap()
+        self.cache.get(name).unwrap_or_else(|| {
+            unreachable!("placeholder was just inserted")
+        })
     }
 
     fn generate_placeholder(&self, name: &str, value: &str) -> Placeholder {
@@ -118,7 +120,10 @@ impl PlaceholderGenerator {
         let sep_pos = value.find(|c| c == '_' || c == '-');
 
         if let Some(sep_idx) = sep_pos {
-            let separator = value.chars().nth(sep_idx).unwrap();
+            let separator = match value.chars().nth(sep_idx) {
+                Some(c) => c,
+                None => unreachable!("sep_idx from find() is always valid"),
+            };
             let first_part = &value[..sep_idx];
 
             // Check if first part <= 4 chars
@@ -181,6 +186,7 @@ impl PlaceholderGenerator {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

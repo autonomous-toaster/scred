@@ -633,7 +633,7 @@ impl PatternSelector {
             PatternSelector::All => true,
             PatternSelector::None => false,
 
-            PatternSelector::Tiers(tiers) => tiers.iter().any(|t| *t == tier),
+            PatternSelector::Tiers(tiers) => tiers.contains(&tier),
 
             // For other selectors, we can't easily match by tier alone
             // Would need full PatternMetadata
@@ -825,16 +825,19 @@ impl PatternSelector {
 
 #[cfg(test)]
 mod glob_tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_exact_match() {
         let matcher = GlobMatcher::new("mysql-password");
         assert!(matcher.matches("mysql-password"));
         assert!(!matcher.matches("mysql-user"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_star_suffix() {
         let matcher = GlobMatcher::new("mysql*");
         assert!(matcher.matches("mysql-password"));
@@ -845,7 +848,8 @@ mod glob_tests {
         assert!(!matcher.matches("mariadb-password"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_star_prefix() {
         let matcher = GlobMatcher::new("*-password");
         assert!(matcher.matches("mysql-password"));
@@ -855,7 +859,8 @@ mod glob_tests {
         assert!(!matcher.matches("mysql-user"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_star_middle() {
         let matcher = GlobMatcher::new("aws*-key");
         assert!(matcher.matches("aws-key"));
@@ -865,7 +870,8 @@ mod glob_tests {
         assert!(!matcher.matches("aws"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_question_single() {
         let matcher = GlobMatcher::new("aws-?");
         assert!(matcher.matches("aws-a"));
@@ -875,7 +881,8 @@ mod glob_tests {
         assert!(!matcher.matches("aws"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_question_multiple() {
         let matcher = GlobMatcher::new("gh?-token");
         assert!(matcher.matches("ghp-token"));
@@ -885,7 +892,8 @@ mod glob_tests {
         assert!(!matcher.matches("ghab-token"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_combined_wildcards() {
         let matcher = GlobMatcher::new("*test*");
         assert!(matcher.matches("test"));
@@ -896,7 +904,8 @@ mod glob_tests {
         assert!(!matcher.matches("tes"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_aws_pattern() {
         let matcher = GlobMatcher::new("aws-*");
         assert!(matcher.matches("aws-akia"));
@@ -907,7 +916,8 @@ mod glob_tests {
         assert!(!matcher.matches("aws"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_github_pattern() {
         let matcher = GlobMatcher::new("github-*");
         assert!(matcher.matches("github-ghp"));
@@ -917,7 +927,8 @@ mod glob_tests {
         assert!(!matcher.matches("github"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_api_key_patterns() {
         let matchers = vec![
             ("mysql*", vec!["mysql-password", "mysql-url", "mysql-dsn"]),
@@ -941,7 +952,8 @@ mod glob_tests {
         }
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_exclusion_pattern() {
         let matcher = GlobMatcher::new("test-*");
         // These should match the glob
@@ -953,7 +965,8 @@ mod glob_tests {
         assert!(!matcher.matches("staging-password"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_performance_simple() {
         // Verify simple case is fast
         let start = std::time::Instant::now();
@@ -970,7 +983,8 @@ mod glob_tests {
         );
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_edge_cases() {
         // Empty pattern should only match empty string
         let matcher = GlobMatcher::new("");
@@ -995,19 +1009,21 @@ mod glob_tests {
 mod pattern_selector_glob_tests {
     use super::*;
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_selector_wildcard_mode() {
         let selector = PatternSelector::Wildcard("mysql*".to_string());
         assert_eq!(selector.description(), "Wildcard: mysql*");
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_selector_from_string_wildcard() {
         let selector = PatternSelector::from_string("wildcard:mysql*").unwrap();
         assert!(matches!(selector, PatternSelector::Wildcard(_)));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_selector_from_string_multiple_globs() {
         // Note: Currently supports "patterns:mysql*,postgres*" syntax
         let selector =
@@ -1020,14 +1036,16 @@ mod pattern_selector_glob_tests {
 mod composite_selector_tests {
     use super::*;
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_single_tier_filter() {
         let selector = CompositePatternSelector::from_string("CRITICAL").unwrap();
         assert!(selector.matches("aws-akia", RiskTier::Critical));
         assert!(!selector.matches("mysql-password", RiskTier::ApiKeys));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_multiple_tiers() {
         let selector = CompositePatternSelector::from_string("CRITICAL,API_KEYS").unwrap();
         assert!(selector.matches("aws-akia", RiskTier::Critical));
@@ -1035,7 +1053,7 @@ mod composite_selector_tests {
         assert!(!selector.matches("ssh-key", RiskTier::Infrastructure));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_glob_pattern_only() {
         let selector = CompositePatternSelector::from_string("mysql*").unwrap();
         assert!(selector.matches("mysql-password", RiskTier::Critical));
@@ -1043,7 +1061,7 @@ mod composite_selector_tests {
         assert!(!selector.matches("postgres-dsn", RiskTier::Critical));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_multiple_glob_patterns() {
         let selector = CompositePatternSelector::from_string("mysql*,postgresql*,redis*").unwrap();
         assert!(selector.matches("mysql-password", RiskTier::Critical));
@@ -1052,7 +1070,7 @@ mod composite_selector_tests {
         assert!(!selector.matches("mongodb-uri", RiskTier::Critical));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_tier_and_glob_combined() {
         let selector = CompositePatternSelector::from_string("CRITICAL,mysql*,postgres*").unwrap();
         // Matches CRITICAL tier
@@ -1064,7 +1082,7 @@ mod composite_selector_tests {
         assert!(!selector.matches("heroku-api-key", RiskTier::ApiKeys));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_simple_exclusion() {
         let selector = CompositePatternSelector::from_string("CRITICAL,!test-*").unwrap();
         assert!(selector.matches("aws-akia", RiskTier::Critical));
@@ -1072,7 +1090,7 @@ mod composite_selector_tests {
         assert!(!selector.matches("test-password", RiskTier::Critical));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_exclude_syntax_variations() {
         let selector1 = CompositePatternSelector::from_string("CRITICAL,!test-*").unwrap();
         let selector2 = CompositePatternSelector::from_string("CRITICAL,exclude:test-*").unwrap();
@@ -1085,7 +1103,7 @@ mod composite_selector_tests {
         assert!(!selector2.matches("test-secret", RiskTier::Critical));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_multiple_exclusions() {
         let selector =
             CompositePatternSelector::from_string("CRITICAL,!test-*,!mock-*,!dummy-*").unwrap();
@@ -1095,7 +1113,7 @@ mod composite_selector_tests {
         assert!(!selector.matches("dummy-key", RiskTier::Critical));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_complex_real_world_scenario() {
         // Detect CRITICAL tier + AWS/GitHub/OpenAI patterns, excluding test patterns
         let selector = CompositePatternSelector::from_string(
@@ -1117,7 +1135,7 @@ mod composite_selector_tests {
         assert!(!selector.matches("mysql-password", RiskTier::ApiKeys));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_database_pattern_selection() {
         // Select only database patterns
         let selector =
@@ -1132,7 +1150,7 @@ mod composite_selector_tests {
         assert!(!selector.matches("github-ghp", RiskTier::Critical));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_api_provider_selection() {
         // Select OpenAI, Anthropic, HuggingFace
         let selector =
@@ -1146,7 +1164,7 @@ mod composite_selector_tests {
         assert!(!selector.matches("aws-akia", RiskTier::Critical));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_tier_with_specific_glob_and_exclusion() {
         let selector =
             CompositePatternSelector::from_string("CRITICAL,API_KEYS,mysql*,!test-*").unwrap();
@@ -1161,14 +1179,14 @@ mod composite_selector_tests {
         assert!(!selector.matches("test-password", RiskTier::Critical));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_invalid_no_inclusions() {
         // Only exclusions should fail
         let result = CompositePatternSelector::from_string("!test-*,!mock-*");
         assert!(result.is_err());
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_pattern_filter_parsing() {
         let tier_filter = PatternFilter::from_str("CRITICAL").unwrap();
         assert!(matches!(
@@ -1186,7 +1204,7 @@ mod composite_selector_tests {
         assert!(matches!(exclude_filter2, PatternFilter::Exclude(_)));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_description() {
         let selector = CompositePatternSelector::from_string("CRITICAL,mysql*,!test-*").unwrap();
         let desc = selector.description();
@@ -1195,7 +1213,7 @@ mod composite_selector_tests {
         assert!(desc.contains("test"));
     }
 
-    #[test]
+    #[allow(clippy::unwrap_used)]    #[test]
     fn test_performance_composite_matching() {
         let selector = CompositePatternSelector::from_string(
             "CRITICAL,API_KEYS,mysql*,postgresql*,redis*,mongodb*,!test-*,!mock-*",

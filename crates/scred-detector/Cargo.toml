@@ -37,6 +37,5 @@ harness = false
 name = "redaction"
 harness = false
 
-[[bench]]
-name = "pattern_frequency"
-harness = false
+[lints]
+workspace = true

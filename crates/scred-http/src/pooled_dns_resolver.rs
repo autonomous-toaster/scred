@@ -175,18 +175,20 @@ impl std::ops::Deref for PooledTcpStream {
     type Target = TcpStream;
 
     fn deref(&self) -> &Self::Target {
-        self.stream
-            .as_ref()
-            .expect("PooledTcpStream used after drop")
+        match self.stream.as_ref() {
+            Some(s) => s,
+            None => unreachable!("PooledTcpStream used after drop"),
+        }
     }
 }
 
 /// Implement DerefMut for transparent usage
 impl std::ops::DerefMut for PooledTcpStream {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.stream
-            .as_mut()
-            .expect("PooledTcpStream used after drop")
+        match self.stream.as_mut() {
+            Some(s) => s,
+            None => unreachable!("PooledTcpStream used after drop"),
+        }
     }
 }
 

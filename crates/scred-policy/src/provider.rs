@@ -136,7 +136,11 @@ impl EnvProvider {
         }
 
         // Last part must match end
-        if !parts.last().unwrap().is_empty() && !name.ends_with(parts.last().unwrap()) {
+        let last_part = match parts.last() {
+            Some(p) => p,
+            None => unreachable!("parts is non-empty, checked earlier"),
+        };
+        if !last_part.is_empty() && !name.ends_with(last_part) {
             return false;
         }
 
@@ -245,6 +249,7 @@ impl SecretProvider for EnvProvider {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::env;
 

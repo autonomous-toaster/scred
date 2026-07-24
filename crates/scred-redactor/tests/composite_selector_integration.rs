@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 //! Phase 4: Integration Tests for CompositePatternSelector
 //! Tests real-world pattern selection scenarios
 
