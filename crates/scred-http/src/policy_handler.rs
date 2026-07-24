@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 
 #[cfg(feature = "policy")]
-use scred_policy::{PolicyIntegration, ReplacementTracker};
+use scred_policy::StreamingTracker;
 
 /// Result of policy-based HTTP handling
 #[derive(Debug)]
@@ -23,7 +23,7 @@ pub struct PolicyResult {
     /// Number of secrets replaced in response
     pub response_replacements: usize,
     /// Tracker for replacements
-    pub tracker: ReplacementTracker,
+    pub tracker: StreamingTracker,
 }
 
 /// Handle HTTP request/response with policy replacement
@@ -37,7 +37,7 @@ pub async fn handle_http_with_policy<C, U>(
     request_line: &str,
     headers: &crate::http_headers::HttpHeaders,
     target_host: &str,
-    policy: Arc<PolicyIntegration>,
+    policy: Arc<scred_policy::PolicyEngine>,
 ) -> Result<PolicyResult>
 where
     C: AsyncReadExt + Unpin,
@@ -156,9 +156,9 @@ mod tests {
     #[cfg(feature = "policy")]
     #[test]
     fn test_policy_result_debug() {
-        use scred_policy::ReplacementTracker;
+        use scred_policy::StreamingTracker;
 
-        let tracker = ReplacementTracker::new();
+        let tracker = StreamingTracker::new();
         let _ = format!("replacements: {}", tracker.replacements().len());
     }
 }

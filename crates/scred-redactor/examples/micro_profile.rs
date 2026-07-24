@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 //! Micro-profile each detection function individually
 //!
 //! Run with: cargo run --bin micro_profile --release -p scred-redactor

@@ -1,0 +1,22 @@
+use super::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    include!("tests_0.rs");
+    include!("tests_1.rs");
+    include!("tests_2.rs");
+    include!("tests_3.rs");
+    include!("tests_4.rs");
+    include!("tests_5.rs");
+    include!("tests_6.rs");
+    include!("tests_7.rs");
+    include!("tests_8.rs");
+    include!("tests_9.rs");
+    include!("tests_10.rs");
+    include!("tests_11.rs");
+    include!("tests_12.rs");
+    include!("tests_13.rs");
+    include!("tests_14.rs");
+}

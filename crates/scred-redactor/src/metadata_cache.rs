@@ -82,10 +82,7 @@ impl RiskTier {
     }
 
     pub fn default_redact(&self) -> bool {
-        match self {
-            RiskTier::Critical | RiskTier::ApiKeys => true,
-            _ => false,
-        }
+        matches!(self, RiskTier::Critical | RiskTier::ApiKeys)
     }
 
     pub fn name(&self) -> &'static str {
@@ -191,18 +188,21 @@ pub struct MetadataCache {
     total_patterns: usize,
 }
 
-impl MetadataCache {
-    /// Initialize cache from FFI
-    pub fn new() -> Self {
-        // Load patterns from Zig via FFI (if implemented)
-        // For now, this is a template for the integration
-
+impl Default for MetadataCache {
+    fn default() -> Self {
         MetadataCache {
             patterns_by_name: HashMap::new(),
             patterns_by_tier: HashMap::new(),
             patterns_by_tag: HashMap::new(),
             total_patterns: 0,
         }
+    }
+}
+
+impl MetadataCache {
+    /// Initialize cache from FFI
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get pattern by name - O(1)

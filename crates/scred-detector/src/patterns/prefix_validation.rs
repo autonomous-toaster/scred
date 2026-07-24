@@ -1,177 +1,4 @@
-//! Pattern definitions - extracted from Zig source of truth
-//! All 275 patterns organized by detection type
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PatternTier {
-    Critical,
-    Infrastructure,
-    Services,
-    ApiKeys,
-    Patterns,
-}
-
-// ============================================================================
-// SIMPLE PREFIX PATTERNS (26 total)
-// Fast path: just check if text starts with prefix, no validation
-// ============================================================================
-
-#[derive(Debug, Clone)]
-pub struct SimplePrefixPattern {
-    pub name: &'static str,
-    pub prefix: &'static str,
-    pub tier: PatternTier,
-}
-
-pub const SIMPLE_PREFIX_PATTERNS: &[SimplePrefixPattern] = &[
-    SimplePrefixPattern {
-        name: "artifactoryreferencetoken",
-        prefix: "cmVmdGtu",
-        tier: PatternTier::Infrastructure,
-    },
-    SimplePrefixPattern {
-        name: "azure-storage",
-        prefix: "AccountName",
-        tier: PatternTier::Infrastructure,
-    },
-    SimplePrefixPattern {
-        name: "azure-app-config",
-        prefix: "Endpoint=https://",
-        tier: PatternTier::Infrastructure,
-    },
-    SimplePrefixPattern {
-        name: "coinbase",
-        prefix: "organizations/",
-        tier: PatternTier::Services,
-    },
-    SimplePrefixPattern {
-        name: "context7-api-key",
-        prefix: "ctx7sk_",
-        tier: PatternTier::Critical,
-    },
-    SimplePrefixPattern {
-        name: "context7-secret",
-        prefix: "ctx7sk-",
-        tier: PatternTier::Critical,
-    },
-    SimplePrefixPattern {
-        name: "langsmith-deployment-key",
-        prefix: "lsv2_sk_",
-        tier: PatternTier::Critical,
-    },
-    SimplePrefixPattern {
-        name: "pypi-upload-token",
-        prefix: "pypi-AgEIcHlwaS5vcmc",
-        tier: PatternTier::Services,
-    },
-    SimplePrefixPattern {
-        name: "salad-cloud-api-key",
-        prefix: "salad_cloud_",
-        tier: PatternTier::Infrastructure,
-    },
-    SimplePrefixPattern {
-        name: "sentry-access-token",
-        prefix: "bsntrys_",
-        tier: PatternTier::ApiKeys,
-    },
-    SimplePrefixPattern {
-        name: "travisoauth",
-        prefix: "travis_",
-        tier: PatternTier::ApiKeys,
-    },
-    SimplePrefixPattern {
-        name: "tumblr-api-key",
-        prefix: "tumblr_",
-        tier: PatternTier::Services,
-    },
-    SimplePrefixPattern {
-        name: "upstash-redis",
-        prefix: "redis_",
-        tier: PatternTier::Infrastructure,
-    },
-    SimplePrefixPattern {
-        name: "vercel-token",
-        prefix: "vercel_",
-        tier: PatternTier::ApiKeys,
-    },
-    // AWS patterns (all use simple prefix check)
-    SimplePrefixPattern {
-        name: "aws-akia",
-        prefix: "AKIA",
-        tier: PatternTier::Critical,
-    },
-    SimplePrefixPattern {
-        name: "aws-asia",
-        prefix: "ASIA",
-        tier: PatternTier::Critical,
-    },
-    SimplePrefixPattern {
-        name: "aws-abia",
-        prefix: "ABIA",
-        tier: PatternTier::Critical,
-    },
-    SimplePrefixPattern {
-        name: "aws-acca",
-        prefix: "ACCA",
-        tier: PatternTier::Critical,
-    },
-    // GitHub patterns
-    SimplePrefixPattern {
-        name: "github-ghp",
-        prefix: "ghp_",
-        tier: PatternTier::Critical,
-    },
-    SimplePrefixPattern {
-        name: "github-ghu",
-        prefix: "ghu_",
-        tier: PatternTier::Critical,
-    },
-    SimplePrefixPattern {
-        name: "github-ghs",
-        prefix: "ghs_",
-        tier: PatternTier::Critical,
-    },
-    // OpenAI patterns
-    SimplePrefixPattern {
-        name: "openai-sk-proj",
-        prefix: "sk-proj-",
-        tier: PatternTier::Critical,
-    },
-    SimplePrefixPattern {
-        name: "openai-sk",
-        prefix: "sk-",
-        tier: PatternTier::Critical,
-    },
-    // NOTE: Removed 4 overly broad generic patterns (generic-password, generic-password-colon,
-    // generic-password-lower, generic-secret) to eliminate false positives.
-    // Real secrets are caught by more specific patterns:
-    // - Database passwords: MYSQL_PASSWORD=, POSTGRES_PASSWORD=, REDIS_PASSWORD=, etc.
-    // - Secrets/tokens: Specific env patterns (_SECRET=, _TOKEN=, _API_KEY=)
-    // - Generic "PASSWORD=" was matching demo values (PASSWORD=demo123)
-];
-
-// ============================================================================
-// PREFIX VALIDATION PATTERNS (45 total)
-// Medium path: check prefix + validate token length and charset
-// ============================================================================
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Charset {
-    Alphanumeric,
-    Base64,
-    Base64Url,
-    Hex,
-    Any,
-}
-
-#[derive(Debug, Clone)]
-pub struct PrefixValidationPattern {
-    pub name: &'static str,
-    pub prefix: &'static str,
-    pub tier: PatternTier,
-    pub min_len: usize,
-    pub max_len: usize,
-    pub charset: Charset,
-}
+use super::{Charset, PatternTier, PrefixValidationPattern};
 
 pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
     PrefixValidationPattern {
@@ -494,6 +321,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Alphanumeric,
     },
+
     PrefixValidationPattern {
         name: "stripe-api-key-test",
         prefix: "sk_test_",
@@ -713,9 +541,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 300,
         charset: Charset::Any,
     },
-    // ============================================================================
-    // BATCH 2: Infrastructure & System Authentication (25 patterns)
-    // ============================================================================
+
     // Password Hashes (3 patterns)
     PrefixValidationPattern {
         name: "bcrypt-password-hash",
@@ -854,6 +680,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 300,
         charset: Charset::Base64,
     },
+
     PrefixValidationPattern {
         name: "docker-registry-token",
         prefix: "eyJ0eXAiOiJ",
@@ -1062,6 +889,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Base64Url,
     },
+
     PrefixValidationPattern {
         name: "mistral-api-key",
         prefix: "sk-",
@@ -1291,6 +1119,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Alphanumeric,
     },
+
     PrefixValidationPattern {
         name: "contentful-cpa-token",
         prefix: "CFPAT-",
@@ -1541,6 +1370,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Alphanumeric,
     },
+
     // Cloud-Specific Tools (4 patterns)
     PrefixValidationPattern {
         name: "terraform-cloud-token",
@@ -1777,6 +1607,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Base64,
     },
+
     PrefixValidationPattern {
         name: "tiktok-api-token",
         prefix: "tiktok-",
@@ -1964,6 +1795,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 100,
         charset: Charset::Any,
     },
+
     // Generic environment variable KEY=VALUE patterns (hardcoded for common naming conventions)
     // These are added to catch PASSWORD=, SECRET=, TOKEN=, API_KEY=, APIKEY= in various forms
     // with auto-generated variations (exact, prefix, suffix)
@@ -2214,6 +2046,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 0,
         charset: Charset::Base64Url,
     },
+
     PrefixValidationPattern {
         name: "kubernetes-bearer-token",
         prefix: "eyJhbGc", // Base64 for JWT header {"alg"
@@ -2534,6 +2367,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 0,
         charset: Charset::Alphanumeric,
     },
+
     PrefixValidationPattern {
         name: "auth0-management-token",
         prefix: "mgmt_",
@@ -2854,6 +2688,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 0,
         charset: Charset::Alphanumeric,
     },
+
     PrefixValidationPattern {
         name: "snyk-api-token",
         prefix: "snyk_",
@@ -3150,304 +2985,5 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 0,
         charset: Charset::Alphanumeric,
     },
+
 ];
-
-// ============================================================================
-// JWT PATTERNS (1 total)
-// Generic JWT: eyJ prefix with exactly 2 dots = all JWT algorithms
-// ============================================================================
-
-#[derive(Debug, Clone)]
-pub struct JwtPattern {
-    pub name: &'static str,
-    pub tier: PatternTier,
-}
-
-pub const JWT_PATTERNS: &[JwtPattern] = &[JwtPattern {
-    name: "jwt-generic",
-    tier: PatternTier::Critical,
-}];
-
-// ============================================================================
-// MULTILINE MARKER PATTERNS (4 total)
-// Detect multiline secrets like SSH keys using bounded lookahead
-// Pattern: -----BEGIN <TYPE> PRIVATE KEY-----...(multiline)...-----END <TYPE> PRIVATE KEY-----
-// ============================================================================
-
-#[derive(Debug, Clone)]
-pub struct MultilineMarkerPattern {
-    pub name: &'static str,
-    pub start_marker: &'static str,
-    pub end_marker: &'static str,
-    pub tier: PatternTier,
-    pub max_lookahead: usize, // Max bytes to look ahead (SSH keys ~4KB max)
-}
-
-/// Generalized marker-based pattern for multiline secrets
-/// Supports start_marker -> content -> end_marker format
-/// Examples: SSH keys, certificates, PGP keys, kubeconfig
-#[derive(Debug, Clone, Copy)]
-pub struct GeneralizedMarkerPattern {
-    pub name: &'static str,
-    pub start_marker: &'static str,
-    pub end_marker: &'static str,
-    pub tier: PatternTier,
-    pub max_lookahead: usize,
-
-    // Optional validation keywords
-    pub contains_keyword: Option<&'static str>, // e.g., Some("PRIVATE KEY")
-    pub exclude_keyword: Option<&'static str>,  // e.g., Some("PUBLIC") to skip public keys
-
-    // Content characteristics (optimization hints)
-    pub min_body_len: usize, // Minimum content size between markers
-    pub pattern_type: u16,   // Type ID for pattern classification (300+ for multiline)
-}
-
-impl From<MultilineMarkerPattern> for GeneralizedMarkerPattern {
-    fn from(p: MultilineMarkerPattern) -> Self {
-        GeneralizedMarkerPattern {
-            name: p.name,
-            start_marker: p.start_marker,
-            end_marker: p.end_marker,
-            tier: p.tier,
-            max_lookahead: p.max_lookahead,
-            contains_keyword: None,
-            exclude_keyword: None,
-            min_body_len: 0,
-            pattern_type: 300, // Default pattern type for multiline markers
-        }
-    }
-}
-
-pub const MULTILINE_MARKER_PATTERNS: &[MultilineMarkerPattern] = &[
-    MultilineMarkerPattern {
-        name: "ssh-rsa-private-key",
-        start_marker: "-----BEGIN RSA PRIVATE KEY-----",
-        end_marker: "-----END RSA PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 4096,
-    },
-    MultilineMarkerPattern {
-        name: "ssh-openssh-private-key",
-        start_marker: "-----BEGIN OPENSSH PRIVATE KEY-----",
-        end_marker: "-----END OPENSSH PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 4096,
-    },
-    MultilineMarkerPattern {
-        name: "ssh-private-key",
-        start_marker: "-----BEGIN PRIVATE KEY-----",
-        end_marker: "-----END PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 4096,
-    },
-    MultilineMarkerPattern {
-        name: "ssh-ec-private-key",
-        start_marker: "-----BEGIN EC PRIVATE KEY-----",
-        end_marker: "-----END EC PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 4096,
-    },
-    // X.509 Certificate patterns (Phase 4b)
-    MultilineMarkerPattern {
-        name: "x509-certificate",
-        start_marker: "-----BEGIN CERTIFICATE-----",
-        end_marker: "-----END CERTIFICATE-----",
-        tier: PatternTier::Infrastructure,
-        max_lookahead: 10240, // Certificates can be 5-10KB
-    },
-    MultilineMarkerPattern {
-        name: "x509-certificate-request",
-        start_marker: "-----BEGIN CERTIFICATE REQUEST-----",
-        end_marker: "-----END CERTIFICATE REQUEST-----",
-        tier: PatternTier::Infrastructure,
-        max_lookahead: 5120, // CSRs typically 1-3KB
-    },
-    MultilineMarkerPattern {
-        name: "encrypted-private-key",
-        start_marker: "-----BEGIN ENCRYPTED PRIVATE KEY-----",
-        end_marker: "-----END ENCRYPTED PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 5120, // Encrypted keys typically 2-4KB
-    },
-    MultilineMarkerPattern {
-        name: "public-key",
-        start_marker: "-----BEGIN PUBLIC KEY-----",
-        end_marker: "-----END PUBLIC KEY-----",
-        tier: PatternTier::Infrastructure,
-        max_lookahead: 3072, // Public keys typically 1-2KB
-    },
-    // PGP key patterns (Phase 4c)
-    MultilineMarkerPattern {
-        name: "pgp-private-key-block",
-        start_marker: "-----BEGIN PGP PRIVATE KEY BLOCK-----",
-        end_marker: "-----END PGP PRIVATE KEY BLOCK-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 20480, // PGP keys can be 2-20KB
-    },
-    MultilineMarkerPattern {
-        name: "pgp-public-key-block",
-        start_marker: "-----BEGIN PGP PUBLIC KEY BLOCK-----",
-        end_marker: "-----END PGP PUBLIC KEY BLOCK-----",
-        tier: PatternTier::Infrastructure,
-        max_lookahead: 6144, // PGP public keys typically 1-5KB
-    },
-    MultilineMarkerPattern {
-        name: "pgp-message",
-        start_marker: "-----BEGIN PGP MESSAGE-----",
-        end_marker: "-----END PGP MESSAGE-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 15360, // PGP messages are variable (up to 15KB)
-    },
-];
-
-/// Generalized multiline pattern array - Phase A1 refactoring
-/// Converts MultilineMarkerPattern to GeneralizedMarkerPattern for optimization
-pub const GENERALIZED_MARKER_PATTERNS: &[GeneralizedMarkerPattern] = &[
-    GeneralizedMarkerPattern {
-        name: "ssh-rsa-private-key",
-        start_marker: "-----BEGIN RSA PRIVATE KEY-----",
-        end_marker: "-----END RSA PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 4096,
-        contains_keyword: Some("PRIVATE KEY"),
-        exclude_keyword: None,
-        min_body_len: 100,
-        pattern_type: 300,
-    },
-    GeneralizedMarkerPattern {
-        name: "ssh-openssh-private-key",
-        start_marker: "-----BEGIN OPENSSH PRIVATE KEY-----",
-        end_marker: "-----END OPENSSH PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 4096,
-        contains_keyword: Some("OPENSSH PRIVATE KEY"),
-        exclude_keyword: None,
-        min_body_len: 100,
-        pattern_type: 301,
-    },
-    GeneralizedMarkerPattern {
-        name: "ssh-private-key",
-        start_marker: "-----BEGIN PRIVATE KEY-----",
-        end_marker: "-----END PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 4096,
-        contains_keyword: Some("PRIVATE KEY"),
-        exclude_keyword: Some("RSA"), // Skip RSA (covered separately)
-        min_body_len: 100,
-        pattern_type: 302,
-    },
-    GeneralizedMarkerPattern {
-        name: "ssh-ec-private-key",
-        start_marker: "-----BEGIN EC PRIVATE KEY-----",
-        end_marker: "-----END EC PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 4096,
-        contains_keyword: Some("EC PRIVATE KEY"),
-        exclude_keyword: None,
-        min_body_len: 100,
-        pattern_type: 303,
-    },
-    GeneralizedMarkerPattern {
-        name: "x509-certificate",
-        start_marker: "-----BEGIN CERTIFICATE-----",
-        end_marker: "-----END CERTIFICATE-----",
-        tier: PatternTier::Infrastructure,
-        max_lookahead: 10240,
-        contains_keyword: Some("CERTIFICATE"),
-        exclude_keyword: Some("REQUEST"), // Skip CSRs (covered separately)
-        min_body_len: 200,
-        pattern_type: 304,
-    },
-    GeneralizedMarkerPattern {
-        name: "x509-certificate-request",
-        start_marker: "-----BEGIN CERTIFICATE REQUEST-----",
-        end_marker: "-----END CERTIFICATE REQUEST-----",
-        tier: PatternTier::Infrastructure,
-        max_lookahead: 5120,
-        contains_keyword: Some("CERTIFICATE REQUEST"),
-        exclude_keyword: None,
-        min_body_len: 100,
-        pattern_type: 305,
-    },
-    GeneralizedMarkerPattern {
-        name: "encrypted-private-key",
-        start_marker: "-----BEGIN ENCRYPTED PRIVATE KEY-----",
-        end_marker: "-----END ENCRYPTED PRIVATE KEY-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 5120,
-        contains_keyword: Some("ENCRYPTED PRIVATE KEY"),
-        exclude_keyword: None,
-        min_body_len: 100,
-        pattern_type: 306,
-    },
-    GeneralizedMarkerPattern {
-        name: "public-key",
-        start_marker: "-----BEGIN PUBLIC KEY-----",
-        end_marker: "-----END PUBLIC KEY-----",
-        tier: PatternTier::Infrastructure,
-        max_lookahead: 3072,
-        contains_keyword: Some("PUBLIC KEY"),
-        exclude_keyword: None,
-        min_body_len: 100,
-        pattern_type: 307,
-    },
-    GeneralizedMarkerPattern {
-        name: "pgp-private-key-block",
-        start_marker: "-----BEGIN PGP PRIVATE KEY BLOCK-----",
-        end_marker: "-----END PGP PRIVATE KEY BLOCK-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 20480,
-        contains_keyword: Some("PRIVATE KEY"),
-        exclude_keyword: None,
-        min_body_len: 500,
-        pattern_type: 308,
-    },
-    GeneralizedMarkerPattern {
-        name: "pgp-public-key-block",
-        start_marker: "-----BEGIN PGP PUBLIC KEY BLOCK-----",
-        end_marker: "-----END PGP PUBLIC KEY BLOCK-----",
-        tier: PatternTier::Infrastructure,
-        max_lookahead: 6144,
-        contains_keyword: Some("PUBLIC KEY"),
-        exclude_keyword: None,
-        min_body_len: 200,
-        pattern_type: 309,
-    },
-    GeneralizedMarkerPattern {
-        name: "pgp-message",
-        start_marker: "-----BEGIN PGP MESSAGE-----",
-        end_marker: "-----END PGP MESSAGE-----",
-        tier: PatternTier::Critical,
-        max_lookahead: 15360,
-        contains_keyword: None,
-        exclude_keyword: None,
-        min_body_len: 50,
-        pattern_type: 310,
-    },
-];
-
-// ============================================================================
-// REGEX PATTERNS (203 total) - NOT IMPLEMENTED YET
-// Complex patterns: anchors, character classes, repetition
-// For MVP, we'll implement a subset or skip entirely
-// ============================================================================
-
-pub const REGEX_PATTERN_COUNT: usize = 18; // Implemented in regex_patterns.rs
-pub const URI_PATTERNS_COUNT: usize = 14; // Database URIs (11) + Webhook URLs (3) - Phase B (URI handler)
-
-// ============================================================================
-// SUMMARY & COUNTS
-// ============================================================================
-
-pub const SIMPLE_PREFIX_COUNT: usize = 23; // Removed 4 overly broad patterns (generic-password, etc.)
-pub const PREFIX_VALIDATION_COUNT: usize = 359; // Removed 7 old strict env patterns, added 18 lenient ones (PASSWORD, SECRET, TOKEN, API_KEY, APIKEY, PASSPHRASE variations)
-pub const JWT_COUNT: usize = 1;
-pub const MULTILINE_MARKER_COUNT: usize = 11; // SSH keys + certificate + PGP patterns (Phase 4a-4c)
-
-pub const TOTAL_PATTERNS: usize = SIMPLE_PREFIX_COUNT
-    + PREFIX_VALIDATION_COUNT
-    + JWT_COUNT
-    + MULTILINE_MARKER_COUNT
-    + REGEX_PATTERN_COUNT
-    + URI_PATTERNS_COUNT;
