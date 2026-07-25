@@ -3,6 +3,8 @@
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
+    use crate::streaming::*;
+    use std::sync::Arc;
     use crate::{RedactionConfig, RedactionEngine};
 
     fn test_engine() -> Arc<RedactionEngine> {
