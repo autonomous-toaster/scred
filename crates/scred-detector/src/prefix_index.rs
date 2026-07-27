@@ -128,3 +128,60 @@ pub fn init_prefix_index(patterns: &[GeneralizedMarkerPattern]) -> &'static Pref
 
 
 
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::patterns::PatternTier;
+
+    fn make_test_pattern(name: &'static str, prefix: &'static str) -> GeneralizedMarkerPattern {
+        GeneralizedMarkerPattern {
+            name,
+            start_marker: prefix,
+            end_marker: "",
+            tier: PatternTier::ApiKeys,
+            max_lookahead: 0,
+            contains_keyword: None,
+            exclude_keyword: None,
+            min_body_len: 0,
+            pattern_type: 0,
+        }
+    }
+
+    #[test]
+    fn test_get_candidates_fuzzy_empty_index() {
+        let index = PrefixIndex::build(&[]);
+        let result = index.get_candidates_fuzzy(b"test_data_here", 0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_candidates_fuzzy_no_match() {
+        let patterns = vec![make_test_pattern("test1", "hello")];
+        let index = PrefixIndex::build(&patterns);
+        let result = index.get_candidates_fuzzy(b"world_data_here", 0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_candidates_fuzzy_exact_match() {
+        let patterns = vec![make_test_pattern("test1", "hello_world_prefix")];
+        let index = PrefixIndex::build(&patterns);
+        let result = index.get_candidates_fuzzy(b"hello_world_prefix_and_more", 0);
+        assert!(result.is_some());
+        assert!(!result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_get_candidates_fuzzy_multiple_patterns() {
+        let patterns = vec![
+            make_test_pattern("test1", "hello_prefix_match"),
+            make_test_pattern("test2", "world_prefix_match"),
+        ];
+        let index = PrefixIndex::build(&patterns);
+        let result = index.get_candidates_fuzzy(b"hello_prefix_match_and_more", 0);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().len(), 1);
+    }
+}
