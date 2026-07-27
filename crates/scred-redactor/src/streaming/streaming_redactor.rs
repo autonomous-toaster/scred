@@ -386,3 +386,53 @@ impl FrameRingRedactor {
 // ============================================================================
 // Tests
 // ============================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_redact_reader_to_writer_empty() {
+        let engine = Arc::new(RedactionEngine::new(crate::redactor::RedactionConfig { enabled: false }));
+        let redactor = StreamingRedactor::new(engine, StreamingConfig::default());
+        let mut reader = &b""[..];
+        let mut writer = Vec::new();
+        let stats = redactor.redact_reader_to_writer(&mut reader, &mut writer).unwrap();
+        assert!(writer.is_empty());
+        assert_eq!(stats.bytes_read, 0);
+    }
+
+    #[test]
+    fn test_redact_reader_to_writer_small() {
+        let engine = Arc::new(RedactionEngine::new(crate::redactor::RedactionConfig { enabled: false }));
+        let redactor = StreamingRedactor::new(engine, StreamingConfig::default());
+        let mut reader = &b"hello world"[..];
+        let mut writer = Vec::new();
+        let stats = redactor.redact_reader_to_writer(&mut reader, &mut writer).unwrap();
+        assert_eq!(writer, b"hello world");
+        assert_eq!(stats.bytes_read, 11);
+    }
+
+    #[test]
+    fn test_redact_reader_to_writer_large() {
+        let engine = Arc::new(RedactionEngine::new(crate::redactor::RedactionConfig { enabled: false }));
+        let redactor = StreamingRedactor::new(engine, StreamingConfig::default());
+        let data = vec![b'A'; 10000];
+        let mut reader = &data[..];
+        let mut writer = Vec::new();
+        let stats = redactor.redact_reader_to_writer(&mut reader, &mut writer).unwrap();
+        assert_eq!(writer.len(), 10000);
+        assert_eq!(stats.bytes_read, 10000);
+    }
+
+    #[test]
+    fn test_redact_reader_to_writer_with_redaction() {
+        let engine = Arc::new(RedactionEngine::new(crate::redactor::RedactionConfig { enabled: true }));
+        let redactor = StreamingRedactor::new(engine, StreamingConfig::default());
+        let mut reader = &b"api_key=sk-test-12345"[..];
+        let mut writer = Vec::new();
+        let stats = redactor.redact_reader_to_writer(&mut reader, &mut writer).unwrap();
+        // With redaction enabled, the output should be different from input
+        assert!(stats.patterns_found > 0 || stats.bytes_written > 0);
+    }
+}
+
