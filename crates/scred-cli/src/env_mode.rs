@@ -79,3 +79,44 @@ fn redact_env_line_generic<F: Fn(&str) -> String>(line: &str, redact_fn: F) -> S
 pub fn redact_env_line_configurable(line: &str, config_engine: &ConfigurableEngine) -> String {
     redact_env_line_generic(line, |v| config_engine.redact_only(v))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_redact_env_line_generic_key_value() {
+        let result = redact_env_line_generic("API_KEY=sk-abc123", |v| format!("[REDACTED:{}]", v));
+        assert_eq!(result, "API_KEY=[REDACTED:sk-abc123]");
+    }
+
+    #[test]
+    fn test_redact_env_line_generic_no_value() {
+        let result = redact_env_line_generic("KEY=", |v| format!("[REDACTED:{}]", v));
+        assert_eq!(result, "KEY=[REDACTED:]");
+    }
+
+    #[test]
+    fn test_redact_env_line_generic_no_equals() {
+        let result = redact_env_line_generic("just a comment", |v| format!("[REDACTED:{}]", v));
+        assert_eq!(result, "[REDACTED:just a comment]");
+    }
+
+    #[test]
+    fn test_redact_env_line_generic_export_format() {
+        let result = redact_env_line_generic("export SECRET=abc123", |v| format!("[REDACTED:{}]", v));
+        assert_eq!(result, "export SECRET=[REDACTED:abc123]");
+    }
+
+    #[test]
+    fn test_redact_env_line_generic_quoted_value() {
+        let result = redact_env_line_generic("KEY=\"quoted value\"", |v| format!("[REDACTED:{}]", v));
+        assert_eq!(result, "KEY=[REDACTED:\"quoted value\"]");
+    }
+
+    #[test]
+    fn test_redact_env_line_generic_empty_line() {
+        let result = redact_env_line_generic("", |v| format!("[REDACTED:{}]", v));
+        assert_eq!(result, "");
+    }
+}
