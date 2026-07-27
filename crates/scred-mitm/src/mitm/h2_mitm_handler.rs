@@ -429,4 +429,37 @@ mod tests {
         assert_eq!(result, "text/html");
     }
 
+    #[test]
+    fn test_apply_header_policy_with_disabled_policy() {
+        use std::sync::Arc;
+        use scred_policy::PolicyEngine;
+        let config = scred_config::PolicyConfig {
+            enabled: false,
+            providers: vec![],
+            ..Default::default()
+        };
+        let engine = Arc::new(PolicyEngine::new(config).unwrap());
+        let policy = Some(engine);
+        let name = http::HeaderName::from_static("content-type");
+        let value = http::HeaderValue::from_static("text/html");
+        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &policy);
+        assert_eq!(result, "text/html");
+    }
+
+    #[test]
+    fn test_apply_header_policy_with_enabled_policy() {
+        use std::sync::Arc;
+        use scred_policy::PolicyEngine;
+        let config = scred_config::PolicyConfig {
+            enabled: true,
+            providers: vec![],
+            ..Default::default()
+        };
+        let engine = Arc::new(PolicyEngine::new(config).unwrap());
+        let policy = Some(engine);
+        let name = http::HeaderName::from_static("authorization");
+        let value = http::HeaderValue::from_static("Bearer token-12345");
+        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &policy);
+        assert_eq!(result, "Bearer token-12345");
+    }
 }
