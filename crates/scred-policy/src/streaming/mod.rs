@@ -198,26 +198,12 @@ impl PlaceholderAutomaton {
     /// Single-pass O(n) using tracker's known secrets.
     #[inline]
     pub fn replace_secrets(&self, data: &mut [u8], tracker: &ReplacementTracker) -> usize {
-        if tracker.replacements().is_empty() {
+        let Some(text) = Self::validate_and_get_text(data, tracker) else {
             return 0;
-        }
-
-        let text = match std::str::from_utf8(data) {
-            Ok(t) => t,
-            Err(_) => return 0,
         };
 
-        // Build automaton from tracked secrets (those actually injected)
-        let tracked_secrets: Vec<&str> =
-            tracker.replacements().keys().map(|s| s.as_str()).collect();
-
-        if tracked_secrets.is_empty() {
+        let Some(ac) = Self::build_automaton(tracker) else {
             return 0;
-        }
-
-        let ac = match AhoCorasick::new(&tracked_secrets) {
-            Ok(ac) => ac,
-            Err(_) => return 0,
         };
 
         let matches: Vec<_> = ac.find_iter(text).collect();
@@ -226,12 +212,43 @@ impl PlaceholderAutomaton {
             return 0;
         }
 
-        // Build replacement with placeholders
+        let (result, replacements) = Self::build_replacement_string(text, &matches, tracker);
+        Self::copy_result_back(data, &result);
+
+        replacements
+    }
+
+    /// Validate input and get text slice, returning None if no work to do
+    fn validate_and_get_text<'a>(data: &'a [u8], tracker: &ReplacementTracker) -> Option<&'a str> {
+        if tracker.replacements().is_empty() {
+            return None;
+        }
+        std::str::from_utf8(data).ok()
+    }
+
+    /// Build Aho-Corasick automaton from tracked secrets
+    fn build_automaton(tracker: &ReplacementTracker) -> Option<AhoCorasick> {
+        let tracked_secrets: Vec<&str> =
+            tracker.replacements().keys().map(|s| s.as_str()).collect();
+
+        if tracked_secrets.is_empty() {
+            return None;
+        }
+
+        AhoCorasick::new(&tracked_secrets).ok()
+    }
+
+    /// Build replacement string with placeholders
+    fn build_replacement_string(
+        text: &str,
+        matches: &[aho_corasick::Match],
+        tracker: &ReplacementTracker,
+    ) -> (String, usize) {
         let mut result = String::with_capacity(text.len());
         let mut last_end = 0;
         let mut replacements = 0;
 
-        for m in &matches {
+        for m in matches {
             let secret_value = &text[m.start()..m.end()];
 
             if let Some(placeholder) = tracker.get_placeholder(secret_value) {
@@ -243,16 +260,17 @@ impl PlaceholderAutomaton {
         }
 
         result.push_str(&text[last_end..]);
+        (result, replacements)
+    }
 
-        // Copy back
+    /// Copy replacement result back to data buffer
+    fn copy_result_back(data: &mut [u8], result: &str) {
         let bytes = result.as_bytes();
         let copy_len = bytes.len().min(data.len());
         data[..copy_len].copy_from_slice(&bytes[..copy_len]);
         if copy_len < data.len() {
             data[copy_len..].fill(0);
         }
-
-        replacements
     }
 
     /// Streaming chunk processor for request path
