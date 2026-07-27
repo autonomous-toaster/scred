@@ -574,4 +574,36 @@ mod tests {
         client_read.read_to_end(&mut client_data).await.unwrap();
         assert_eq!(client_data, b"hello", "Should contain body data");
     }
+
+    #[tokio::test]
+    async fn test_stream_response_to_client_basic() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, BufReader, duplex};
+        
+        let (mut upstream_write, mut upstream_read) = duplex(65536);
+        let (mut client_write, mut client_read) = duplex(65536);
+        
+        // Write HTTP response with headers and body
+        upstream_write.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello").await.unwrap();
+        drop(upstream_write);
+        
+        let engine = std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: false },
+        ));
+        let redactor = std::sync::Arc::new(scred_redactor::StreamingRedactor::new(engine, Default::default()));
+        let config = StreamingResponseConfig::default();
+        
+        let mut upstream_buf_reader = BufReader::new(&mut upstream_read);
+        
+        let result = stream_response_to_client(
+            &mut upstream_buf_reader,
+            client_write,
+            "HTTP/1.1 200 OK",
+            redactor,
+            config,
+            None,
+            None,
+            None,
+        ).await;
+        assert!(result.is_ok(), "stream_response_to_client failed: {:?}", result);
+    }
 }
