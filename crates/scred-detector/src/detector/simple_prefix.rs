@@ -70,3 +70,15 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_simple_prefix_threshold() {
+        let threshold = get_simple_prefix_threshold();
+        assert!(threshold > 0);
+        assert!(threshold < 1000);
+    }
+}

@@ -118,3 +118,15 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_validation_threshold() {
+        let threshold = get_validation_threshold();
+        assert!(threshold > 0);
+        assert!(threshold < 100000);
+    }
+}
