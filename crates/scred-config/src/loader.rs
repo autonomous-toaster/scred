@@ -113,17 +113,30 @@ impl ConfigLoader {
 
     /// Validate configuration
     pub fn validate(config: &mut FileConfig) -> Result<()> {
-        // Validate and normalize traffic mode
+        Self::validate_mitm_config(config);
+        Self::validate_proxy_config(config)?;
+
+        // Validate patterns
+        if let Some(cli_cfg) = &config.scred_cli {
+            Self::validate_patterns(&cli_cfg.patterns)?;
+        }
+
+        Ok(())
+    }
+
+    /// Validate and normalize MITM traffic config
+    fn validate_mitm_config(config: &mut FileConfig) {
         if let Some(mitm_cfg) = &mut config.scred_mitm {
-            // If mode is "allow-list", enable traffic filtering
             if let Some(mode) = &mitm_cfg.traffic.mode {
                 if mode == "allow-list" {
                     mitm_cfg.traffic.enabled = true;
                 }
             }
         }
+    }
 
-        // Validate proxy config
+    /// Validate proxy config
+    fn validate_proxy_config(config: &FileConfig) -> Result<()> {
         if let Some(proxy_cfg) = &config.scred_proxy {
             if proxy_cfg.upstream.url.is_none() {
                 return Err(anyhow!(
@@ -133,25 +146,17 @@ impl ConfigLoader {
                 ));
             }
 
-            // Validate upstream URL format
             if let Some(url) = &proxy_cfg.upstream.url {
                 url.parse::<http::Uri>()
                     .map_err(|e| anyhow!("Invalid upstream URL '{}': {}", url, e))?;
             }
 
-            // Validate path rules
             for rule in &proxy_cfg.rules {
                 if rule.path.is_empty() {
                     return Err(anyhow!("Path rule has empty path"));
                 }
             }
         }
-
-        // Validate patterns
-        if let Some(cli_cfg) = &config.scred_cli {
-            Self::validate_patterns(&cli_cfg.patterns)?;
-        }
-
         Ok(())
     }
 
@@ -287,5 +292,19 @@ mod tests {
     fn test_default_block_message() {
         let msg = default_block_message();
         assert!(!msg.is_empty());
+    }
+
+    #[test]
+    fn test_validate_mitm_config_none() {
+        let mut config = FileConfig::default();
+        config.scred_mitm = None;
+        ConfigLoader::validate_mitm_config(&mut config);
+    }
+
+    #[test]
+    fn test_validate_proxy_config_none() {
+        let config = FileConfig::default();
+        let result = ConfigLoader::validate_proxy_config(&config);
+        assert!(result.is_ok());
     }
 }
