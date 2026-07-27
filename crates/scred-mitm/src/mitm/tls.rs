@@ -526,9 +526,36 @@ mod tests {
     }
 
     #[test]
-    fn test_write_cert_to_disk_and_cache_to_memory() {
-        // These are async methods that need a valid CertificateGenerator
-        // Testing them requires integration-level setup
-        // This test verifies the function signatures compile
+    fn test_certificate_generator_new_success() {
+        use std::path::PathBuf;
+        // Create temp dir for CA files
+        let temp_dir = std::env::temp_dir().join("scred-test-ca");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        
+        let ca_key_path = temp_dir.join("ca-key.pem");
+        let ca_cert_path = temp_dir.join("ca-cert.pem");
+        
+        // Generate CA files
+        let result = CertificateGenerator::generate_ca_if_missing(&ca_key_path, &ca_cert_path);
+        assert!(result.is_ok());
+        
+        // Now create CertificateGenerator with valid CA
+        let cache_dir = temp_dir.join("cache");
+        let gen = CertificateGenerator::new(&ca_key_path, &ca_cert_path, &cache_dir);
+        assert!(gen.is_ok());
+        
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_certificate_generator_new_missing_key() {
+        let result = CertificateGenerator::new(
+            &PathBuf::from("/tmp/nonexistent-ca-key.pem"),
+            &PathBuf::from("/tmp/nonexistent-ca-cert.pem"),
+            &PathBuf::from("/tmp/nonexistent-cache"),
+        );
+        assert!(result.is_err());
     }
 }
