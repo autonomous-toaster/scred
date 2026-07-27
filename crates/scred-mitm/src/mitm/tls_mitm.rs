@@ -694,5 +694,30 @@ mod tests {
         log_redaction_mode();
     }
 
-
+    #[tokio::test]
+    async fn test_forward_response_no_redaction_headers_only() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, duplex};
+        
+        let (mut upstream_write, mut upstream_read) = duplex(65536);
+        let (mut client_write, mut client_read) = duplex(65536);
+        
+        // Write HTTP response with headers only (no body)
+        upstream_write.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n").await.unwrap();
+        drop(upstream_write);
+        
+        let result = forward_response_no_redaction(
+            &mut upstream_read,
+            &mut client_write,
+            "HTTP/1.1 200 OK",
+        ).await;
+        assert!(result.is_ok(), "forward_response_no_redaction failed: {:?}", result);
+        
+        // Read the output from client
+        drop(client_write);
+        let mut output = Vec::new();
+        client_read.read_to_end(&mut output).await.unwrap();
+        let output_str = String::from_utf8_lossy(&output);
+        assert!(output_str.contains("HTTP/1.1 200 OK"), "Should contain status line");
+        assert!(output_str.contains("Content-Type: text/plain"), "Should contain content-type");
+    }
 }
