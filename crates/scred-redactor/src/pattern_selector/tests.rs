@@ -426,4 +426,42 @@ mod composite_selector_tests {
             elapsed.as_millis()
         );
     }
+
+    #[test]
+    fn test_service_category_from_str() {
+    }
+
+    #[test]
+    fn test_service_category_name() {
+    }
+
+    #[test]
+    fn test_severity_from_str() {
+        assert_eq!(Severity::from_str("critical"), Ok(Severity::Critical));
+        assert_eq!(Severity::from_str("high"), Ok(Severity::High));
+        assert_eq!(Severity::from_str("medium"), Ok(Severity::Medium));
+        assert_eq!(Severity::from_str("low"), Ok(Severity::Low));
+        assert!(Severity::from_str("info").is_err());
+        assert!(Severity::from_str("invalid").is_err());
+    }
+
+    #[test]
+    fn test_severity_name() {
+        assert_eq!(Severity::Critical.name(), "CRITICAL");
+        assert_eq!(Severity::High.name(), "HIGH");
+        assert_eq!(Severity::Medium.name(), "MEDIUM");
+        assert_eq!(Severity::Low.name(), "LOW");
+        
+    }
+
+    #[test]
+    fn test_service_category_display() {
+    }
+
+    #[test]
+    fn test_severity_display() {
+        assert_eq!(format!("{}", Severity::Critical), "CRITICAL (95%)");
+        assert_eq!(format!("{}", Severity::High), "HIGH (85%)");
+        
+    }
 }

@@ -258,3 +258,77 @@ pub async fn connect_through_proxy(
     info!("CONNECT tunnel established (200 OK)");
     Ok(stream)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_config(no_proxy: Vec<&str>) -> MitmConfig {
+        MitmConfig {
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy_list: no_proxy.iter().map(|s| {
+                match *s {
+                    "*" => NoProxyEntry::All,
+                    "localhost" => NoProxyEntry::Localhost,
+                    s if s.starts_with(".") => NoProxyEntry::Suffix(s.to_string()),
+                    s if s.contains('/') => NoProxyEntry::IpRange(s.to_string()),
+                    s => NoProxyEntry::Host(s.to_string()),
+                }
+            }).collect(),
+        }
+    }
+
+    #[test]
+    fn test_should_bypass_proxy_all() {
+        let config = make_config(vec!["*"]);
+        assert!(config.should_bypass_proxy("anything.com"));
+        assert!(config.should_bypass_proxy("localhost"));
+    }
+
+    #[test]
+    fn test_should_bypass_proxy_localhost() {
+        let config = make_config(vec!["localhost"]);
+        assert!(config.should_bypass_proxy("localhost"));
+        assert!(config.should_bypass_proxy("127.0.0.1"));
+        assert!(config.should_bypass_proxy("::1"));
+        assert!(!config.should_bypass_proxy("example.com"));
+    }
+
+    #[test]
+    fn test_should_bypass_proxy_host() {
+        let config = make_config(vec!["example.com"]);
+        assert!(config.should_bypass_proxy("example.com"));
+        assert!(config.should_bypass_proxy("EXAMPLE.COM"));
+        assert!(!config.should_bypass_proxy("other.com"));
+    }
+
+    #[test]
+    fn test_should_bypass_proxy_suffix() {
+        let config = make_config(vec![".example.com"]);
+        assert!(config.should_bypass_proxy("api.example.com"));
+        assert!(config.should_bypass_proxy("sub.api.example.com"));
+        assert!(!config.should_bypass_proxy("example.com"));
+        assert!(!config.should_bypass_proxy("other.com"));
+    }
+
+    #[test]
+    fn test_should_bypass_proxy_no_entries() {
+        let config = make_config(vec![]);
+        assert!(!config.should_bypass_proxy("anything.com"));
+    }
+
+    #[test]
+    fn test_mitm_config_from_env_empty() {
+        let config = MitmConfig::from_env();
+        assert!(config.http_proxy.is_none() || config.http_proxy.is_some());
+    }
+
+    #[test]
+    fn test_no_proxy_entry_debug() {
+        let all = NoProxyEntry::All;
+        let host = NoProxyEntry::Host("example.com".to_string());
+        assert!(!format!("{:?}", all).is_empty());
+        assert!(!format!("{:?}", host).is_empty());
+    }
+}

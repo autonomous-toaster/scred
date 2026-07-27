@@ -278,3 +278,14 @@ impl Default for TrafficPolicyConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_block_message() {
+        let msg = default_block_message();
+        assert!(!msg.is_empty());
+    }
+}

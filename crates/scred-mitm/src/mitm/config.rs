@@ -458,4 +458,58 @@ mod tests {
         // In test environment, there should be no SCRED_ vars
         assert!(vars.is_empty() || vars.iter().all(|(k, _)| k.starts_with("SCRED_")));
     }
+
+    #[test]
+    fn test_apply_proxy_env_overrides_no_env() {
+        let mut config = Config::default();
+        let original_listen = config.proxy.listen.clone();
+        config.apply_proxy_env_overrides();
+        assert_eq!(config.proxy.listen, original_listen);
+    }
+
+    #[test]
+    fn test_apply_tls_env_overrides_no_env() {
+        let mut config = Config::default();
+        let original_ca_key = config.tls.ca_key.clone();
+        config.apply_tls_env_overrides();
+        assert_eq!(config.tls.ca_key, original_ca_key);
+    }
+
+    #[test]
+    fn test_apply_logging_env_overrides_no_env() {
+        let mut config = Config::default();
+        let original_level = config.logging.level.clone();
+        config.apply_logging_env_overrides();
+        assert_eq!(config.logging.level, original_level);
+    }
+
+    #[test]
+    fn test_apply_secrets_env_overrides_no_env() {
+        let mut config = Config::default();
+        let original_patterns = config.secrets.patterns.clone();
+        config.apply_secrets_env_overrides();
+        assert_eq!(config.secrets.patterns, original_patterns);
+    }
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert_eq!(config.proxy.listen, "127.0.0.1:8080");
+        assert_eq!(config.proxy.max_connections, 1000);
+    }
+
+    #[test]
+    fn test_tls_config_default() {
+        let config = Config::default();
+        assert!(config.tls.ca_key.to_string_lossy().contains("ca"));
+        assert!(config.tls.ca_cert.to_string_lossy().contains("ca"));
+    }
+
+    #[test]
+    fn test_logging_config_default() {
+        let config = Config::default();
+        assert_eq!(config.logging.level, "info");
+    }
+
+
 }

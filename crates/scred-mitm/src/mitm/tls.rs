@@ -456,4 +456,35 @@ mod tests {
         );
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_generate_cert_signed_by_ca_fails_without_ca() {
+        let result = generate_cert_signed_by_ca(
+            "test.example.com",
+            b"invalid-key",
+            b"invalid-cert",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_ca_if_missing_fails_with_bad_paths() {
+        let result = CertificateGenerator::generate_ca_if_missing(
+            &PathBuf::from("/nonexistent/ca-key.pem"),
+            &PathBuf::from("/nonexistent/ca-cert.pem"),
+        );
+        // Should succeed because files don't exist and it will try to create them
+        // But will fail because /nonexistent is not writable
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_certificate_generator_get_or_generate_cert_fails_without_ca() {
+        let gen = CertificateGenerator::new(
+            &PathBuf::from("/tmp/nonexistent-ca-key.pem"),
+            &PathBuf::from("/tmp/nonexistent-ca-cert.pem"),
+            &PathBuf::from("/tmp/nonexistent-cache"),
+        );
+        assert!(gen.is_err());
+    }
 }
