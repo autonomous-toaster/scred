@@ -234,7 +234,14 @@ impl Config {
 
     /// Apply environment variable overrides to config
     fn apply_env_overrides(&mut self) {
-        // Proxy config overrides
+        self.apply_proxy_env_overrides();
+        self.apply_tls_env_overrides();
+        self.apply_logging_env_overrides();
+        self.apply_secrets_env_overrides();
+    }
+
+    /// Apply proxy config overrides from environment variables
+    fn apply_proxy_env_overrides(&mut self) {
         if let Ok(listen) = std::env::var("SCRED_LISTEN") {
             self.proxy.listen = listen;
         }
@@ -251,14 +258,16 @@ impl Config {
                 "passthrough" => RedactionMode::Passthrough,
                 "detect" | "detect-only" => RedactionMode::DetectOnly,
                 "redact" => RedactionMode::Redact,
-                _ => RedactionMode::DetectOnly, // Default
+                _ => RedactionMode::DetectOnly,
             };
         }
         if let Ok(h2_redact) = std::env::var("SCRED_H2_REDACT_HEADERS") {
             self.proxy.h2_redact_headers = h2_redact.to_lowercase() != "false" && h2_redact != "0";
         }
+    }
 
-        // TLS config overrides
+    /// Apply TLS config overrides from environment variables
+    fn apply_tls_env_overrides(&mut self) {
         if let Ok(ca_key) = std::env::var("SCRED_CA_KEY") {
             self.tls.ca_key = PathBuf::from(ca_key);
         }
@@ -268,8 +277,10 @@ impl Config {
         if let Ok(cert_cache) = std::env::var("SCRED_CERT_CACHE_DIR") {
             self.tls.cert_cache_dir = PathBuf::from(cert_cache);
         }
+    }
 
-        // Logging config overrides
+    /// Apply logging config overrides from environment variables
+    fn apply_logging_env_overrides(&mut self) {
         if let Ok(level) = std::env::var("SCRED_LOG_LEVEL") {
             self.logging.level = level;
         }
@@ -279,8 +290,10 @@ impl Config {
         if let Ok(output) = std::env::var("SCRED_LOG_OUTPUT") {
             self.logging.output = output;
         }
+    }
 
-        // Secret patterns override
+    /// Apply secrets config overrides from environment variables
+    fn apply_secrets_env_overrides(&mut self) {
         if let Ok(patterns) = std::env::var("SCRED_PATTERNS") {
             self.secrets.patterns = patterns.split(',').map(|s| s.trim().to_string()).collect();
         }
