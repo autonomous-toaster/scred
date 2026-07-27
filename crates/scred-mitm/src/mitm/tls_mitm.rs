@@ -31,6 +31,75 @@ use scred_http::upstream_h2_client::{extract_upstream_protocol, UpstreamConnecti
 use scred_redactor::StreamingRedactor;
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
 
+/// Load and parse TLS certificate and private key from PEM data
+fn load_tls_certificate(cert_pem: &[u8], key_pem: &[u8]) -> Result<(Vec<Certificate>, PrivateKey)> {
+    let mut cert_reader = Cursor::new(cert_pem);
+    let certs: Vec<_> = rustls_pemfile::certs(&mut cert_reader)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| anyhow!("Failed to parse certificate: {}", e))?;
+
+    if certs.is_empty() {
+        return Err(anyhow!("No certificates found in PEM"));
+    }
+
+    let cert_chain: Vec<Certificate> = certs
+        .into_iter()
+        .map(|c| Certificate(c.as_ref().to_vec()))
+        .collect();
+
+    let mut key_reader = Cursor::new(key_pem);
+    let parsed_keys: Vec<_> = rustls_pemfile::pkcs8_private_keys(&mut key_reader)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| anyhow!("Failed to parse private key: {}", e))?;
+
+    if parsed_keys.is_empty() {
+        return Err(anyhow!("No private keys found in PEM"));
+    }
+
+    let private_key = PrivateKey(parsed_keys[0].secret_pkcs8_der().to_vec());
+    Ok((cert_chain, private_key))
+}
+
+/// Build TLS ServerConfig with ALPN protocols
+fn build_tls_server_config(
+    cert_chain: Vec<Certificate>,
+    private_key: PrivateKey,
+) -> Result<ServerConfig> {
+    let mut server_config = ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth()
+        .with_single_cert(cert_chain, private_key)
+        .map_err(|e| anyhow!("Failed to build TLS config: {}", e))?;
+
+    use scred_http::h2::alpn::alpn_protocols;
+    server_config.alpn_protocols = alpn_protocols();
+    Ok(server_config)
+}
+
+/// Accept TLS from client and extract negotiated ALPN protocol
+async fn accept_client_tls(
+    acceptor: &tokio_rustls::TlsAcceptor,
+    duplex: DuplexSocket<tokio::net::tcp::OwnedReadHalf, tokio::net::tcp::OwnedWriteHalf>,
+) -> Result<(impl AsyncReadExt + AsyncWriteExt + Unpin, HttpProtocol)> {
+    debug!("Accepting TLS connection from client...");
+    let client_tls = acceptor.accept(duplex).await
+        .map_err(|e| {
+            error!("Client TLS handshake failed: {}", e);
+            anyhow!("Client TLS handshake failed: {}", e)
+        })?;
+
+    let negotiated_protocol = client_tls.get_ref().1.alpn_protocol()
+        .and_then(|proto| HttpProtocol::from_bytes(proto))
+        .unwrap_or(HttpProtocol::Http11);
+
+    info!(
+        "Client TLS handshake successful, HTTP decrypted, protocol: {}",
+        negotiated_protocol
+    );
+
+    Ok((client_tls, negotiated_protocol))
+}
+
 /// Execute REAL TLS MITM with full streaming support (Phase 6)
 ///
 /// This function implements the complete man-in-the-middle with streaming:
@@ -62,82 +131,21 @@ pub async fn handle_tls_mitm(
     debug!("Certificate loaded/generated for: {}", host);
 
     // Step 2: Parse certificate and key for rustls
-    let mut cert_reader = Cursor::new(&cert_pem);
-    let certs: Vec<_> = rustls_pemfile::certs(&mut cert_reader)
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| anyhow!("Failed to parse certificate: {}", e))?;
+    let (cert_chain, private_key) = load_tls_certificate(&cert_pem, &key_pem)?;
 
-    if certs.is_empty() {
-        return Err(anyhow!("No certificates found in PEM"));
-    }
-
-    let cert_chain: Vec<Certificate> = certs
-        .into_iter()
-        .map(|c| Certificate(c.as_ref().to_vec()))
-        .collect();
-
-    let mut key_reader = Cursor::new(&key_pem);
-    let parsed_keys: Vec<_> = rustls_pemfile::pkcs8_private_keys(&mut key_reader)
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| anyhow!("Failed to parse private key: {}", e))?;
-
-    if parsed_keys.is_empty() {
-        return Err(anyhow!("No private keys found in PEM"));
-    }
-
-    let private_key = PrivateKey(parsed_keys[0].secret_pkcs8_der().to_vec());
-
-    // Step 3: Build TLS ServerConfig (this accepts TLS FROM the client!)
-    let mut server_config = ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth()
-        .with_single_cert(cert_chain, private_key)
-        .map_err(|e| anyhow!("Failed to build TLS config: {}", e))?;
-
-    // Add ALPN protocols: advertise both HTTP/2 and HTTP/1.1 to downstream clients
-    // Phase 1: If client selects HTTP/2, downgrade to HTTP/1.1 (transparent fallback)
-    // Full HTTP/2 support with frame forwarding with h2_reader and transcode modules
-    use scred_http::h2::alpn::alpn_protocols;
-    server_config.alpn_protocols = alpn_protocols();
-
+    // Step 3: Build TLS ServerConfig
+    let server_config = build_tls_server_config(cert_chain, private_key)?;
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
 
     // Step 4: Combine split socket halves using DuplexSocket
     let duplex = DuplexSocket::new(client_read, client_write);
 
-    // Step 5: Accept TLS FROM client - THIS IS THE KEY STEP!
-    debug!("Accepting TLS connection from client...");
-    let mut client_tls = acceptor.accept(duplex).await
-        .map_err(|e| {
-            error!("Client TLS handshake failed: {}", e);
-            anyhow!("Client TLS handshake failed: {}", e)
-        })?;
-
-    // Extract negotiated ALPN protocol
-    let negotiated_protocol = client_tls.get_ref().1.alpn_protocol()
-        .and_then(|proto| HttpProtocol::from_bytes(proto))
-        .unwrap_or(HttpProtocol::Http11);
-
-    info!(
-        "Client TLS handshake successful, HTTP decrypted, protocol: {}",
-        negotiated_protocol
-    );
+    // Step 5: Accept TLS FROM client
+    let (mut client_tls, negotiated_protocol) = accept_client_tls(&acceptor, duplex).await?;
 
     // Smart Routing: Handle HTTP/2 upstream based on client protocol and upstream type
-    // 
-    // Decision Tree (from autoresearch.md):
-    // 1. Did client negotiate H2 via ALPN?
-    //    YES → Check upstream type (proxy vs direct)
-    //    NO → Use existing HTTP/1.1 path (scenarios 1-3)
-    //
-    // 2. Is upstream a proxy (contains "://")?
-    //    YES → Scenario 3: H2 client via proxy → transcode via H2UpstreamClient
-    //    NO → Scenario 4: H2 client direct → use frame_forwarder for H2↔H2
-    
     if negotiated_protocol.is_h2() {
-        // Client negotiated HTTP/2 - use transcoding for both proxy and direct upstreams
         info!("H2 Client: Using H2 transcoding");
-        
         return handle_h2_client_transcoding(
             client_tls,
             host,
