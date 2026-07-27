@@ -402,48 +402,63 @@ impl PlaceholderAutomaton {
         let tracked_secrets: Vec<&str> =
             tracker.replacements().keys().map(|s| s.as_str()).collect();
 
-        let ac = match AhoCorasick::new(&tracked_secrets) {
-            Ok(ac) => ac,
-            Err(_) => {
-                lookahead.clear();
-                return (combined, 0);
-            }
+        let Ok(ac) = AhoCorasick::new(&tracked_secrets) else {
+            lookahead.clear();
+            return (combined, 0);
         };
 
-        let text = match std::str::from_utf8(&combined) {
-            Ok(t) => t,
-            Err(_) => {
-                lookahead.clear();
-                return (combined, 0);
-            }
+        let Ok(text) = std::str::from_utf8(&combined) else {
+            lookahead.clear();
+            return (combined, 0);
         };
 
         let matches: Vec<_> = ac.find_iter(text).collect();
 
         if matches.is_empty() {
-            if is_eof {
-                lookahead.clear();
-                return (combined, 0);
-            }
-            let max_secret_len = tracker
-                .replacements()
-                .keys()
-                .map(|s| s.len())
-                .max()
-                .unwrap_or(64);
-            let keep = combined.len().saturating_sub(max_secret_len);
-            let output = combined[..keep].to_vec();
-            lookahead.clear();
-            lookahead.extend_from_slice(&combined[keep..]);
-            return (output, 0);
+            return Self::handle_no_matches_response(&combined, lookahead, tracker, is_eof);
         }
 
-        // Build output with placeholders
+        Self::process_matches_response(&combined, text, &matches, lookahead, tracker, is_eof)
+    }
+
+    /// Handle case when no matches found in response chunk
+    fn handle_no_matches_response(
+        combined: &[u8],
+        lookahead: &mut Vec<u8>,
+        tracker: &ReplacementTracker,
+        is_eof: bool,
+    ) -> (Vec<u8>, usize) {
+        if is_eof {
+            lookahead.clear();
+            return (combined.to_vec(), 0);
+        }
+        let max_secret_len = tracker
+            .replacements()
+            .keys()
+            .map(|s| s.len())
+            .max()
+            .unwrap_or(64);
+        let keep = combined.len().saturating_sub(max_secret_len);
+        let output = combined[..keep].to_vec();
+        lookahead.clear();
+        lookahead.extend_from_slice(&combined[keep..]);
+        (output, 0)
+    }
+
+    /// Process matches in response chunk with lookahead handling
+    fn process_matches_response(
+        combined: &[u8],
+        text: &str,
+        matches: &[aho_corasick::Match],
+        lookahead: &mut Vec<u8>,
+        tracker: &ReplacementTracker,
+        is_eof: bool,
+    ) -> (Vec<u8>, usize) {
         let mut result = Vec::with_capacity(combined.len());
         let mut last_end = 0;
         let mut replacements = 0;
 
-        for m in &matches {
+        for m in matches {
             let secret_value = &text[m.start()..m.end()];
 
             if let Some(placeholder) = tracker.get_placeholder(secret_value) {
