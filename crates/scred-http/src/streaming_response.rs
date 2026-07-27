@@ -539,4 +539,39 @@ mod tests {
         let result = String::from_utf8_lossy(&output);
         assert!(result.contains("X-SCRED-Redacted"));
     }
+
+    #[tokio::test]
+    async fn test_stream_response_body_content_length_passthrough_basic() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, BufReader, duplex};
+        
+        let (mut upstream_write, mut upstream_read) = duplex(65536);
+        let (mut client_write, mut client_read) = duplex(65536);
+        
+        // Write body data to upstream
+        upstream_write.write_all(b"hello").await.unwrap();
+        drop(upstream_write);
+        
+        let engine = std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: false },
+        ));
+        let redactor = std::sync::Arc::new(scred_redactor::StreamingRedactor::new(engine, Default::default()));
+        let config = StreamingResponseConfig::default();
+        
+        let mut upstream_buf_reader = BufReader::new(&mut upstream_read);
+        
+        let result = stream_response_body_content_length_passthrough(
+            &mut upstream_buf_reader,
+            &mut client_write,
+            5,
+            redactor,
+            &config,
+        ).await;
+        assert!(result.is_ok(), "stream_response_body_content_length_passthrough failed: {:?}", result);
+        
+        // Read what was sent to client
+        drop(client_write);
+        let mut client_data = Vec::new();
+        client_read.read_to_end(&mut client_data).await.unwrap();
+        assert_eq!(client_data, b"hello", "Should contain body data");
+    }
 }
