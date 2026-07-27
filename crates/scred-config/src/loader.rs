@@ -77,15 +77,19 @@ impl ConfigLoader {
 
     /// Apply environment variable overrides to configuration
     fn apply_env_overrides(mut config: FileConfig) -> Result<FileConfig> {
-        // Example env var patterns:
-        // SCRED_PROXY_LISTEN_PORT=9999
-        // SCRED_PROXY_UPSTREAM_URL=https://backend.example.com
-        // SCRED_CLI_STREAMING=true
+        Self::apply_proxy_env_overrides(&mut config);
+        Self::apply_cli_env_overrides(&mut config);
+        Self::apply_mitm_env_overrides(&mut config);
+        Ok(config)
+    }
 
-        // Proxy overrides
+    /// Apply proxy env var overrides
+    fn apply_proxy_env_overrides(config: &mut FileConfig) {
         if let Ok(port) = env::var("SCRED_PROXY_LISTEN_PORT") {
             if let Some(proxy_cfg) = &mut config.scred_proxy {
-                proxy_cfg.listen.port = Some(port.parse()?);
+                if let Ok(p) = port.parse() {
+                    proxy_cfg.listen.port = Some(p);
+                }
             }
         }
         if let Ok(url) = env::var("SCRED_PROXY_UPSTREAM_URL") {
@@ -93,22 +97,26 @@ impl ConfigLoader {
                 proxy_cfg.upstream.url = Some(url);
             }
         }
+    }
 
-        // CLI overrides
+    /// Apply CLI env var overrides
+    fn apply_cli_env_overrides(config: &mut FileConfig) {
         if let Ok(streaming) = env::var("SCRED_CLI_STREAMING") {
             if let Some(cli_cfg) = &mut config.scred_cli {
                 cli_cfg.streaming = streaming.to_lowercase() == "true";
             }
         }
+    }
 
-        // MITM overrides
+    /// Apply MITM env var overrides
+    fn apply_mitm_env_overrides(config: &mut FileConfig) {
         if let Ok(port) = env::var("SCRED_MITM_LISTEN_PORT") {
             if let Some(mitm_cfg) = &mut config.scred_mitm {
-                mitm_cfg.listen.port = Some(port.parse()?);
+                if let Ok(p) = port.parse() {
+                    mitm_cfg.listen.port = Some(p);
+                }
             }
         }
-
-        Ok(config)
     }
 
     /// Validate configuration
@@ -305,6 +313,34 @@ mod tests {
     fn test_validate_proxy_config_none() {
         let config = FileConfig::default();
         let result = ConfigLoader::validate_proxy_config(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_proxy_env_overrides_no_env() {
+        let mut config = FileConfig::default();
+        ConfigLoader::apply_proxy_env_overrides(&mut config);
+        // Should not panic, config unchanged
+    }
+
+    #[test]
+    fn test_apply_cli_env_overrides_no_env() {
+        let mut config = FileConfig::default();
+        ConfigLoader::apply_cli_env_overrides(&mut config);
+        // Should not panic, config unchanged
+    }
+
+    #[test]
+    fn test_apply_mitm_env_overrides_no_env() {
+        let mut config = FileConfig::default();
+        ConfigLoader::apply_mitm_env_overrides(&mut config);
+        // Should not panic, config unchanged
+    }
+
+    #[test]
+    fn test_apply_env_overrides_no_env() {
+        let config = FileConfig::default();
+        let result = ConfigLoader::apply_env_overrides(config);
         assert!(result.is_ok());
     }
 }
