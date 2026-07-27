@@ -12,6 +12,133 @@ use tracing::debug;
 use crate::chunked_parser::ChunkedParser;
 use crate::http_headers::parse_http_headers;
 
+/// Normalize Location header by removing default ports and optionally rewriting to proxy
+fn normalize_location_header(
+    headers: &mut Vec<(String, String)>,
+    upstream_host: Option<&str>,
+    proxy_host: Option<&str>,
+    client_scheme: Option<&str>,
+) {
+    let Some(location_pos) = headers
+        .iter()
+        .position(|(k, _)| k.eq_ignore_ascii_case("Location"))
+    else {
+        return;
+    };
+
+    let mut location = headers[location_pos].1.clone();
+    debug!("[Location] Found Location header: {}", location);
+
+    // Remove :443 from https:// URLs and :80 from http:// URLs
+    if location.contains("https://") && location.contains(":443/") {
+        location = location.replace(":443/", "/");
+        debug!("[Location] Normalized (removed default HTTPS port): {}", location);
+    } else if location.contains("http://") && location.contains(":80/") {
+        location = location.replace(":80/", "/");
+        debug!("[Location] Normalized (removed default HTTP port): {}", location);
+    }
+
+    // Optionally rewrite Location headers to point back to proxy
+    if let Some(proxy_hostname) = proxy_host {
+        if crate::location_rewriter::is_absolute_uri(&location) {
+            let scheme = client_scheme.unwrap_or("http");
+            let rewritten = crate::location_rewriter::rewrite_location_to_proxy(
+                &location, scheme, proxy_hostname,
+            );
+            headers[location_pos].1 = rewritten.clone();
+            debug!("[Location] Rewriting absolute-URI to proxy: {} → {}", location, rewritten);
+            return;
+        }
+    }
+
+    headers[location_pos].1 = location;
+}
+
+/// Forward response line and headers to client with redaction
+async fn forward_response_headers<W: AsyncWriteExt + Unpin>(
+    client_writer: &mut W,
+    response_line: &str,
+    headers: &[(String, String)],
+    redactor: &StreamingRedactor,
+    config: &StreamingResponseConfig,
+) -> Result<scred_redactor::StreamingStats> {
+    client_writer
+        .write_all(format!("{}\r\n", response_line).as_bytes())
+        .await?;
+
+    let mut forwarded_headers = headers
+        .iter()
+        .filter(|(k, _)| {
+            !k.eq_ignore_ascii_case("content-length")
+                && !k.eq_ignore_ascii_case("transfer-encoding")
+                && !k.eq_ignore_ascii_case("connection")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    forwarded_headers.push(("Connection".to_string(), "close".to_string()));
+    if config.add_scred_header {
+        forwarded_headers.push(("X-SCRED-Redacted".to_string(), "true".to_string()));
+    }
+
+    let mut headers_text = String::new();
+    for (key, value) in &forwarded_headers {
+        headers_text.push_str(key);
+        headers_text.push_str(": ");
+        headers_text.push_str(value);
+        headers_text.push_str("\r\n");
+    }
+
+    let (redacted_headers, header_stats) = redactor.redact_buffer(headers_text.as_bytes());
+    client_writer.write_all(redacted_headers.as_bytes()).await?;
+    client_writer.write_all(b"\r\n").await?;
+
+    if header_stats.patterns_found > 0 {
+        debug!(
+            "[REDACTION] Headers: {} patterns found and redacted",
+            header_stats.patterns_found
+        );
+    }
+
+    Ok(header_stats)
+}
+
+/// Stream response body through redactor based on content-length or chunked encoding
+async fn stream_response_body<R, W>(
+    upstream_reader: &mut BufReader<R>,
+    client_writer: &mut W,
+    headers: &crate::http_headers::HttpHeaders,
+    redactor: Arc<StreamingRedactor>,
+    config: &StreamingResponseConfig,
+    response_line: &str,
+) -> Result<StreamingStats>
+where
+    R: AsyncReadExt + Unpin,
+    W: AsyncWriteExt + Unpin,
+{
+    let should_have_no_body = response_is_head_or_bodyless(response_line);
+
+    if should_have_no_body {
+        debug!("[streaming] Response has no body by status/method semantics");
+        return Ok(StreamingStats::default());
+    }
+
+    if let Some(content_length) = headers.content_length {
+        stream_response_body_content_length_passthrough(
+            upstream_reader, client_writer, content_length, redactor, config,
+        )
+        .await
+    } else if headers.is_chunked() {
+        stream_response_body_chunked_passthrough(
+            upstream_reader, client_writer, redactor, config,
+        )
+        .await
+    } else {
+        debug!("[streaming] No response body");
+        Ok(StreamingStats::default())
+    }
+}
+
 /// Configuration for streaming response handling
 #[derive(Clone, Debug)]
 pub struct StreamingResponseConfig {
@@ -78,14 +205,7 @@ where
         debug!("[streaming] Response headers parsed");
     }
 
-    // 2. Forward response line to client
-    client_writer
-        .write_all(format!("{}\r\n", response_line).as_bytes())
-        .await?;
-
-    // 3. Forward headers + normalize downstream framing for streamed redaction.
-    // We strip any upstream body-length framing and enforce Connection: close so
-    // downstream clients can delimit the streamed body by connection end.
+    // 2. Build forwarded headers list
     let mut forwarded_headers = headers
         .headers
         .iter()
@@ -97,133 +217,31 @@ where
         .cloned()
         .collect::<Vec<_>>();
 
-    // ALWAYS normalize Location headers by removing default ports
-    // This should run regardless of whether we're rewriting for proxy transparency
-    if let Some(location_pos) = forwarded_headers
-        .iter()
-        .position(|(k, _)| k.eq_ignore_ascii_case("Location"))
-    {
-        let mut location = forwarded_headers[location_pos].1.clone();
-        debug!("[Location] Found Location header: {}", location);
+    // 3. Normalize Location headers
+    normalize_location_header(&mut forwarded_headers, upstream_host, proxy_host, client_scheme);
 
-        // Remove :443 from https:// URLs and :80 from http:// URLs
-        if location.contains("https://") && location.contains(":443/") {
-            location = location.replace(":443/", "/");
-            debug!(
-                "[Location] Normalized (removed default HTTPS port): {}",
-                location
-            );
-        } else if location.contains("http://") && location.contains(":80/") {
-            location = location.replace(":80/", "/");
-            debug!(
-                "[Location] Normalized (removed default HTTP port): {}",
-                location
-            );
-        } else {
-            debug!(
-                "[Location] No normalization needed (https={}, :443/={})",
-                location.contains("https://"),
-                location.contains(":443/")
-            );
-        }
+    // 4. Forward response line and headers to client
+    let header_stats = forward_response_headers(
+        &mut client_writer,
+        response_line,
+        &forwarded_headers,
+        &redactor,
+        &config,
+    )
+    .await?;
 
-        // Now optionally rewrite Location headers to point back to proxy (if applicable)
-        if let Some(_upstream_hostname) = upstream_host {
-            if let Some(proxy_hostname) = proxy_host {
-                // Check if location is an absolute-URI (contains ://)
-                if crate::location_rewriter::is_absolute_uri(&location) {
-                    // For HTTP proxy mode, rewrite ALL absolute-URI redirects back through the proxy
-                    // This maintains proxy transparency even for redirects to other hosts
-                    let scheme = client_scheme.unwrap_or("http");
-                    let rewritten_location = crate::location_rewriter::rewrite_location_to_proxy(
-                        &location,
-                        scheme,
-                        proxy_hostname,
-                    );
+    // 5. Stream body through redactor
+    let mut stats = stream_response_body(
+        upstream_reader,
+        &mut client_writer,
+        &headers,
+        redactor,
+        &config,
+        response_line,
+    )
+    .await?;
 
-                    forwarded_headers[location_pos].1 = rewritten_location.clone();
-                    debug!(
-                        "[Location] Rewriting absolute-URI to proxy: {} → {}",
-                        location, rewritten_location
-                    );
-                } else {
-                    debug!("[Location] NOT rewriting (relative URI): {}", location);
-                    forwarded_headers[location_pos].1 = location;
-                }
-            } else {
-                // upstream_hostname provided but not proxy_hostname - just use normalized
-                debug!(
-                    "[Location] No proxy_hostname, using normalized: {}",
-                    location
-                );
-                forwarded_headers[location_pos].1 = location;
-            }
-        } else {
-            // No upstream hostname - just use normalized version
-            debug!(
-                "[Location] No upstream_hostname, using normalized: {}",
-                location
-            );
-            forwarded_headers[location_pos].1 = location;
-        }
-    }
-
-    // Preserve Connection header from upstream by default
-    // Note: If we stripped Content-Length/Transfer-Encoding for streaming/redaction,
-    // we added Connection: close during the streaming phase
-    forwarded_headers.push(("Connection".to_string(), "close".to_string()));
-    if config.add_scred_header {
-        forwarded_headers.push(("X-SCRED-Redacted".to_string(), "true".to_string()));
-    }
-
-    let mut headers_text = String::new();
-    for (key, value) in &forwarded_headers {
-        headers_text.push_str(key);
-        headers_text.push_str(": ");
-        headers_text.push_str(value);
-        headers_text.push_str("\r\n");
-    }
-
-    let (redacted_headers, header_stats) = redactor.redact_buffer(headers_text.as_bytes());
-    client_writer.write_all(redacted_headers.as_bytes()).await?;
-    client_writer.write_all(b"\r\n").await?;
-
-    // Report header redaction
-    if header_stats.patterns_found > 0 {
-        debug!(
-            "[REDACTION] Headers: {} patterns found and redacted",
-            header_stats.patterns_found
-        );
-    }
-
-    // 4. Stream body through redactor
-    let mut stats = StreamingStats::default();
-    let should_have_no_body = response_is_head_or_bodyless(response_line);
-
-    if should_have_no_body {
-        debug!("[streaming] Response has no body by status/method semantics");
-    } else if let Some(content_length) = headers.content_length {
-        stats = stream_response_body_content_length_passthrough(
-            upstream_reader,
-            &mut client_writer,
-            content_length,
-            redactor,
-            &config,
-        )
-        .await?;
-    } else if headers.is_chunked() {
-        stats = stream_response_body_chunked_passthrough(
-            upstream_reader,
-            &mut client_writer,
-            redactor,
-            &config,
-        )
-        .await?;
-    } else {
-        // No body (or implicit end-of-body on connection close)
-        debug!("[streaming] No response body");
-        stats = StreamingStats::default();
-    }
+    stats.patterns_found += header_stats.patterns_found;
 
     client_writer.flush().await?;
 
