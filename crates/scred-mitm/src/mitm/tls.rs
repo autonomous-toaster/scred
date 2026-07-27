@@ -558,4 +558,46 @@ mod tests {
         );
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_get_or_generate_cert_with_valid_ca() {
+        let temp_dir = std::env::temp_dir().join("scred-test-cert");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        
+        let ca_key_path = temp_dir.join("ca-key.pem");
+        let ca_cert_path = temp_dir.join("ca-cert.pem");
+        let cache_dir = temp_dir.join("cache");
+        
+        CertificateGenerator::generate_ca_if_missing(&ca_key_path, &ca_cert_path).unwrap();
+        let gen = CertificateGenerator::new(&ca_key_path, &ca_cert_path, &cache_dir).unwrap();
+        
+        let result = gen.get_or_generate_cert("test.example.com").await;
+        assert!(result.is_ok(), "get_or_generate_cert failed: {:?}", result.err());
+        
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_clear_cache_with_valid_ca() {
+        let temp_dir = std::env::temp_dir().join("scred-test-clear");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        
+        let ca_key_path = temp_dir.join("ca-key.pem");
+        let ca_cert_path = temp_dir.join("ca-cert.pem");
+        let cache_dir = temp_dir.join("cache");
+        
+        CertificateGenerator::generate_ca_if_missing(&ca_key_path, &ca_cert_path).unwrap();
+        let gen = CertificateGenerator::new(&ca_key_path, &ca_cert_path, &cache_dir).unwrap();
+        
+        // Generate a cert first
+        let _ = gen.get_or_generate_cert("test.example.com").await;
+        
+        // Clear cache
+        let result = gen.clear_cache().await;
+        assert!(result.is_ok(), "clear_cache failed: {:?}", result.err());
+        
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
 }

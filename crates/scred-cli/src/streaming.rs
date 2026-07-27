@@ -287,4 +287,57 @@ mod tests {
         let (result, _) = read_all_input(Some(&data), false);
         assert_eq!(result.len(), 1024);
     }
+
+    #[test]
+    fn test_process_chunk_text_mode() {
+        let engine = scred_http::ConfigurableEngine::with_defaults(
+            std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+                scred_redactor::RedactionConfig { enabled: false },
+            )),
+        );
+        let mut output = Vec::new();
+        let (read, written) = process_chunk("hello world", RedactionMode::Text, &engine, &mut output);
+        assert_eq!(read, 11);
+        assert!(written > 0);
+        assert_eq!(String::from_utf8_lossy(&output), "hello world");
+    }
+
+    #[test]
+    fn test_process_chunk_env_mode() {
+        let engine = scred_http::ConfigurableEngine::with_defaults(
+            std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+                scred_redactor::RedactionConfig { enabled: false },
+            )),
+        );
+        let mut output = Vec::new();
+        let (read, written) = process_chunk("hello world", RedactionMode::Env, &engine, &mut output);
+        assert_eq!(read, 11);
+        assert!(written > 0);
+    }
+
+    #[test]
+    fn test_process_buffer_chunk_text_mode() {
+        let engine = scred_http::ConfigurableEngine::with_defaults(
+            std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+                scred_redactor::RedactionConfig { enabled: false },
+            )),
+        );
+        let mut output = Vec::new();
+        let (read, written) = process_buffer_chunk(b"hello world", RedactionMode::Text, &engine, &mut output);
+        assert_eq!(read, 11);
+        assert!(written > 0);
+    }
+
+    #[test]
+    fn test_process_buffer_chunk_env_mode() {
+        let engine = scred_http::ConfigurableEngine::with_defaults(
+            std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+                scred_redactor::RedactionConfig { enabled: false },
+            )),
+        );
+        let mut output = Vec::new();
+        let (read, written) = process_buffer_chunk(b"hello world", RedactionMode::Env, &engine, &mut output);
+        assert_eq!(read, 11);
+        assert!(written > 0);
+    }
 }
