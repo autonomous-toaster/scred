@@ -211,6 +211,41 @@ where
     Ok(())
 }
 
+/// Stream data from reader to writer through a RedactionStream
+async fn stream_with_redaction<R, W>(
+    reader: &mut BufReader<R>,
+    writer: &mut W,
+    engine: &PolicyEngine,
+) -> Result<scred_redactor::streaming::StreamingStats>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    let redaction_engine = engine.redaction_engine();
+    let mut redaction_stream = RedactionStream::new(Arc::clone(redaction_engine));
+    let mut buffer = vec![0u8; 65536];
+
+    loop {
+        match reader.read(&mut buffer).await? {
+            0 => break,
+            n => {
+                let redacted = redaction_stream.feed(&buffer[..n]);
+                if !redacted.is_empty() {
+                    writer.write_all(&redacted).await?;
+                }
+            }
+        }
+    }
+
+    let (remaining, stats) = redaction_stream.finalize();
+    if !remaining.is_empty() {
+        writer.write_all(&remaining).await?;
+    }
+
+    writer.flush().await?;
+    Ok(stats)
+}
+
 /// Forward request body with redaction through RedactionStream
 pub async fn forward_body_redacted<R, W>(
     client_reader: &mut BufReader<R>,
@@ -222,36 +257,13 @@ where
     R: tokio::io::AsyncRead + Unpin,
     W: tokio::io::AsyncWrite + Unpin,
 {
-
-    let redaction_engine = engine.redaction_engine();
-    let mut redaction_stream = RedactionStream::new(Arc::clone(redaction_engine));
-    let mut buffer = vec![0u8; 65536]; // 64KB chunks
-
-    loop {
-        match client_reader.read(&mut buffer).await? {
-            0 => break, // EOF
-            n => {
-                let redacted = redaction_stream.feed(&buffer[..n]);
-                if !redacted.is_empty() {
-                    upstream.write_all(&redacted).await?;
-                }
-            }
-        }
-    }
-
-    // Finalize and flush remaining redacted data
-    let (remaining, stats) = redaction_stream.finalize();
-    if !remaining.is_empty() {
-        upstream.write_all(&remaining).await?;
-    }
+    let stats = stream_with_redaction(client_reader, upstream, engine).await?;
     if stats.patterns_found > 0 {
         debug!(
             "[proxy] Redacted {} patterns in request body to {}",
             stats.patterns_found, host
         );
     }
-
-    upstream.flush().await?;
     Ok(())
 }
 
@@ -266,36 +278,13 @@ where
     R: tokio::io::AsyncRead + Unpin,
     W: tokio::io::AsyncWrite + Unpin,
 {
-
-    let redaction_engine = engine.redaction_engine();
-    let mut redaction_stream = RedactionStream::new(Arc::clone(redaction_engine));
-    let mut buffer = vec![0u8; 65536]; // 64KB chunks
-
-    loop {
-        match upstream_reader.read(&mut buffer).await? {
-            0 => break, // EOF
-            n => {
-                let redacted = redaction_stream.feed(&buffer[..n]);
-                if !redacted.is_empty() {
-                    client_write.write_all(&redacted).await?;
-                }
-            }
-        }
-    }
-
-    // Finalize and flush remaining redacted data
-    let (remaining, stats) = redaction_stream.finalize();
-    if !remaining.is_empty() {
-        client_write.write_all(&remaining).await?;
-    }
+    let stats = stream_with_redaction(upstream_reader, client_write, engine).await?;
     if stats.patterns_found > 0 {
         debug!(
             "[proxy] Redacted {} patterns in response body from {}",
             stats.patterns_found, host
         );
     }
-
-    client_write.flush().await?;
     Ok(())
 }
 
