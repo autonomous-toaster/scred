@@ -363,4 +363,28 @@ mod tests {
         let line = read_first_line(&mut reader).await.unwrap();
         assert_eq!(line, None);
     }
+
+    #[tokio::test]
+    async fn test_consume_connect_headers_basic() {
+        let data = b"Host: example.com\r\n\r\n";
+        let mut reader = &data[..];
+        let result = consume_connect_headers(&mut reader).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_consume_connect_headers_empty() {
+        let data = b"";
+        let mut reader = &data[..];
+        let result = consume_connect_headers(&mut reader).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_consume_connect_headers_no_separator() {
+        let data = b"Host: example.com\r\n";
+        let mut reader = &data[..];
+        let result = consume_connect_headers(&mut reader).await;
+        assert!(result.is_err());
+    }
 }
