@@ -124,3 +124,40 @@ pub async fn read_response_line<R: AsyncReadExt + Unpin>(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_read_request_line_basic() {
+        let data = b"GET /path HTTP/1.1\r\nHost: example.com\r\n\r\n";
+        let mut reader = &data[..];
+        let line = read_request_line(&mut reader).await.unwrap();
+        assert_eq!(line, "GET /path HTTP/1.1");
+    }
+
+    #[tokio::test]
+    async fn test_read_request_line_empty() {
+        let data = b"";
+        let mut reader = &data[..];
+        let result = read_request_line(&mut reader).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_read_response_line_basic() {
+        let data = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
+        let mut reader = &data[..];
+        let line = read_response_line(&mut reader).await.unwrap();
+        assert_eq!(line, "HTTP/1.1 200 OK");
+    }
+
+    #[tokio::test]
+    async fn test_read_response_line_empty() {
+        let data = b"";
+        let mut reader = &data[..];
+        let result = read_response_line(&mut reader).await;
+        assert!(result.is_err());
+    }
+}
+
