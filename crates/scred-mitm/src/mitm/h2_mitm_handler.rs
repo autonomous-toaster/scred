@@ -155,74 +155,85 @@ impl H2MitmHandler {
         let mut result = http::HeaderMap::new();
 
         for (name, value) in headers {
-            let name_str = name.as_str().to_lowercase();
-
-            if matches!(
-                name_str.as_str(),
-                "connection"
-                    | "transfer-encoding"
-                    | "upgrade"
-                    | "te"
-                    | "trailer"
-                    | "proxy-authenticate"
-                    | "proxy-authorization"
-            ) {
-                tracing::debug!("[H2] Skipping hop-by-hop header: {}", name);
+            if Self::is_hop_by_hop_header(name) {
                 continue;
             }
 
-            let processed_value = if let Some(ref engine) = policy {
-                use scred_config::HeaderAction;
-                let resolved = engine.resolve_for_host(host);
-                let action = resolved.header_action(name.as_str());
-                let value_str = value.to_str().unwrap_or("");
-
-                match action {
-                    HeaderAction::Replace => {
-                        let mut value_bytes = value_str.as_bytes().to_vec();
-                        let (_, count) = engine
-                            .create_placeholder_automaton()
-                            .replace_placeholders(&mut value_bytes, host, |_, _| true);
-                        if count > 0 {
-                            tracing::info!(
-                                "[H2 policy] Replaced {} placeholder(s) in header: {}",
-                                count, name
-                            );
-                        }
-                        http::HeaderValue::from_bytes(&value_bytes).unwrap_or(value.clone())
-                    }
-                    HeaderAction::Redact => {
-                        let redacted = engine.redaction_engine().redact(value_str);
-                        if !redacted.matches.is_empty() {
-                            tracing::debug!(
-                                "[H2 policy] Redacted {} secret(s) in header: {}",
-                                redacted.matches.len(), name
-                            );
-                        }
-                        http::HeaderValue::from_str(&redacted.redacted).unwrap_or(value.clone())
-                    }
-                    HeaderAction::Detect => {
-                        let redacted = engine.redaction_engine().redact(value_str);
-                        if !redacted.matches.is_empty() {
-                            for m in &redacted.matches {
-                                tracing::info!(
-                                    "[H2 policy] Detected {} in header: {}",
-                                    m.pattern_type, name
-                                );
-                            }
-                        }
-                        value.clone()
-                    }
-                    HeaderAction::Passthrough => value.clone(),
-                }
-            } else {
-                value.clone()
-            };
-
+            let processed_value = Self::apply_header_policy(name, value, host, policy);
             result.insert(name.clone(), processed_value);
         }
 
         result
+    }
+
+    /// Check if a header is a hop-by-hop header that should not be forwarded
+    fn is_hop_by_hop_header(name: &http::HeaderName) -> bool {
+        matches!(
+            name.as_str().to_lowercase().as_str(),
+            "connection"
+                | "transfer-encoding"
+                | "upgrade"
+                | "te"
+                | "trailer"
+                | "proxy-authenticate"
+                | "proxy-authorization"
+        )
+    }
+
+    /// Apply policy to a header value (redact, replace, detect, or passthrough)
+    fn apply_header_policy(
+        name: &http::HeaderName,
+        value: &http::HeaderValue,
+        host: &str,
+        policy: &Option<Arc<PolicyEngine>>,
+    ) -> http::HeaderValue {
+        let Some(ref engine) = policy else {
+            return value.clone();
+        };
+
+        use scred_config::HeaderAction;
+        let resolved = engine.resolve_for_host(host);
+        let action = resolved.header_action(name.as_str());
+        let value_str = value.to_str().unwrap_or("");
+
+        match action {
+            HeaderAction::Replace => {
+                let mut value_bytes = value_str.as_bytes().to_vec();
+                let (_, count) = engine
+                    .create_placeholder_automaton()
+                    .replace_placeholders(&mut value_bytes, host, |_, _| true);
+                if count > 0 {
+                    tracing::info!(
+                        "[H2 policy] Replaced {} placeholder(s) in header: {}",
+                        count, name
+                    );
+                }
+                http::HeaderValue::from_bytes(&value_bytes).unwrap_or(value.clone())
+            }
+            HeaderAction::Redact => {
+                let redacted = engine.redaction_engine().redact(value_str);
+                if !redacted.matches.is_empty() {
+                    tracing::debug!(
+                        "[H2 policy] Redacted {} secret(s) in header: {}",
+                        redacted.matches.len(), name
+                    );
+                }
+                http::HeaderValue::from_str(&redacted.redacted).unwrap_or(value.clone())
+            }
+            HeaderAction::Detect => {
+                let redacted = engine.redaction_engine().redact(value_str);
+                if !redacted.matches.is_empty() {
+                    for m in &redacted.matches {
+                        tracing::info!(
+                            "[H2 policy] Detected {} in header: {}",
+                            m.pattern_type, name
+                        );
+                    }
+                }
+                value.clone()
+            }
+            HeaderAction::Passthrough => value.clone(),
+        }
     }
 
     /// Send HTTP/2 response to client
@@ -385,4 +396,37 @@ mod tests {
         assert_eq!(config.detect_patterns, scred_http::PatternSelector::None);
         assert_eq!(config.redact_patterns, scred_http::PatternSelector::None);
     }
+
+    #[test]
+    fn test_is_hop_by_hop_header_connection() {
+        let name = http::HeaderName::from_static("connection");
+        assert!(H2MitmHandler::is_hop_by_hop_header(&name));
+    }
+
+    #[test]
+    fn test_is_hop_by_hop_header_transfer_encoding() {
+        let name = http::HeaderName::from_static("transfer-encoding");
+        assert!(H2MitmHandler::is_hop_by_hop_header(&name));
+    }
+
+    #[test]
+    fn test_is_hop_by_hop_header_content_type() {
+        let name = http::HeaderName::from_static("content-type");
+        assert!(!H2MitmHandler::is_hop_by_hop_header(&name));
+    }
+
+    #[test]
+    fn test_is_hop_by_hop_header_host() {
+        let name = http::HeaderName::from_static("host");
+        assert!(!H2MitmHandler::is_hop_by_hop_header(&name));
+    }
+
+    #[test]
+    fn test_apply_header_policy_no_policy() {
+        let name = http::HeaderName::from_static("content-type");
+        let value = http::HeaderValue::from_static("text/html");
+        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &None);
+        assert_eq!(result, "text/html");
+    }
+
 }
