@@ -1,7 +1,5 @@
 use std::env;
-use std::io::{self, Read, IsTerminal};
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
+use std::io::{self, IsTerminal, Read};
 use std::time::Instant;
 
 use scred_http::{env_detection, PatternSelector};
@@ -163,6 +161,8 @@ fn main() {
     // New pattern tier flags
     let detect_flag = extract_flag_value(&args, "--detect");
     let redact_flag = extract_flag_value(&args, "--redact");
+    let output_flag =
+        extract_flag_value(&args, "--output").or_else(|| extract_flag_value(&args, "-o"));
 
     // Handle special commands
     if args.len() > 1 {
@@ -234,6 +234,7 @@ fn main() {
         &detect_selector,
         &redact_selector,
         verbose,
+        output_flag.as_deref(),
     );
 }
 
@@ -260,6 +261,7 @@ fn print_help() {
     println!("  --text-mode             Force text/pattern mode");
     println!("  --auto-detect=off       Disable auto-detection");
     println!("  --detect-only           Show detection result and exit (debug)");
+    println!("  -o, --output <FILE>     Write output to FILE instead of stdout");
     println!();
     println!("Information Options:");
     println!("  --list-patterns         List all secret detection patterns");
@@ -298,6 +300,7 @@ fn print_help() {
     println!();
 }
 
+#[allow(clippy::match_like_matches_macro)]
 fn list_patterns(filter_type: Option<&str>) {
     use std::collections::BTreeMap;
 

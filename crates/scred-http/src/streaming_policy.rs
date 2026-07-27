@@ -96,7 +96,7 @@ where
 {
     if !config.enabled || tracker.replacements().is_empty() {
         // Pass through without modification
-        let mut buffer = if let Some(len) = content_length {
+        let buffer = if let Some(len) = content_length {
             let mut buf = vec![0u8; len];
             upstream_reader.read_exact(&mut buf).await?;
             buf
@@ -142,6 +142,7 @@ mod tests {
     use std::collections::HashMap;
     use std::io::Cursor;
 
+    #[allow(clippy::unwrap_used)]
     fn build_test_automaton() -> (PlaceholderAutomaton, String) {
         let mut secrets = HashMap::new();
         secrets.insert("TEST_KEY".to_string(), "sk-test-secret-123".to_string());
@@ -153,6 +154,7 @@ mod tests {
         (automaton, placeholder.value.clone())
     }
 
+    #[allow(clippy::unwrap_used)]
     #[tokio::test]
     async fn test_streaming_request_replacement() {
         let (automaton, placeholder) = build_test_automaton();
@@ -185,6 +187,7 @@ mod tests {
         assert!(tracker.contains_secret("sk-test-secret-123"));
     }
 
+    #[allow(clippy::unwrap_used)]
     #[tokio::test]
     async fn test_streaming_response_replacement() {
         let (automaton, placeholder) = build_test_automaton();

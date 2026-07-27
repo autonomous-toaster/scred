@@ -6,7 +6,7 @@
 ///
 /// Expected improvement: +15% (120 → 138 MB/s)
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use scred_redactor::{RedactionConfig, RedactionEngine, StreamingConfig, StreamingRedactor};
+use scred_redactor::{RedactionConfig, RedactionEngine, StreamingRedactor};
 use std::sync::Arc;
 
 fn create_test_data_with_secrets(size: usize) -> Vec<u8> {

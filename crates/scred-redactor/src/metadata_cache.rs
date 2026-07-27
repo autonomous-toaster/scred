@@ -174,6 +174,7 @@ impl Charset {
 // MetadataCache: O(1) Lookups
 // ============================================================================
 
+#[derive(Default)]
 pub struct MetadataCache {
     // By-name: HashMap<pattern_name, PatternMetadata> → O(1)
     patterns_by_name: HashMap<String, PatternMetadata>,
@@ -186,17 +187,6 @@ pub struct MetadataCache {
 
     // Total count
     total_patterns: usize,
-}
-
-impl Default for MetadataCache {
-    fn default() -> Self {
-        MetadataCache {
-            patterns_by_name: HashMap::new(),
-            patterns_by_tier: HashMap::new(),
-            patterns_by_tag: HashMap::new(),
-            total_patterns: 0,
-        }
-    }
 }
 
 impl MetadataCache {

@@ -72,12 +72,18 @@ where
     let request_replacements = tracker.replacements().len();
 
     if request_replacements > 0 {
-        info!("[policy] Replaced {} placeholders in request", request_replacements);
+        info!(
+            "[policy] Replaced {} placeholders in request",
+            request_replacements
+        );
     }
 
     // Step 3: Forward request to upstream
     let request_data = format!("{}\r\n{}\r\n", request_line, headers.raw_headers);
-    upstream.get_mut().write_all(request_data.as_bytes()).await?;
+    upstream
+        .get_mut()
+        .write_all(request_data.as_bytes())
+        .await?;
 
     if !body_bytes.is_empty() {
         upstream.get_mut().write_all(&body_bytes).await?;
@@ -122,7 +128,10 @@ where
     let response_replacements = policy.process_response(&mut response_body, &tracker).await;
 
     if response_replacements > 0 {
-        info!("[policy] Replaced {} secrets in response", response_replacements);
+        info!(
+            "[policy] Replaced {} secrets in response",
+            response_replacements
+        );
     }
 
     // Step 7: Forward response to client

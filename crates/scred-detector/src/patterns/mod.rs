@@ -5,7 +5,10 @@ pub mod marker;
 pub mod prefix_validation;
 pub mod simple_prefix;
 
-pub use marker::{GeneralizedMarkerPattern, MultilineMarkerPattern, GENERALIZED_MARKER_PATTERNS, MULTILINE_MARKER_PATTERNS};
+pub use marker::{
+    GeneralizedMarkerPattern, MultilineMarkerPattern, GENERALIZED_MARKER_PATTERNS,
+    MULTILINE_MARKER_PATTERNS,
+};
 pub use prefix_validation::PREFIX_VALIDATION_PATTERNS;
 pub use simple_prefix::SIMPLE_PREFIX_PATTERNS;
 

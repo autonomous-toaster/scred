@@ -56,7 +56,10 @@ impl H2MitmHandler {
         config: H2MitmConfig,
         policy: Option<Arc<PolicyEngine>>,
     ) -> Self {
-        tracing::info!("[H2MitmHandler] Created with automaton: {:?}", policy.is_some());
+        tracing::info!(
+            "[H2MitmHandler] Created with automaton: {:?}",
+            policy.is_some()
+        );
         Self {
             engine,
             config,
@@ -111,6 +114,7 @@ impl H2MitmHandler {
     }
 
     /// Handle individual stream
+    #[allow(clippy::too_many_arguments)]
     async fn handle_stream(
         request: http::Request<h2::RecvStream>,
         mut respond: server::SendResponse<Bytes>,
@@ -173,74 +177,85 @@ impl H2MitmHandler {
             .uri(request_parts.uri.clone());
 
         // Process each header according to its HeaderAction from policy
-    // Uses per-header action: Replace, Redact, Detect, or Passthrough
-    for (name, value) in &request_parts.headers {
-        let name_str = name.as_str().to_lowercase();
+        // Uses per-header action: Replace, Redact, Detect, or Passthrough
+        for (name, value) in &request_parts.headers {
+            let name_str = name.as_str().to_lowercase();
 
-        // Skip hop-by-hop headers (RFC 7230)
-        if matches!(
-            name_str.as_str(),
-            "connection" | "transfer-encoding" | "upgrade" | "te" | "trailer"
-                | "proxy-authenticate" | "proxy-authorization"
-        ) {
-            tracing::debug!("[H2] Skipping hop-by-hop header: {}", name);
-            continue;
-        }
+            // Skip hop-by-hop headers (RFC 7230)
+            if matches!(
+                name_str.as_str(),
+                "connection"
+                    | "transfer-encoding"
+                    | "upgrade"
+                    | "te"
+                    | "trailer"
+                    | "proxy-authenticate"
+                    | "proxy-authorization"
+            ) {
+                tracing::debug!("[H2] Skipping hop-by-hop header: {}", name);
+                continue;
+            }
 
-        // Determine header action from policy or default to Passthrough
-        let processed_value = if let Some(ref engine) = policy {
-            use scred_config::HeaderAction;
-            let resolved = engine.resolve_for_host(host);
-            let action = resolved.header_action(name.as_str());
-            let value_str = value.to_str().unwrap_or("");
+            // Determine header action from policy or default to Passthrough
+            let processed_value = if let Some(ref engine) = policy {
+                use scred_config::HeaderAction;
+                let resolved = engine.resolve_for_host(host);
+                let action = resolved.header_action(name.as_str());
+                let value_str = value.to_str().unwrap_or("");
 
-            match action {
-                HeaderAction::Replace => {
-                    let mut value_bytes = value_str.as_bytes().to_vec();
-                    let (_, count) = engine
-                        .create_placeholder_automaton()
-                        .replace_placeholders(&mut value_bytes, host, |_, _| true);
-                    if count > 0 {
-                        tracing::info!(
-                            "[H2 policy] Replaced {} placeholder(s) in header: {}",
-                            count, name
-                        );
-                    }
-                    http::HeaderValue::from_bytes(&value_bytes).unwrap_or(value.clone())
-                }
-                HeaderAction::Redact => {
-                    let redacted = engine.redaction_engine().redact(value_str);
-                    if !redacted.matches.is_empty() {
-                        tracing::debug!(
-                            "[H2 policy] Redacted {} secret(s) in header: {}",
-                            redacted.matches.len(), name
-                        );
-                    }
-                    http::HeaderValue::from_str(&redacted.redacted).unwrap_or(value.clone())
-                }
-                HeaderAction::Detect => {
-                    let redacted = engine.redaction_engine().redact(value_str);
-                    if !redacted.matches.is_empty() {
-                        for m in &redacted.matches {
+                match action {
+                    HeaderAction::Replace => {
+                        let mut value_bytes = value_str.as_bytes().to_vec();
+                        let (_, count) = engine
+                            .create_placeholder_automaton()
+                            .replace_placeholders(&mut value_bytes, host, |_, _| true);
+                        if count > 0 {
                             tracing::info!(
-                                "[H2 policy] Detected {} in header: {}",
-                                m.pattern_type, name
+                                "[H2 policy] Replaced {} placeholder(s) in header: {}",
+                                count,
+                                name
                             );
                         }
+                        http::HeaderValue::from_bytes(&value_bytes).unwrap_or(value.clone())
                     }
-                    value.clone()
+                    HeaderAction::Redact => {
+                        let redacted = engine.redaction_engine().redact(value_str);
+                        if !redacted.matches.is_empty() {
+                            tracing::debug!(
+                                "[H2 policy] Redacted {} secret(s) in header: {}",
+                                redacted.matches.len(),
+                                name
+                            );
+                        }
+                        http::HeaderValue::from_str(&redacted.redacted).unwrap_or(value.clone())
+                    }
+                    HeaderAction::Detect => {
+                        let redacted = engine.redaction_engine().redact(value_str);
+                        if !redacted.matches.is_empty() {
+                            for m in &redacted.matches {
+                                tracing::info!(
+                                    "[H2 policy] Detected {} in header: {}",
+                                    m.pattern_type,
+                                    name
+                                );
+                            }
+                        }
+                        value.clone()
+                    }
+                    HeaderAction::Passthrough => value.clone(),
                 }
-                HeaderAction::Passthrough => value.clone(),
-            }
-        } else {
-            value.clone()
-        };
+            } else {
+                value.clone()
+            };
 
-        builder = builder.header(name.clone(), processed_value);
-        tracing::debug!("[H2] Forwarding header: {} (value hidden for security)", name);
-    }
+            builder = builder.header(name.clone(), processed_value);
+            tracing::debug!(
+                "[H2] Forwarding header: {} (value hidden for security)",
+                name
+            );
+        }
 
-    let upstream_request = builder
+        let upstream_request = builder
             .body(redacted_body)
             .map_err(|e| anyhow::anyhow!("Failed to build upstream request: {}", e))?;
 
@@ -297,5 +312,61 @@ impl H2MitmHandler {
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_h2_mitm_config_defaults() {
+        let config = H2MitmConfig::default();
+        assert_eq!(config.max_concurrent_streams, 100);
+        assert_eq!(config.initial_connection_window_size, 65535);
+        assert_eq!(config.initial_stream_window_size, 65535);
+        assert_eq!(config.redaction_mode, RedactionMode::DetectOnly);
+    }
+
+    #[test]
+    fn test_h2_mitm_handler_creation() {
+        let engine = Arc::new(RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+        let config = H2MitmConfig::default();
+        let handler = H2MitmHandler::new(
+            engine,
+            "example.com:443".to_string(),
+            config,
+            None,
+        );
+        assert_eq!(handler.upstream_addr, "example.com:443");
+        assert!(handler.policy.is_none());
+    }
+
+    #[test]
+    fn test_h2_mitm_config_custom_redaction_mode() {
+        let config = H2MitmConfig {
+            redaction_mode: RedactionMode::Redact,
+            ..Default::default()
+        };
+        assert_eq!(config.redaction_mode, RedactionMode::Redact);
+        
+        let config = H2MitmConfig {
+            redaction_mode: RedactionMode::Passthrough,
+            ..Default::default()
+        };
+        assert_eq!(config.redaction_mode, RedactionMode::Passthrough);
+    }
+
+    #[test]
+    fn test_h2_mitm_config_custom_pattern_selectors() {
+        let config = H2MitmConfig {
+            detect_patterns: scred_http::PatternSelector::None,
+            redact_patterns: scred_http::PatternSelector::None,
+            ..Default::default()
+        };
+        assert_eq!(config.detect_patterns, scred_http::PatternSelector::None);
+        assert_eq!(config.redact_patterns, scred_http::PatternSelector::None);
     }
 }

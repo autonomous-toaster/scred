@@ -52,7 +52,7 @@ impl PlaceholderAutomaton {
         if patterns.is_empty() {
             // No secrets - return empty automaton
             return Ok(Self {
-                ac: AhoCorasick::new(&[""])?,
+                ac: AhoCorasick::new([""])?,
                 replacements: Vec::new(),
                 placeholder_values: Vec::new(),
             });
@@ -74,7 +74,7 @@ impl PlaceholderAutomaton {
     /// Used when policy is disabled or no secrets are loaded.
     pub fn empty() -> Self {
         Self {
-            ac: match AhoCorasick::new(&[""]) {
+            ac: match AhoCorasick::new([""]) {
                 Ok(ac) => ac,
                 Err(e) => unreachable!("AhoCorasick with empty pattern failed: {}", e),
             },
@@ -118,9 +118,9 @@ impl PlaceholderAutomaton {
     /// * `ReplacementTracker` - For response processing
     /// * `usize` - Number of replacements made
     #[inline]
-    pub fn replace_placeholders<'a>(
+    pub fn replace_placeholders(
         &self,
-        data: &'a mut [u8],
+        data: &mut [u8],
         domain: &str,
         domain_checker: impl Fn(&str, &str) -> bool,
     ) -> (ReplacementTracker, usize) {
@@ -486,4 +486,3 @@ impl ReplacementTracker {
         &self.replacements
     }
 }
-

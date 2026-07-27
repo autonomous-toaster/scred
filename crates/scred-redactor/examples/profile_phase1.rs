@@ -24,7 +24,7 @@ fn main() {
     println!("-----");
 
     let mut total_detect_time = 0.0;
-    let mut total_matches = 0;
+    let mut total_matches;
 
     for i in 1..=3 {
         let start = Instant::now();

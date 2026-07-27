@@ -1,0 +1,12 @@
+# Gitleaks configuration
+# Allowlist test and benchmark files that contain fake secrets for testing
+
+[allowlist]
+description = "Allow test fixtures and benchmark data with fake secrets"
+paths = [
+    # Benchmark files with fake JWT tokens
+    '''crates/scred-detector/benches/realistic\.rs''',
+    '''crates/scred-detector/benches/scaling\.rs''',
+    # Integration test scripts with fake secrets
+    '''tests/integration/proxy_body_redaction\.sh''',
+]

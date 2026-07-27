@@ -55,15 +55,20 @@ impl MitmConfig {
                 warn!("https_proxy: {}", val);
             }
             if !no_proxy_list.is_empty() {
-                warn!("no_proxy: {} entries - {}",
+                warn!(
+                    "no_proxy: {} entries - {}",
                     no_proxy_list.len(),
-                    no_proxy_list.iter().map(|e| match e {
-                        NoProxyEntry::All => "*".to_string(),
-                        NoProxyEntry::Localhost => "localhost".to_string(),
-                        NoProxyEntry::Host(h) => h.clone(),
-                        NoProxyEntry::Suffix(s) => format!(".{}", s),
-                        NoProxyEntry::IpRange(_) => "<ip_range>".to_string(),
-                    }).collect::<Vec<_>>().join(", ")
+                    no_proxy_list
+                        .iter()
+                        .map(|e| match e {
+                            NoProxyEntry::All => "*".to_string(),
+                            NoProxyEntry::Localhost => "localhost".to_string(),
+                            NoProxyEntry::Host(h) => h.clone(),
+                            NoProxyEntry::Suffix(s) => format!(".{}", s),
+                            NoProxyEntry::IpRange(_) => "<ip_range>".to_string(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
         }

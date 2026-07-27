@@ -48,6 +48,7 @@ impl Default for HttpProxyConfig {
 /// * `upstream_host` - Optional upstream hostname (for header rewriting)
 /// * `redact_selector` - Optional selector to filter which patterns are redacted
 /// * `config` - Proxy configuration (headers, options)
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_http_proxy(
     mut client_read: tokio::net::tcp::OwnedReadHalf,
     mut client_write: tokio::net::tcp::OwnedWriteHalf,
@@ -389,10 +390,10 @@ fn inject_proxy_headers(
 
 /// Parse HTTP proxy URL format: http://host:port/path or http://host/path
 pub fn parse_proxy_url(url: &str) -> Result<(String, u16, String)> {
-    let url = if url.starts_with("http://") {
-        &url[7..]
-    } else if url.starts_with("https://") {
-        &url[8..]
+    let url = if let Some(rest) = url.strip_prefix("http://") {
+        rest
+    } else if let Some(rest) = url.strip_prefix("https://") {
+        rest
     } else {
         url
     };

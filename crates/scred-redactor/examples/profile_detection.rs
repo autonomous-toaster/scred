@@ -25,7 +25,7 @@ fn main() {
     println!("═══════════════════════════════════════════════════════");
 
     let mut total_all = 0.0;
-    let mut total_matches = 0;
+    let mut total_matches;
 
     for i in 1..=5 {
         let start = Instant::now();
@@ -54,7 +54,7 @@ fn main() {
     println!("════════════════════════════════════");
 
     let mut total_simple = 0.0;
-    let mut simple_count = 0;
+    let mut simple_count;
 
     for i in 1..=5 {
         let start = Instant::now();
@@ -83,7 +83,7 @@ fn main() {
     println!("═════════════════════════════════");
 
     let mut total_validation = 0.0;
-    let mut valid_count = 0;
+    let mut valid_count;
 
     for i in 1..=5 {
         let start = Instant::now();
@@ -115,7 +115,7 @@ fn main() {
     println!("════════════════════════════");
 
     let mut total_jwt = 0.0;
-    let mut jwt_count = 0;
+    let mut jwt_count;
 
     for i in 1..=5 {
         let start = Instant::now();
@@ -183,7 +183,7 @@ fn main() {
     );
 
     // Identify slowest component
-    let components = vec![
+    let components = [
         ("Simple prefix", tput_simple),
         ("Validation", tput_validation),
         ("JWT", tput_jwt),

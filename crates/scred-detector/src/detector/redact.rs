@@ -119,4 +119,3 @@ pub fn redact_in_place_with_original(
 
     count
 }
-

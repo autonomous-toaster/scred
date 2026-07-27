@@ -1,9 +1,9 @@
 //! Discovery API - expose placeholders without secret values
 
+use anyhow::Result;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use anyhow::Result;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tracing::{debug, info};
@@ -60,7 +60,10 @@ impl DiscoveryServer {
 
     /// Get a clone of current placeholders
     fn get_placeholders(&self) -> HashMap<String, Placeholder> {
-        self.placeholders.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.placeholders
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Run the discovery server
@@ -249,7 +252,10 @@ mod tests {
         updater.update(placeholders);
 
         // Verify placeholders are stored
-        let retrieved = server.placeholders.lock().unwrap_or_else(|e| e.into_inner());
+        let retrieved = server
+            .placeholders
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         assert!(retrieved.contains_key("TEST_KEY"));
     }
 }

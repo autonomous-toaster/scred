@@ -206,8 +206,6 @@ pub async fn parse_response<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<H
     // Parse body based on Content-Length or Transfer-Encoding
     let body = if let Some(len) = parse_content_length(&headers) {
         vec![0u8; len] // Placeholder
-    } else if is_chunked(&headers) {
-        Vec::new()
     } else {
         Vec::new()
     };

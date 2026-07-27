@@ -127,7 +127,7 @@ SECRET=mysecret789";
     let matches = detect_all(text.as_bytes());
 
     assert!(
-        matches.matches.len() >= 1,
+        !matches.matches.is_empty(),
         "Should detect at least one env pattern, found {}",
         matches.matches.len()
     );

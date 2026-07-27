@@ -35,7 +35,7 @@ fn main() {
         let start = Instant::now();
         for chunk in data.chunks(chunk_size) {
             let is_eof = chunk.len() < chunk_size;
-            let (output, bytes_written, patterns) =
+            let (_output, bytes_written, patterns) =
                 redactor.process_chunk(chunk, &mut lookahead, is_eof);
             total_output += bytes_written;
             pattern_count += patterns;

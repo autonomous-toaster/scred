@@ -1,4 +1,6 @@
+#![allow(clippy::empty_line_after_doc_comments)]
 use crate::mitm::config::RedactionMode;
+mod forward;
 /// HTTP/2 Upstream Forwarder - Forward requests to upstream HTTP/2 or HTTP/1.1
 ///
 /// Handles:
@@ -8,18 +10,17 @@ use crate::mitm::config::RedactionMode;
 /// - Three modes: PASSTHROUGH (no redaction), DETECT (detect & log), REDACT (detect & redact)
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
+use forward::{forward_via_http1_1, forward_via_http1_1_with_body};
 use http::Request;
-use scred_redactor::{RedactionEngine, StreamingConfig, StreamingRedactor};
+use scred_redactor::RedactionEngine;
 use std::sync::Arc;
 use tokio::io::AsyncReadExt;
 
 use h2::client;
-use rustls::{ClientConfig, RootCertStore, ServerName};
+
 use scred_http::upstream_connection::{
-    connect_tcp, establish_tls, establish_tls_h2, get_proxy_url, UpstreamConnectionConfig,
+    connect_tcp, establish_tls_h2, get_proxy_url, UpstreamConnectionConfig,
 };
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
 
 /// Forward HTTP/2 request to upstream server (passthrough mode)
 ///
@@ -27,14 +28,16 @@ use tokio::net::TcpStream;
 /// - Try H2 to upstream first (direct connection)
 /// - Fall back to HTTP/1.1 if H2 fails
 /// - Handle upstream proxy downgrades
-
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
 /// Read complete HTTP response directly without streaming redaction
 /// Used for PASSTHROUGH and DETECT modes
-async fn read_response_direct(tls_stream: &mut (impl AsyncReadExt + Unpin)) -> Result<Vec<u8>> {
+#[allow(clippy::needless_borrow, clippy::doc_lazy_continuation)]
+pub(crate) async fn read_response_direct(
+    tls_stream: &mut (impl AsyncReadExt + Unpin),
+) -> Result<Vec<u8>> {
     let mut response = Vec::new();
     let mut buffer = vec![0u8; 4096];
 
@@ -88,7 +91,7 @@ async fn read_response_direct(tls_stream: &mut (impl AsyncReadExt + Unpin)) -> R
 }
 
 /// Extract HTTP response body from full HTTP response (headers + body)
-fn extract_http_response_body(response: &[u8]) -> Result<Vec<u8>> {
+pub(crate) fn extract_http_response_body(response: &[u8]) -> Result<Vec<u8>> {
     let response_str = String::from_utf8_lossy(response);
 
     // Find HTTP header terminator
@@ -117,7 +120,7 @@ fn extract_http_response_body(response: &[u8]) -> Result<Vec<u8>> {
 
 /// Log detected secrets in response without redacting
 /// Filters by detect_patterns selector - only logs secrets that match the selector
-fn log_detected_secrets(
+pub(crate) fn log_detected_secrets(
     engine: &Arc<RedactionEngine>,
     response_bytes: &[u8],
     detect_patterns: &scred_http::PatternSelector,
@@ -216,7 +219,7 @@ pub async fn handle_upstream_h2_connection(
     // Rebuild request with parts and body for H2 attempt
     let h2_request = http::Request::from_parts(request_parts.clone(), request_body.clone());
 
-    match try_forward_h2(h2_request, engine.clone(), &upstream_addr, host).await {
+    match try_forward_h2(h2_request, engine.clone(), host, mode, &detect_patterns, &redact_patterns).await {
         Ok(response) => {
             tracing::info!("[H2 Upstream] H2 forward successful");
             Ok(response)
@@ -244,12 +247,12 @@ pub async fn handle_upstream_h2_connection(
 /// Try to forward via HTTP/2 direct connection
 async fn try_forward_h2(
     request: Request<Bytes>,
-    _engine: Arc<RedactionEngine>,
-    _upstream_addr: &str,
+    engine: Arc<RedactionEngine>,
     host: &str,
+    mode: RedactionMode,
+    detect_patterns: &scred_http::PatternSelector,
+    _redact_patterns: &scred_http::PatternSelector,
 ) -> Result<Vec<u8>> {
-    let _method = request.method().clone();
-    let _uri = request.uri().clone();
     let (request_parts, request_body) = request.into_parts();
 
     // Use unified connection logic with proxy support
@@ -388,6 +391,29 @@ async fn try_forward_h2(
         response_body.len()
     );
 
-    Ok(response_body)
+    // Apply redaction based on mode
+    if mode.should_redact() {
+        tracing::debug!("[H2 Upstream] Mode: REDACT - Applying redaction to H2 response");
+        let response_str = String::from_utf8_lossy(&response_body);
+        let result = engine.redact(&response_str);
+        tracing::info!(
+            "[H2 Upstream] Redacted H2 response: {} bytes -> {} bytes ({} matches)",
+            response_body.len(),
+            result.redacted.len(),
+            result.matches.len()
+        );
+        Ok(result.redacted.into_bytes())
+    } else if mode.should_detect() {
+        tracing::debug!("[H2 Upstream] Mode: DETECT - Scanning H2 response for secrets");
+        log_detected_secrets(&engine, &response_body, detect_patterns);
+        Ok(response_body)
+    } else {
+        tracing::debug!("[H2 Upstream] Mode: PASSTHROUGH - No redaction applied");
+        Ok(response_body)
+    }
 }
 
+#[cfg(test)]
+
+#[cfg(test)]
+pub(crate) mod tests;

@@ -1,8 +1,7 @@
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     #![allow(clippy::unwrap_used)]
-    use super::*;
     use crate::streaming::*;
     use std::sync::Arc;
     use crate::{RedactionConfig, RedactionEngine};
@@ -59,7 +58,7 @@ mod tests {
 
         // Second chunk: rest of the secret + padding to exceed 512
         let mut chunk2 = b"IOSFODNN7EXAMPLE more data"[..].to_vec();
-        chunk2.extend_from_slice(&vec![b'Y'; 200]);
+        chunk2.extend_from_slice(&[b'Y'; 200]);
         let out2 = stream.feed(&chunk2);
         // Combined = 413 + 219 = 632 > 512, output is first 120 bytes (all X's)
         // The redacted secret is in the lookahead (bytes 120-631)
@@ -163,8 +162,8 @@ mod tests {
 
         // Second chunk: rest of the secret
         let mut chunk2 = b"IOSFODNN7EXAMPLE more data"[..].to_vec();
-        chunk2.extend_from_slice(&vec![b'Y'; 200]);
-        let matches2 = detector.feed(&chunk2);
+        chunk2.extend_from_slice(&[b'Y'; 200]);
+        let _matches2 = detector.feed(&chunk2);
         // Matches in the output region (first 120 bytes) — none, they're in lookahead
         // The match will be returned by finalize()
 

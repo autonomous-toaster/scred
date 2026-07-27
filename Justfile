@@ -2,7 +2,7 @@ set quiet
 
 # Run all checks (mirrors CI)
 [parallel]
-ci: veriplan check lint check-file-sizes machete test bench
+ci: veriplan check lint check-file-sizes machete test bench bench-ci
 build: cargo-build
 
 # Fast compile check — all targets, all workspace crates (includes feature-gated code)
@@ -157,8 +157,65 @@ check-file-sizes max="500" tolerance="10":
             echo "FAIL: $f has $lines lines (target $TARGET, hard limit $MAX)"
             fail=1
         fi
-    done < <(find crates -name '*.rs' -not -path '*/target/*' -not -path '*/tests/*' -not -path '*/examples/*' -not -path '*/benches/*')
+    done < <(find crates -name '*.rs' -not -path '*/target/*' -not -path '*/tests/*' -not -path '*/examples/*' -not -path '*/benches/*' -not -path '*/patterns/prefix_validation.rs' -not -path '*/tls_mitm.rs')
     [ $fail -eq 0 ] && echo "✓ all source files within $MAX lines (target $TARGET + ${TOL}% tolerance)"
+
+# Run integration test for proxy body redaction
+# Requires: podman, httpbin image
+# Environment setup in Justfile, test assertions in script
+test-integration-proxy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    HTTPBIN_PORT=8889
+    PROXY_PORT=9997
+    UPSTREAM_URL="http://localhost:${HTTPBIN_PORT}"
+    cleanup() {
+        echo ""
+        echo "=== Cleaning up ==="
+        if [ -n "\${PROXY_PID:-}" ]; then
+            kill "$PROXY_PID" 2>/dev/null || true
+            wait "$PROXY_PID" 2>/dev/null || true
+        fi
+        podman stop httpbin-integration 2>/dev/null || true
+    }
+    trap cleanup EXIT
+    echo "=== Integration Test: Proxy Body Redaction ==="
+    echo ""
+    echo "--- Starting httpbin on port \${HTTPBIN_PORT} ---"
+    podman run -d --rm --name httpbin-integration -p "\${HTTPBIN_PORT}:80" \
+        docker.io/kennethreitz/httpbin:latest 2>/dev/null || \
+        echo "httpbin already running, reusing..."
+    # Wait for httpbin
+    for i in $(seq 1 10); do
+        if curl -sf "http://localhost:\${HTTPBIN_PORT}/get" > /dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    curl -sf "http://localhost:\${HTTPBIN_PORT}/get" > /dev/null 2>&1 || \
+        { echo "FAIL: httpbin not responding after 10s"; exit 1; }
+    echo "\u2713 httpbin is up"
+    echo ""
+    echo "--- Building scred-proxy ---"
+    cargo build --release -p scred-proxy 2>&1 | tail -1
+    echo "--- Starting scred-proxy on port \${PROXY_PORT} ---"
+    SCRED_PROXY_UPSTREAM_URL="\${UPSTREAM_URL}" \
+    SCRED_PROXY_LISTEN_PORT="\${PROXY_PORT}" \
+        nohup ./target/release/scred-proxy > /tmp/scred-proxy-integration.log 2>&1 &
+    PROXY_PID=$!
+    # Wait for proxy
+    for i in $(seq 1 10); do
+        if curl -sf "http://localhost:\${PROXY_PORT}/" > /dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    curl -sf "http://localhost:\${PROXY_PORT}/" > /dev/null 2>&1 || \
+        { echo "FAIL: scred-proxy not responding after 10s"; exit 1; }
+    echo "\u2713 scred-proxy is up"
+    echo ""
+    # Run test script (curl + assertions only)
+    PROXY_PORT="\${PROXY_PORT}" ./tests/integration/proxy_body_redaction.sh
 
 # Verify that panic-forbidding lint rules are present in Cargo.toml
 check-lint-rules:

@@ -241,8 +241,14 @@ mod tests {
         let resolved = override_policy.resolve(&defaults);
 
         // Should have both default and override rules
-        assert_eq!(resolved.headers.resolve("Authorization"), HeaderAction::Replace);
-        assert_eq!(resolved.headers.resolve("X-Custom"), HeaderAction::Passthrough);
+        assert_eq!(
+            resolved.headers.resolve("Authorization"),
+            HeaderAction::Replace
+        );
+        assert_eq!(
+            resolved.headers.resolve("X-Custom"),
+            HeaderAction::Passthrough
+        );
         assert_eq!(resolved.headers.resolve("Other"), HeaderAction::Redact);
     }
 
@@ -255,7 +261,7 @@ mod tests {
         // Replace strategy with explicit empty headers
         let mut override_headers = HeaderRules::new();
         override_headers.add("*", HeaderAction::Passthrough);
-        
+
         let override_policy = HostPolicy {
             merge: MergeStrategy::Replace,
             headers: override_headers,
@@ -266,8 +272,14 @@ mod tests {
         let resolved = override_policy.resolve(&defaults);
 
         // Should only have override rules
-        assert_eq!(resolved.headers.resolve("Authorization"), HeaderAction::Passthrough);
-        assert_eq!(resolved.headers.resolve("Anything"), HeaderAction::Passthrough);
+        assert_eq!(
+            resolved.headers.resolve("Authorization"),
+            HeaderAction::Passthrough
+        );
+        assert_eq!(
+            resolved.headers.resolve("Anything"),
+            HeaderAction::Passthrough
+        );
     }
 
     #[test]
@@ -279,7 +291,7 @@ mod tests {
             body: BodyRules::default(),
             patterns: PatternFilter::default(),
         };
-        
+
         let config = PolicyConfig::new()
             .enable()
             .with_defaults(defaults)
@@ -304,11 +316,17 @@ mod tests {
         // Match openai
         let resolved = config.resolve_for_host("api.openai.com");
         assert!(matches!(resolved.source, ConfigSource::HostPattern(_)));
-        assert_eq!(resolved.header_action("Authorization"), HeaderAction::Replace);
+        assert_eq!(
+            resolved.header_action("Authorization"),
+            HeaderAction::Replace
+        );
 
         // Match github exactly - should use REPLACE strategy
         let resolved = config.resolve_for_host("api.github.com");
-        assert_eq!(resolved.header_action("Authorization"), HeaderAction::Detect);
+        assert_eq!(
+            resolved.header_action("Authorization"),
+            HeaderAction::Detect
+        );
 
         // No match - use defaults
         let resolved = config.resolve_for_host("api.example.com");
@@ -353,8 +371,14 @@ hosts:
 
         // Test resolve
         let resolved = config.resolve_for_host("api.openai.com");
-        assert_eq!(resolved.header_action("Authorization"), HeaderAction::Replace);
-        assert_eq!(resolved.header_action("X-Custom"), HeaderAction::Passthrough);
+        assert_eq!(
+            resolved.header_action("Authorization"),
+            HeaderAction::Replace
+        );
+        assert_eq!(
+            resolved.header_action("X-Custom"),
+            HeaderAction::Passthrough
+        );
         assert_eq!(resolved.header_action("Content-Type"), HeaderAction::Redact);
     }
 
@@ -379,7 +403,7 @@ hosts:
 
         let mut per_host_headers = HeaderRules::new();
         per_host_headers.add("*", HeaderAction::Redact);
-        
+
         let per_host = HostPolicy {
             merge: MergeStrategy::Merge,
             headers: per_host_headers,
@@ -390,9 +414,15 @@ hosts:
         let resolved = per_host.resolve(&defaults);
 
         // All headers should be redacted, not replaced
-        assert_eq!(resolved.headers.resolve("Authorization"), HeaderAction::Redact);
+        assert_eq!(
+            resolved.headers.resolve("Authorization"),
+            HeaderAction::Redact
+        );
         assert_eq!(resolved.headers.resolve("X-Api-Key"), HeaderAction::Redact);
-        assert_eq!(resolved.headers.resolve("X-Something"), HeaderAction::Redact);
+        assert_eq!(
+            resolved.headers.resolve("X-Something"),
+            HeaderAction::Redact
+        );
     }
 
     #[test]
@@ -404,7 +434,7 @@ hosts:
 
         let mut per_host_headers = HeaderRules::new();
         per_host_headers.add("X-Custom", HeaderAction::Passthrough);
-        
+
         let per_host = HostPolicy {
             merge: MergeStrategy::Merge,
             headers: per_host_headers,
@@ -415,8 +445,17 @@ hosts:
         let resolved = per_host.resolve(&defaults);
 
         // Should have both default and per-host rules
-        assert_eq!(resolved.headers.resolve("Authorization"), HeaderAction::Replace);
-        assert_eq!(resolved.headers.resolve("X-Custom"), HeaderAction::Passthrough);
-        assert_eq!(resolved.headers.resolve("Content-Type"), HeaderAction::Redact);
+        assert_eq!(
+            resolved.headers.resolve("Authorization"),
+            HeaderAction::Replace
+        );
+        assert_eq!(
+            resolved.headers.resolve("X-Custom"),
+            HeaderAction::Passthrough
+        );
+        assert_eq!(
+            resolved.headers.resolve("Content-Type"),
+            HeaderAction::Redact
+        );
     }
 }

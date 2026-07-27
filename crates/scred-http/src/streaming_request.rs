@@ -31,7 +31,6 @@ impl Default for StreamingRequestConfig {
 /// Helper: Apply selector filtering to redacted text
 /// If selector is None, returns redacted text as-is (backward compatible)
 /// If selector is Some, uses ConfigurableEngine to filter which patterns stay redacted
-
 /// Handle HTTP request with streaming
 ///
 /// Flow:
@@ -96,7 +95,8 @@ where
 
     // 4. Stream body through redactor
     debug!("[stream_request_to_upstream] STEP 4: Processing request body...");
-    let mut stats = StreamingStats::default();
+    #[allow(unused_mut)]
+    let mut stats;
 
     if let Some(content_length) = headers.content_length {
         // Content-Length: stream exactly N bytes

@@ -2,18 +2,17 @@
 ///
 /// Handles connections to upstream servers with automatic HTTP/2 detection.
 /// Detects if upstream supports HTTP/2 via ALPN and provides unified interface.
-
 use anyhow::{anyhow, Result};
+use rustls::ServerName;
 use rustls::{ClientConfig, RootCertStore};
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::{TlsConnector, TlsStream};
-use rustls::ServerName;
 use tracing::{debug, info};
 
 use scred_http::dns_resolver::DnsResolver;
+use scred_http::h2::alpn::{alpn_protocols, HttpProtocol};
 use scred_http::proxy_resolver::connect_through_proxy;
-use scred_http::h2::alpn::{HttpProtocol, alpn_protocols};
 
 /// Information about upstream server connection
 #[derive(Debug, Clone)]
@@ -32,7 +31,10 @@ pub async fn connect_to_upstream(
     upstream_addr: &str,
     target_host: &str,
 ) -> Result<(TlsStream<TcpStream>, UpstreamConnectionInfo)> {
-    debug!("Connecting to upstream: {} (target: {})", upstream_addr, target_host);
+    debug!(
+        "Connecting to upstream: {} (target: {})",
+        upstream_addr, target_host
+    );
 
     // Step 1: Establish TCP connection
     let is_upstream_proxy = upstream_addr.contains("://");
@@ -74,8 +76,11 @@ pub async fn connect_to_upstream(
         .map_err(|e| anyhow!("Upstream TLS handshake failed: {}", e))?;
 
     // Step 4: Extract negotiated protocol
-    let negotiated_protocol = tls_stream.get_ref().1.alpn_protocol()
-        .and_then(|proto| HttpProtocol::from_bytes(proto))
+    let negotiated_protocol = tls_stream
+        .get_ref()
+        .1
+        .alpn_protocol()
+        .and_then(HttpProtocol::from_bytes)
         .unwrap_or(HttpProtocol::Http11);
 
     info!(

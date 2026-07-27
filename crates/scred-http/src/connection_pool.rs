@@ -20,7 +20,7 @@ impl PooledConnection {
 /// Connection pool for a single upstream address
 pub struct ConnectionPool {
     pool: Arc<Mutex<VecDeque<PooledConnection>>>,
-    addr: String,
+    _addr: String,
     max_connections: usize,
     max_idle_time: Duration,
 }
@@ -30,7 +30,7 @@ impl ConnectionPool {
     pub fn new(addr: String, max_connections: usize) -> Self {
         Self {
             pool: Arc::new(Mutex::new(VecDeque::with_capacity(max_connections))),
-            addr,
+            _addr: addr,
             max_connections,
             max_idle_time: Duration::from_secs(30), // 30 second timeout
         }

@@ -69,7 +69,7 @@ impl ChunkedParser {
     pub async fn next_chunk<R: AsyncReadExt + Unpin>(
         &mut self,
         reader: &mut BufReader<R>,
-        redactor: Arc<StreamingRedactor>,
+        _redactor: Arc<StreamingRedactor>,
     ) -> Result<(Vec<u8>, ChunkStats)> {
         let mut stats = ChunkStats::default();
 
@@ -113,10 +113,12 @@ impl ChunkedParser {
                     // Redact chunk via RedactionStream
                     let stream = match self.stream.as_mut() {
                         Some(s) => s,
-                        None => unreachable!("ChunkedParser::init_stream() must be called before next_chunk()"),
+                        None => unreachable!(
+                            "ChunkedParser::init_stream() must be called before next_chunk()"
+                        ),
                     };
                     let redacted = stream.feed(&chunk_data);
-                    let patterns = 0; // patterns_found tracked by finalize
+                    let _patterns = 0; // patterns_found tracked by finalize
 
                     stats.total_data_bytes += chunk_data.len() as u64;
                     stats.patterns_found += 0; // Will be updated on finalize

@@ -321,7 +321,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Alphanumeric,
     },
-
     PrefixValidationPattern {
         name: "stripe-api-key-test",
         prefix: "sk_test_",
@@ -541,7 +540,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 300,
         charset: Charset::Any,
     },
-
     // Password Hashes (3 patterns)
     PrefixValidationPattern {
         name: "bcrypt-password-hash",
@@ -680,7 +678,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 300,
         charset: Charset::Base64,
     },
-
     PrefixValidationPattern {
         name: "docker-registry-token",
         prefix: "eyJ0eXAiOiJ",
@@ -889,7 +886,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Base64Url,
     },
-
     PrefixValidationPattern {
         name: "mistral-api-key",
         prefix: "sk-",
@@ -1119,7 +1115,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Alphanumeric,
     },
-
     PrefixValidationPattern {
         name: "contentful-cpa-token",
         prefix: "CFPAT-",
@@ -1370,7 +1365,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Alphanumeric,
     },
-
     // Cloud-Specific Tools (4 patterns)
     PrefixValidationPattern {
         name: "terraform-cloud-token",
@@ -1607,7 +1601,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 200,
         charset: Charset::Base64,
     },
-
     PrefixValidationPattern {
         name: "tiktok-api-token",
         prefix: "tiktok-",
@@ -1795,7 +1788,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 100,
         charset: Charset::Any,
     },
-
     // Generic environment variable KEY=VALUE patterns (hardcoded for common naming conventions)
     // These are added to catch PASSWORD=, SECRET=, TOKEN=, API_KEY=, APIKEY= in various forms
     // with auto-generated variations (exact, prefix, suffix)
@@ -2046,7 +2038,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 0,
         charset: Charset::Base64Url,
     },
-
     PrefixValidationPattern {
         name: "kubernetes-bearer-token",
         prefix: "eyJhbGc", // Base64 for JWT header {"alg"
@@ -2367,7 +2358,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 0,
         charset: Charset::Alphanumeric,
     },
-
     PrefixValidationPattern {
         name: "auth0-management-token",
         prefix: "mgmt_",
@@ -2688,7 +2678,6 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 0,
         charset: Charset::Alphanumeric,
     },
-
     PrefixValidationPattern {
         name: "snyk-api-token",
         prefix: "snyk_",
@@ -2985,5 +2974,4 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         max_len: 0,
         charset: Charset::Alphanumeric,
     },
-
 ];

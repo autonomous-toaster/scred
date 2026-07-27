@@ -7,7 +7,6 @@
 //!
 //! Run with: cargo run --bin profile_components --release -p scred-redactor
 
-use scred_detector;
 use scred_redactor::{RedactionConfig, StreamingConfig};
 use std::time::Instant;
 
@@ -23,8 +22,8 @@ fn main() {
     println!("Test data: {}MB", SIZE / (1024 * 1024));
     println!("Running 5 iterations...\n");
 
-    let config = RedactionConfig::default();
-    let streaming_config = StreamingConfig {
+    let _config = RedactionConfig::default();
+    let _streaming_config = StreamingConfig {
         chunk_size: 64 * 1024,
         lookahead_size: 64 * 1024,
     };
@@ -43,7 +42,7 @@ fn main() {
 
         // Measure redaction time
         let start_redaction = Instant::now();
-        let redacted = scred_detector::redact_text(&test_data, &matches.matches);
+        let _redacted = scred_detector::redact_text(&test_data, &matches.matches);
         let redaction_elapsed = start_redaction.elapsed();
 
         let total_elapsed = start_total.elapsed();

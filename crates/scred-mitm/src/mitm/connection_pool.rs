@@ -43,6 +43,7 @@ pub struct PooledConnection {
     /// Target host this connection was established for
     target_host: String,
     /// Whether connection supports HTTP/2 multiplexing
+    #[allow(dead_code)]
     supports_h2: bool,
 }
 
@@ -111,15 +112,13 @@ impl ConnectionPool {
     ///
     /// # Returns
     /// `PooledConnectionGuard` that automatically returns connection to pool on drop
-    pub async fn acquire(
-        &self,
-        target_host: &str,
-    ) -> Result<PooledConnectionGuard> {
+    pub async fn acquire(&self, target_host: &str) -> Result<PooledConnectionGuard> {
         // Try to get an idle connection first
         let idle = {
             let mut idle = self.idle_connections.lock().await;
             // Find matching connection (same target host)
-            idle.iter().position(|c| c.target_host == target_host)
+            idle.iter()
+                .position(|c| c.target_host == target_host)
                 .and_then(|idx| {
                     let conn = match idle.remove(idx) {
                         Some(c) => c,
@@ -127,7 +126,8 @@ impl ConnectionPool {
                     };
                     // Check if still valid
                     if !conn.should_recycle(self.config.max_requests_per_connection)
-                        && !conn.is_idle_too_long(Duration::from_secs(self.config.idle_timeout_secs))
+                        && !conn
+                            .is_idle_too_long(Duration::from_secs(self.config.idle_timeout_secs))
                     {
                         Some(conn)
                     } else {
@@ -263,7 +263,7 @@ impl PooledConnectionGuard {
 
 impl Drop for PooledConnectionGuard {
     fn drop(&mut self) {
-        if let Some(mut conn) = self.connection.take() {
+        if let Some(conn) = self.connection.take() {
             // Check if connection should be recycled
             // Note: max_requests check happens at acquire time, but double-check here
             if conn.should_recycle(usize::MAX) {
@@ -346,26 +346,26 @@ mod tests {
     fn test_pooled_connection_tracking() {
         // Test request counting and idle detection logic
         // without actually creating a TLS stream
-        
+
         let max_requests = 100;
         let idle_timeout = Duration::from_secs(60);
-        
+
         // Simulate connection that has served many requests
         let requests_served = 100;
-        let last_used = Instant::now();
-        
+        let _last_used = Instant::now();
+
         assert!(requests_served >= max_requests, "Should be recycled");
-        
+
         // Simulate connection that has been idle
-        let requests_served = 1;
+        let _requests_served = 1;
         let idle_duration = Duration::from_secs(61);
-        
+
         assert!(idle_duration > idle_timeout, "Should be evicted");
-        
+
         // Simulate healthy connection
         let requests_served = 50;
         let idle_duration = Duration::from_secs(10);
-        
+
         assert!(requests_served < max_requests, "Should not be recycled");
         assert!(idle_duration < idle_timeout, "Should not be evicted");
     }

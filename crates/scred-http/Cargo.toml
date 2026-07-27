@@ -10,18 +10,14 @@ description = "Shared HTTP library for SCRED proxies"
 scred-redactor = { path = "../scred-redactor", optional = true }
 scred-policy = { path = "../scred-policy", optional = true }
 tokio = { workspace = true }
-rayon = { workspace = true }
 serde = { workspace = true }
-serde_yaml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
-thiserror = { workspace = true }
 rustls = { workspace = true }
 tokio-rustls = { workspace = true }
 webpki-roots = "0.25"
 rustls-pemfile = "2"
-http2 = { workspace = true }
 http = "0.2"
 bytes = "1.0"
 h2 = "0.4"
@@ -41,3 +37,6 @@ tempfile = "3.0"
 
 [lints]
 workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ['bytes', 'h2', 'http', 'serde']

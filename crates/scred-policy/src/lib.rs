@@ -21,11 +21,7 @@ pub mod validation;
 
 pub use discovery::{DiscoveryConfig, DiscoveryServer};
 pub use engine::{
-    BodyProcessingResult,
-    DetectionEvent,
-    Direction,
-    HeaderProcessingResult,
-    PolicyEngine,
+    BodyProcessingResult, DetectionEvent, Direction, HeaderProcessingResult, PolicyEngine,
 };
 pub use placeholder::{Placeholder, PlaceholderGenerator};
 pub use provider::{EnvProvider, SecretProvider};
@@ -34,12 +30,7 @@ pub use validation::{validate_secret, OnInvalid, ValidationError};
 
 // Re-export config types from scred-config
 pub use scred_config::{
-    BodyAction,
-    HeaderAction,
-    HostPolicy,
-    PatternFilter,
-    PolicyConfig,
-    ProviderConfig,
+    BodyAction, HeaderAction, HostPolicy, PatternFilter, PolicyConfig, ProviderConfig,
     ResolvedPolicy,
 };
 

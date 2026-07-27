@@ -1,8 +1,9 @@
-use super::*;
-
-mod tests {
+#[cfg(test)]
+mod unit_tests {
     #![allow(clippy::unwrap_used)]
-    use super::*;
+    use crate::engine::{glob_match, PolicyEngine};
+    use crate::{Direction, HeaderAction, PatternFilter, PolicyConfig};
+    use scred_config::ConfigSource;
 
     #[test]
     fn test_glob_match() {
@@ -13,7 +14,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn test_process_headers_passthrough() {
         let config = PolicyConfig {
             enabled: false,
@@ -23,7 +23,10 @@ mod tests {
         let engine = PolicyEngine::new(config).unwrap();
 
         let mut headers = http::HeaderMap::new();
-        headers.insert("Content-Type", http::HeaderValue::from_static("application/json"));
+        headers.insert(
+            "Content-Type",
+            http::HeaderValue::from_static("application/json"),
+        );
 
         // Default policy should process headers
         let result = engine.process_headers(&mut headers, "example.com").unwrap();
@@ -40,7 +43,9 @@ mod tests {
         let engine = PolicyEngine::new(config).unwrap();
 
         let mut body = b"{\"message\": \"hello\"}".to_vec();
-        let result = engine.process_body(&mut body, "example.com", Direction::Request).unwrap();
+        let result = engine
+            .process_body(&mut body, "example.com", Direction::Request)
+            .unwrap();
         assert!(result.bytes_processed > 0);
     }
 
@@ -81,7 +86,10 @@ mod tests {
 
         // Check Authorization gets Replace action by default
         let resolved = engine.resolve_for_host("example.com");
-        assert_eq!(resolved.header_action("Authorization"), HeaderAction::Replace);
+        assert_eq!(
+            resolved.header_action("Authorization"),
+            HeaderAction::Replace
+        );
         assert_eq!(resolved.header_action("Content-Type"), HeaderAction::Redact);
     }
 
@@ -107,7 +115,8 @@ mod tests {
         if let Err(e) = result {
             let err_str = e.to_string();
             assert!(
-                err_str.contains("SCRED_UNIFIED_TEST_KEY_A") || err_str.contains("same-collision-value"),
+                err_str.contains("SCRED_UNIFIED_TEST_KEY_A")
+                    || err_str.contains("same-collision-value"),
                 "Error should mention the colliding keys: {}",
                 err_str
             );

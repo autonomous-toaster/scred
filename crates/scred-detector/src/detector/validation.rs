@@ -118,4 +118,3 @@ pub fn detect_validation(text: &[u8]) -> DetectionResult {
 
     result
 }
-

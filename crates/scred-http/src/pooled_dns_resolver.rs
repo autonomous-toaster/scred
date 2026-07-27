@@ -201,10 +201,7 @@ impl AsyncRead for PooledTcpStream {
     ) -> Poll<std::io::Result<()>> {
         match &mut self.stream {
             Some(stream) => Pin::new(stream).poll_read(cx, buf),
-            None => Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "stream consumed",
-            ))),
+            None => Poll::Ready(Err(std::io::Error::other("stream consumed"))),
         }
     }
 }
@@ -218,30 +215,21 @@ impl AsyncWrite for PooledTcpStream {
     ) -> Poll<std::io::Result<usize>> {
         match &mut self.stream {
             Some(stream) => Pin::new(stream).poll_write(cx, buf),
-            None => Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "stream consumed",
-            ))),
+            None => Poll::Ready(Err(std::io::Error::other("stream consumed"))),
         }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match &mut self.stream {
             Some(stream) => Pin::new(stream).poll_flush(cx),
-            None => Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "stream consumed",
-            ))),
+            None => Poll::Ready(Err(std::io::Error::other("stream consumed"))),
         }
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match &mut self.stream {
             Some(stream) => Pin::new(stream).poll_shutdown(cx),
-            None => Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "stream consumed",
-            ))),
+            None => Poll::Ready(Err(std::io::Error::other("stream consumed"))),
         }
     }
 }

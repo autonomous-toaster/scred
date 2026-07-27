@@ -308,6 +308,7 @@ impl PatternSelector {
     ///   "tags:aws,github"
     ///   "wildcard:aws-*"
     ///   "regex:^(aws|github)"
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(spec: &str) -> Result<Self, String> {
         Self::from_string(spec)
     }
@@ -462,4 +463,3 @@ impl PatternSelector {
 // ============================================================================
 // Tests
 // ============================================================================
-

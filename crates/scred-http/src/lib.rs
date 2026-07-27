@@ -73,9 +73,9 @@ pub mod streaming_response;
 pub mod chunked_parser;
 
 #[cfg(feature = "policy")]
-pub mod streaming_policy;
-#[cfg(feature = "policy")]
 pub mod policy_handler;
+#[cfg(feature = "policy")]
+pub mod streaming_policy;
 
 // Core exports (always available)
 pub use cached_dns_resolver::{CachedDnsConfig, CachedDnsResolver};
@@ -96,10 +96,10 @@ pub use scred_redactor::pattern_selector::{Origin, PatternKind, ServiceCategory,
 pub use scred_redactor::{CompositePatternSelector, PatternFilter, PatternSelector, PatternTier};
 
 #[cfg(feature = "policy")]
+pub use policy_handler::{handle_http_with_policy, PolicyResult};
+#[cfg(feature = "policy")]
 pub use streaming_policy::{
     stream_request_with_policy, stream_response_with_policy, StreamingPolicyConfig,
 };
-#[cfg(feature = "policy")]
-pub use policy_handler::{handle_http_with_policy, PolicyResult};
 
 pub const VERSION: &str = "0.1.0";

@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 fn main() {
-    let target_size = 1 * 1024 * 1024; // 1MB
+    let target_size = 1024 * 1024; // 1MB
 
     // Create very dense pattern (secret every 20 bytes)
     let mut data = Vec::with_capacity(target_size);

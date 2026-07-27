@@ -3,17 +3,15 @@
 //! Integrates the PolicyEngine with the MITM proxy.
 //! Combines both placeholder replacement and secret redaction.
 
-use std::sync::Arc;
 use scred_config::FileConfig;
 use scred_policy::PolicyEngine;
-use tracing::{info, error};
+use std::sync::Arc;
+use tracing::{error, info};
 
 /// Initialize policy from config file
 ///
 /// This replaces the separate policy and redaction initialization.
-pub fn init_policy(
-    file_config: &FileConfig,
-) -> Option<Arc<PolicyEngine>> {
+pub fn init_policy(file_config: &FileConfig) -> Option<Arc<PolicyEngine>> {
     let policy_config = &file_config.policy;
 
     if !policy_config.enabled {
@@ -31,7 +29,10 @@ pub fn init_policy(
 
             // Log discovery info
             if policy_config.discovery.enabled {
-                info!("[policy] Discovery API available at port {}", policy_config.discovery.port);
+                info!(
+                    "[policy] Discovery API available at port {}",
+                    policy_config.discovery.port
+                );
             }
 
             Some(Arc::new(engine))

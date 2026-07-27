@@ -1,4 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use scred_redactor::streaming::RedactionStream;
 use scred_redactor::{RedactionConfig, RedactionEngine, StreamingConfig, StreamingRedactor};
 use std::sync::Arc;
 
@@ -134,10 +135,39 @@ fn benchmark_lookahead_sizes(c: &mut Criterion) {
     group.finish();
 }
 
+fn benchmark_redaction_stream(c: &mut Criterion) {
+    let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
+    let data = create_test_data(1024 * 1024); // 1MB
+    let chunk_sizes: &[usize] = &[4096, 16384, 65536, 262144];
+
+    let mut group = c.benchmark_group("redaction_stream");
+    group.sample_size(30);
+
+    for chunk_size in chunk_sizes {
+        group.bench_function(
+            BenchmarkId::new("feed_finalize", format!("{}kb", chunk_size / 1024)),
+            |b| {
+                b.iter(|| {
+                    let mut stream = RedactionStream::new(engine.clone());
+                    for chunk in data.chunks(*chunk_size) {
+                        let redacted = stream.feed(chunk);
+                        black_box(&redacted);
+                    }
+                    let (remaining, stats) = stream.finalize();
+                    black_box((remaining, stats));
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     benchmark_streaming_core,
     benchmark_chunk_sizes,
-    benchmark_lookahead_sizes
+    benchmark_lookahead_sizes,
+    benchmark_redaction_stream
 );
 criterion_main!(benches);

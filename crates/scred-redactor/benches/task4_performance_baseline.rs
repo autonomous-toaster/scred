@@ -15,7 +15,7 @@ use scred_redactor::{RedactionConfig, RedactionEngine};
 /// Generate test data with embedded secrets
 fn generate_test_data_with_secrets(size_kb: usize) -> String {
     let mut result = String::with_capacity(size_kb * 1024);
-    let test_secrets = vec![
+    let test_secrets = [
         "AWS Key: AKIAIOSFODNN7EXAMPLE",
         "GitHub: ghp_1234567890123456789012345678901234567890",
         "OpenAI: sk-proj-1234567890123456789012345678901234567890",

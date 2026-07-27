@@ -209,11 +209,7 @@ impl DetectionStream {
 
         // Calculate output boundary
         let combined_len = combined.len();
-        let output_end = if combined_len > LOOKAHEAD_SIZE {
-            combined_len - LOOKAHEAD_SIZE
-        } else {
-            0
-        };
+        let output_end = combined_len.saturating_sub(LOOKAHEAD_SIZE);
 
         // Split matches: output region vs lookahead region
         let mut output_matches = Vec::new();
@@ -310,10 +306,9 @@ const MAX_ITERATIONS_PER_POLL: u32 = 8;
 ///
 /// # Example
 /// ```ignore
-/// let mut reader = AsyncRedactionReader::new(tcp_stream, engine);
-/// tokio::io::copy(&mut reader, &mut output).await?;
+/// // AsyncRedactionReader requires an async context and proper setup
+/// // See tests/ for working examples
 /// ```
-
 // Re-exports
 pub use async_reader::{AsyncRedactionReader, StreamingConfig};
 pub use legacy::FrameRingRedactor;

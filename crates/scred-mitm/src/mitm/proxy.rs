@@ -1,8 +1,8 @@
 use crate::mitm::config::Config;
 use crate::mitm::config::TrafficPolicy;
 use crate::mitm::tls::CertificateGenerator;
-use scred_policy::PolicyEngine;
 use anyhow::Result;
+use scred_policy::PolicyEngine;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -15,7 +15,7 @@ pub struct ProxyServer {
     redaction_engine: Arc<scred_redactor::RedactionEngine>,
     pool: Arc<scred_http::MultiUpstreamPool>,
     resolver: Arc<scred_http::OptimizedDnsResolver>,
-        traffic_policy: Arc<TrafficPolicy>,
+    traffic_policy: Arc<TrafficPolicy>,
     policy: Option<Arc<PolicyEngine>>,
 }
 
@@ -33,13 +33,12 @@ impl ProxyServer {
             std::path::Path::new(&config.tls.cert_cache_dir),
         )?;
 
-        let redaction_engine = scred_redactor::RedactionEngine::new(scred_redactor::RedactionConfig {
-            enabled: true,
-        });
+        let redaction_engine =
+            scred_redactor::RedactionEngine::new(scred_redactor::RedactionConfig { enabled: true });
 
-                let traffic_policy = config.traffic.into_policy()?;
+        let traffic_policy = config.traffic.into_policy()?;
 
-                if traffic_policy.enabled {
+        if traffic_policy.enabled {
             info!(
                 "Traffic filtering enabled: {:?}",
                 traffic_policy.allowed_domains
@@ -52,7 +51,7 @@ impl ProxyServer {
             redaction_engine: Arc::new(redaction_engine),
             pool: Arc::new(scred_http::MultiUpstreamPool::new()),
             resolver: Arc::new(scred_http::OptimizedDnsResolverBuilder::new().build()),
-                        traffic_policy: Arc::new(traffic_policy),
+            traffic_policy: Arc::new(traffic_policy),
             policy,
         })
     }
@@ -70,7 +69,7 @@ impl ProxyServer {
             let redaction = self.redaction_engine.clone();
             let pool = self.pool.clone();
             let resolver = self.resolver.clone();
-                        let traffic_policy = self.traffic_policy.clone();
+            let traffic_policy = self.traffic_policy.clone();
             let policy = self.policy.clone();
             let upstream_resolver = Arc::new(scred_http::proxy_resolver::MitmConfig::from_env());
 
@@ -84,7 +83,7 @@ impl ProxyServer {
                     config,
                     pool,
                     resolver,
-                                        traffic_policy,
+                    traffic_policy,
                     policy,
                 )
                 .await
@@ -130,8 +129,9 @@ async fn handle_client(
                         break;
                     }
                     if first_line_buf.len() > 1024 {
-                        let _ = send_error_response(&mut socket_write, 413, "Request Line Too Long")
-                            .await;
+                        let _ =
+                            send_error_response(&mut socket_write, 413, "Request Line Too Long")
+                                .await;
                         connection_closed = true;
                         break;
                     }
@@ -168,7 +168,7 @@ async fn handle_client(
             let (host, _port) = scred_http::connect::parse_host_port(parts[1])
                 .map_err(|e| anyhow::anyhow!("Failed to parse host:port: {}", e))?;
 
-                        if !traffic_policy.is_allowed(&host) {
+            if !traffic_policy.is_allowed(&host) {
                 info!("Blocked CONNECT to {}: domain not allowed", host);
                 send_error_response(&mut socket_write, 403, &traffic_policy.block_message).await?;
                 return Ok(());
@@ -195,7 +195,8 @@ async fn handle_client(
                         buf[3] = byte[0];
 
                         // Check if we have \r\n\r\n
-                        if buf[0] == b'\r' && buf[1] == b'\n' && buf[2] == b'\r' && buf[3] == b'\n' {
+                        if buf[0] == b'\r' && buf[1] == b'\n' && buf[2] == b'\r' && buf[3] == b'\n'
+                        {
                             break;
                         }
                     }
@@ -211,7 +212,8 @@ async fn handle_client(
                 .map_err(|e| anyhow::anyhow!("Failed to parse host:port: {}", e))?;
 
             // Determine upstream destination
-            let upstream_addr = if let Some(upstream) = upstream_resolver.get_proxy_for(&host, true) {
+            let upstream_addr = if let Some(upstream) = upstream_resolver.get_proxy_for(&host, true)
+            {
                 debug!("Routing through upstream proxy: {}", upstream);
                 upstream
             } else {
@@ -252,13 +254,13 @@ async fn handle_client(
             }
 
             // After TLS MITM, connection is consumed, exit
-            return Ok(());
+            Ok(())
         } else {
             // Handle HTTP proxy requests (non-CONNECT)
             debug!("HTTP proxy request from {}: {}", peer_addr, line);
 
             // Extract host from HTTP request for traffic filtering
-                        {
+            {
                 // Parse the host from the request line or headers
                 // For simplicity, we check common patterns
                 let host = extract_host_from_request(&line);
@@ -285,11 +287,9 @@ async fn handle_client(
             {
                 warn!("HTTP proxy handler error: {}", e);
             }
-            return Ok(()); // Connection consumed by HTTP handler
+            Ok(()) // Connection consumed by HTTP handler
         }
     }
-
-    Ok(())
 }
 
 fn extract_host_from_request(request_line: &str) -> Option<String> {

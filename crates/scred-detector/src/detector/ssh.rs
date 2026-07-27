@@ -71,4 +71,3 @@ pub fn detect_ssh_keys(text: &[u8]) -> DetectionResult {
 
     result
 }
-

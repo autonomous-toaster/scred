@@ -1,7 +1,6 @@
 pub mod mitm {
     pub mod config;
     pub mod connection_pool;
-    pub mod h2_e2e_tests;
     /// HTTP/2 MITM Handler - Handles H2 protocol with detect-only and redact modes
     /// Integrated with h2 crate for multiplexing and per-stream redaction support
     pub mod h2_mitm_handler;
@@ -23,7 +22,7 @@ pub use policy_integration::init_policy as init_policy_from_config;
 pub use scred_http::tls_roots::build_root_cert_store;
 
 pub use mitm::config::Config;
-pub use mitm::connection_pool::{ConnectionPool, PooledConnectionGuard, PoolStats};
+pub use mitm::connection_pool::{ConnectionPool, PoolStats, PooledConnectionGuard};
 pub use scred_config::ConnectionPoolConfig;
 
 /// HTTP/2 MITM support: Full implementation with per-stream redaction

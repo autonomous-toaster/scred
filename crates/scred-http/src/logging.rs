@@ -27,7 +27,7 @@ pub fn init() -> anyhow::Result<()> {
                         .with(fmt_layer.with_writer(std::io::stdout))
                         .init();
                 }
-                "stderr" | _ => {
+                _ => {
                     tracing_subscriber::registry()
                         .with(env_filter)
                         .with(fmt_layer.with_writer(std::io::stderr))
@@ -35,7 +35,7 @@ pub fn init() -> anyhow::Result<()> {
                 }
             }
         }
-        "text" | "compact" | _ => {
+        _ => {
             let fmt_layer = fmt::layer()
                 .compact()
                 .with_target(false)
@@ -48,7 +48,7 @@ pub fn init() -> anyhow::Result<()> {
                         .with(fmt_layer.with_writer(std::io::stdout))
                         .init();
                 }
-                "stderr" | _ => {
+                _ => {
                     tracing_subscriber::registry()
                         .with(env_filter)
                         .with(fmt_layer.with_writer(std::io::stderr))

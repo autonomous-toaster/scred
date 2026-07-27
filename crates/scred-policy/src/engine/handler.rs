@@ -8,7 +8,7 @@ impl PolicyEngine {
     ) -> crate::streaming::ReplacementTracker {
         use crate::streaming::ReplacementTracker;
 
-        let mut tracker = ReplacementTracker::new();
+        let tracker = ReplacementTracker::new();
 
         // Only process if we have placeholders configured
         if !self.has_placeholders() {

@@ -15,11 +15,8 @@ use aho_corasick::AhoCorasick;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use scred_config::{
-    BodyAction, ConfigSource, HeaderAction, HostPolicy, PatternFilter,
-    ResolvedPolicy, PolicyConfig,
-};
-use scred_redactor::{PatternMatch, RedactionEngine, RedactionConfig};
+use scred_config::{BodyAction, HeaderAction, PolicyConfig, ResolvedPolicy};
+use scred_redactor::{RedactionConfig, RedactionEngine};
 
 use crate::placeholder::PlaceholderGenerator;
 use crate::streaming::PlaceholderAutomaton;
@@ -111,8 +108,7 @@ impl PolicyEngine {
         }
 
         let automaton = if patterns.is_empty() {
-            AhoCorasick::new(&[""])
-                .map_err(|e| PolicyError::PatternError(e.to_string()))?
+            AhoCorasick::new([""]).map_err(|e| PolicyError::PatternError(e.to_string()))?
         } else {
             AhoCorasick::builder()
                 .ascii_case_insensitive(false)
@@ -152,7 +148,7 @@ impl PolicyEngine {
                                 // Track which keys have each value (for collision detection)
                                 value_to_keys
                                     .entry(value.clone())
-                                    .or_insert_with(Vec::new)
+                                    .or_default()
                                     .push(key.clone());
                                 secrets.insert(key, value);
                             }
@@ -163,7 +159,7 @@ impl PolicyEngine {
         }
 
         // Check for value collisions (different keys with same value)
-        for (_value, keys) in &value_to_keys {
+        for keys in value_to_keys.values() {
             if keys.len() > 1 {
                 return Err(PolicyError::ValueCollision(format!(
                     "Multiple secrets have the same value: {}",
@@ -225,11 +221,14 @@ impl PolicyEngine {
             .placeholders()
             .into_iter()
             .map(|(k, v)| {
-                (k.clone(), Placeholder {
-                    name: k,
-                    value: v,
-                    prefix: "".to_string(),
-                })
+                (
+                    k.clone(),
+                    Placeholder {
+                        name: k,
+                        value: v,
+                        prefix: "".to_string(),
+                    },
+                )
             })
             .collect();
         updater.update(placeholders);
@@ -369,8 +368,10 @@ impl PolicyEngine {
             Direction::Response => resolved.response_body_action(),
         };
 
-        let mut result = BodyProcessingResult::default();
-        result.bytes_processed = body.len();
+        let mut result = BodyProcessingResult {
+            bytes_processed: body.len(),
+            ..Default::default()
+        };
 
         match action {
             BodyAction::Redact => {

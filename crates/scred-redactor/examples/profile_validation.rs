@@ -1,6 +1,5 @@
 //! Profile validation detection specifically to identify optimization opportunities
 
-use scred_detector;
 use std::time::Instant;
 
 fn main() {
@@ -11,8 +10,8 @@ fn main() {
     let mut data = vec![0u8; 10 * 1024 * 1024]; // 10MB
 
     // Fill with pseudorandom data (simulates logs)
-    for i in 0..data.len() {
-        data[i] = ((i * 7 + 13) % 256) as u8;
+    for (i, byte) in data.iter_mut().enumerate() {
+        *byte = ((i * 7 + 13) % 256) as u8;
     }
 
     // Insert some real patterns to match

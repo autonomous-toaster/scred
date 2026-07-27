@@ -70,4 +70,3 @@ pub fn detect_simple_prefix(text: &[u8]) -> DetectionResult {
 
     result
 }
-

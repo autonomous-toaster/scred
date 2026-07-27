@@ -5,18 +5,15 @@
 //! through the policy engine.
 
 use anyhow::{anyhow, Result};
-use rustls::{ClientConfig, RootCertStore, ServerName};
 use scred_config::ConfigLoader;
 use scred_http::fixed_upstream::FixedUpstream;
 use scred_http::logging;
-use scred_http::{OptimizedDnsResolver, OptimizedDnsResolverBuilder};
+use scred_http::OptimizedDnsResolverBuilder;
 use scred_policy::PolicyEngine;
 use std::env;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::TlsConnector;
-use tracing::{debug, info, warn};
+use tokio::net::TcpListener;
+use tracing::{info, warn};
 
 mod policy_integration;
 pub use policy_integration::init_policy_from_config;
@@ -125,7 +122,7 @@ scred-proxy:
 
 /// Simple proxy configuration
 #[derive(Clone, Debug)]
-struct ProxyConfig {
+pub struct ProxyConfig {
     listen_addr: String,
     listen_port: u16,
     upstream: FixedUpstream,
@@ -135,7 +132,7 @@ impl ProxyConfig {
     fn from_config_file() -> Result<Self> {
         let mut file_config = ConfigLoader::load()?;
         ConfigLoader::validate(&mut file_config)?;
-        
+
         let proxy_cfg = file_config.scred_proxy.ok_or_else(|| {
             anyhow!(
                 "No scred-proxy configuration found. \
@@ -171,10 +168,15 @@ impl ProxyConfig {
 
         let upstream = FixedUpstream::parse(&upstream_url)?;
 
-        info!("Configuration loaded: listen={}:{}", listen_addr, listen_port);
+        info!(
+            "Configuration loaded: listen={}:{}",
+            listen_addr, listen_port
+        );
         info!(
             "Upstream: {}://{}{}",
-            upstream.scheme, upstream.authority(), upstream.base_path
+            upstream.scheme,
+            upstream.authority(),
+            upstream.base_path
         );
 
         Ok(Self {
@@ -189,10 +191,8 @@ impl ProxyConfig {
             .unwrap_or_else(|_| "9999".to_string())
             .parse::<u16>()?;
 
-        let upstream_url =
-            env::var("SCRED_PROXY_UPSTREAM_URL").map_err(|_| {
-                anyhow!("SCRED_PROXY_UPSTREAM_URL required when no config file found")
-            })?;
+        let upstream_url = env::var("SCRED_PROXY_UPSTREAM_URL")
+            .map_err(|_| anyhow!("SCRED_PROXY_UPSTREAM_URL required when no config file found"))?;
 
         info!("Environment configuration: listen_port={}", listen_port);
 
@@ -225,7 +225,7 @@ async fn main() -> Result<()> {
     logging::init_from_env();
 
     // Load config file for policy initialization
-    let mut file_config = ConfigLoader::load().ok();
+    let file_config = ConfigLoader::load().ok();
 
     // Initialize policy engine (starts discovery server if enabled)
     let policy: Option<Arc<PolicyEngine>> = if let Some(ref fc) = file_config {
@@ -234,13 +234,16 @@ async fn main() -> Result<()> {
         None
     };
 
-
     // Start discovery server if policy is enabled
     if let Some(ref engine) = policy {
         if let Some(_updater) = engine.run_discovery() {
-            info!("Discovery server started on port {}", engine.discovery_port());
+            info!(
+                "Discovery server started on port {}",
+                engine.discovery_port()
+            );
         }
-    }    let config = ProxyConfig::from_config_file().or_else(|_| ProxyConfig::from_env())?;
+    }
+    let config = ProxyConfig::from_config_file().or_else(|_| ProxyConfig::from_env())?;
 
     let listen_addr = format!("{}:{}", config.listen_addr, config.listen_port);
 
@@ -284,7 +287,7 @@ async fn main() -> Result<()> {
 
         tokio::spawn(async move {
             if let Err(e) =
-                handle_connection(stream, config, resolver, peer_addr, policy_clone).await
+                handler::handle_connection(stream, config, resolver, peer_addr, policy_clone).await
             {
                 warn!("Connection error from {}: {}", peer_addr, e);
             }
@@ -293,209 +296,4 @@ async fn main() -> Result<()> {
 }
 
 /// Handle connection with policy processing
-async fn handle_connection(
-    stream: TcpStream,
-    config: Arc<ProxyConfig>,
-    resolver: Arc<OptimizedDnsResolver>,
-    peer_addr: std::net::SocketAddr,
-    policy: Option<Arc<PolicyEngine>>,
-) -> Result<()> {
-    use tokio::io::copy;
-
-    let (client_read, mut client_write) = stream.into_split();
-    let mut client_reader = BufReader::with_capacity(256 * 1024, client_read);
-    let mut request_count = 0;
-
-    loop {
-        request_count += 1;
-
-        let mut first_line = String::new();
-        client_reader.read_line(&mut first_line).await?;
-
-        if first_line.is_empty() {
-            if request_count > 1 {
-                debug!("Connection closed after {} requests", request_count - 1);
-            }
-            break;
-        }
-
-        let first_line = first_line.trim().to_string();
-        let request_path = extract_path(&first_line);
-
-        info!(
-            "{} \"{} {}\"",
-            peer_addr.ip(),
-            extract_method(&first_line),
-            request_path
-        );
-
-        let upstream_addr = config.upstream.authority();
-        let rewritten_request_line = config.upstream.rewrite_request_line(&first_line)?;
-
-        let tcp_stream = resolver.connect_with_retry(&upstream_addr).await?;
-
-        if config.upstream.scheme == "https" {
-            let mut upstream = connect_tls_upstream(tcp_stream, &config.upstream.host).await?;
-
-            // Forward request with policy processing
-            if let Some(ref engine) = policy {
-                forward_with_policy(
-                    &mut client_reader,
-                    &mut upstream,
-                    &rewritten_request_line,
-                    engine,
-                    &config.upstream.host,
-                )
-                .await?;
-            } else {
-                // No policy - simple forwarding
-                forward_simple(&mut client_reader, &mut upstream, &rewritten_request_line).await?;
-            }
-
-            // Read and forward response
-            let mut upstream_buf = BufReader::new(upstream);
-            copy(&mut upstream_buf, &mut client_write).await?;
-        } else {
-            let mut upstream = tcp_stream;
-
-            if let Some(ref engine) = policy {
-                forward_with_policy(
-                    &mut client_reader,
-                    &mut upstream,
-                    &rewritten_request_line,
-                    engine,
-                    &config.upstream.host,
-                )
-                .await?;
-            } else {
-                forward_simple(&mut client_reader, &mut upstream, &rewritten_request_line).await?;
-            }
-
-            let mut upstream_buf = BufReader::new(upstream);
-            copy(&mut upstream_buf, &mut client_write).await?;
-        }
-
-        client_write.flush().await?;
-    }
-
-    Ok(())
-}
-
-/// Forward request with policy processing
-async fn forward_with_policy<R, W>(
-    client_reader: &mut BufReader<R>,
-    upstream: &mut W,
-    request_line: &str,
-    engine: &PolicyEngine,
-    host: &str,
-) -> Result<()>
-where
-    R: tokio::io::AsyncRead + Unpin,
-    W: tokio::io::AsyncWrite + Unpin,
-{
-    // Send request line
-    let req_line = format!("{}\r\n", request_line);
-    upstream.write_all(req_line.as_bytes()).await?;
-
-    // Read and process headers
-    let mut headers = Vec::new();
-    loop {
-        let mut line = String::new();
-        client_reader.read_line(&mut line).await?;
-        if line == "\r\n" || line.is_empty() {
-            break;
-        }
-        headers.push(line);
-    }
-
-    // Process headers through policy engine
-    let header_str: String = headers.join("");
-    let mut header_bytes = header_str.into_bytes();
-    
-    // Use placeholder automaton for replacement
-    let automaton = engine.create_placeholder_automaton();
-    let (_, count) = automaton.replace_placeholders(&mut header_bytes, host, |_, _| true);
-    
-    if count > 0 {
-        debug!("Replaced {} placeholders in request headers", count);
-    }
-
-    upstream.write_all(&header_bytes).await?;
-    upstream.write_all(b"\r\n").await?;
-    upstream.flush().await?;
-
-    Ok(())
-}
-
-/// Simple forwarding without policy
-async fn forward_simple<R, W>(
-    client_reader: &mut BufReader<R>,
-    upstream: &mut W,
-    request_line: &str,
-) -> Result<()>
-where
-    R: tokio::io::AsyncRead + Unpin,
-    W: tokio::io::AsyncWrite + Unpin,
-{
-    // Send request line
-    let req_line = format!("{}\r\n", request_line);
-    upstream.write_all(req_line.as_bytes()).await?;
-
-    // Forward headers
-    let mut headers_buf = Vec::new();
-    loop {
-        let mut line = String::new();
-        client_reader.read_line(&mut line).await?;
-        headers_buf.extend_from_slice(line.as_bytes());
-        if line == "\r\n" || line.is_empty() {
-            break;
-        }
-    }
-
-    upstream.write_all(&headers_buf).await?;
-    upstream.flush().await?;
-
-    Ok(())
-}
-
-async fn connect_tls_upstream<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
-    stream: S,
-    host: &str,
-) -> Result<tokio_rustls::client::TlsStream<S>> {
-    let mut root_store = RootCertStore::empty();
-    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
-
-    let client_config = ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-
-    let connector = TlsConnector::from(Arc::new(client_config));
-    let server_name =
-        ServerName::try_from(host).map_err(|_| anyhow!("Invalid upstream host: {}", host))?;
-
-    connector
-        .connect(server_name, stream)
-        .await
-        .map_err(|e| anyhow!("TLS handshake failed: {}", e))
-}
-
-fn extract_method(request_line: &str) -> &str {
-    request_line.split(' ').next().unwrap_or("UNKNOWN")
-}
-
-fn extract_path(request_line: &str) -> &str {
-    let parts: Vec<&str> = request_line.split(' ').collect();
-    if parts.len() >= 2 {
-        let path_with_query = parts[1];
-        path_with_query.split('?').next().unwrap_or("/")
-    } else {
-        "/"
-    }
-}
+mod handler;

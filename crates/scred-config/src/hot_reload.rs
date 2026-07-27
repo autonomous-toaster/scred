@@ -54,13 +54,14 @@ where
     let on_reload = Arc::new(on_reload);
 
     tokio::spawn(async move {
-        let mut sigterm = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup()) {
-            Ok(sig) => sig,
-            Err(e) => {
-                tracing::error!("Failed to create SIGHUP handler: {}", e);
-                return;
-            }
-        };
+        let mut sigterm =
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup()) {
+                Ok(sig) => sig,
+                Err(e) => {
+                    tracing::error!("Failed to create SIGHUP handler: {}", e);
+                    return;
+                }
+            };
 
         while sigterm.recv().await.is_some() {
             info!("[hot-reload] SIGHUP received, reloading configuration...");

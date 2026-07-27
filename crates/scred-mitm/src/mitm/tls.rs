@@ -14,10 +14,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
+use time::{Duration, OffsetDateTime};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
-use time::{Duration, OffsetDateTime};
-use ::pem;
 use x509_parser::parse_x509_certificate;
 
 // Certificate validity: CA lives 10 years, domain certs 1 year
@@ -37,7 +36,7 @@ fn is_cert_valid(cert_pem: &[u8]) -> bool {
     };
 
     // Parse X.509 certificate
-    let cert = match parse_x509_certificate(&pem.contents()) {
+    let cert = match parse_x509_certificate(pem.contents()) {
         Ok((_, cert)) => cert,
         Err(e) => {
             warn!("Failed to parse X.509 certificate: {}", e);
@@ -53,7 +52,7 @@ fn is_cert_valid(cert_pem: &[u8]) -> bool {
 /// Extract the expiration time from a PEM-encoded certificate
 fn get_cert_expiry(cert_pem: &[u8]) -> Option<OffsetDateTime> {
     let pem = ::pem::parse(cert_pem).ok()?;
-    let (_, cert) = parse_x509_certificate(&pem.contents()).ok()?;
+    let (_, cert) = parse_x509_certificate(pem.contents()).ok()?;
     // to_datetime returns OffsetDateTime directly
     Some(cert.validity().not_after.to_datetime())
 }
@@ -94,27 +93,31 @@ impl CertificateGenerator {
 
         // Use ECDSA P-256 - widely supported including LibreSSL
         let alg = &rcgen::PKCS_ECDSA_P256_SHA256;
-        
+
         // Generate CA with proper attributes
         let mut params = rcgen::CertificateParams::new(vec![]);
-        
+
         // Set proper distinguished name
         params.distinguished_name = rcgen::DistinguishedName::new();
-        params.distinguished_name.push(rcgen::DnType::CommonName, "scred-mitm-ca");
-        params.distinguished_name.push(rcgen::DnType::OrganizationName, "SCRED");
-        
+        params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "scred-mitm-ca");
+        params
+            .distinguished_name
+            .push(rcgen::DnType::OrganizationName, "SCRED");
+
         // Mark as CA with no constraints
         params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
-        
+
         // Set key usage for CA (keyCertSign and cRLSign)
         params.key_usages = vec![
             rcgen::KeyUsagePurpose::KeyCertSign,
             rcgen::KeyUsagePurpose::CrlSign,
         ];
-        
+
         // Use ECDSA P-256 algorithm
         params.alg = alg;
-        
+
         // Set validity period (10 years, starting 24h ago for clock skew)
         let now = OffsetDateTime::now_utc();
         params.not_before = now - Duration::days(1);
@@ -128,7 +131,8 @@ impl CertificateGenerator {
         let cert = rcgen::Certificate::from_params(params)
             .map_err(|e| anyhow!("Failed to generate CA: {}", e))?;
 
-        let cert_pem = cert.serialize_pem()
+        let cert_pem = cert
+            .serialize_pem()
             .map_err(|e| anyhow!("Failed to serialize CA cert: {}", e))?;
         let key_pem = cert.serialize_private_key_pem();
 
@@ -137,7 +141,10 @@ impl CertificateGenerator {
         fs::write(ca_cert_path, cert_pem.as_bytes())
             .map_err(|e| anyhow!("Failed to write CA cert: {}", e))?;
 
-        info!("Generated ECDSA P-256 CA certificate at {:?} and {:?}", ca_key_path, ca_cert_path);
+        info!(
+            "Generated ECDSA P-256 CA certificate at {:?} and {:?}",
+            ca_key_path, ca_cert_path
+        );
         Ok(())
     }
 
@@ -150,17 +157,20 @@ impl CertificateGenerator {
             return Err(anyhow!("CA cert file not found: {:?}", ca_cert_path));
         }
 
-        let ca_key_pem = fs::read(ca_key_path)
-            .map_err(|e| anyhow!("Failed to read CA key: {}", e))?;
-        let ca_cert_pem = fs::read(ca_cert_path)
-            .map_err(|e| anyhow!("Failed to read CA cert: {}", e))?;
+        let ca_key_pem =
+            fs::read(ca_key_path).map_err(|e| anyhow!("Failed to read CA key: {}", e))?;
+        let ca_cert_pem =
+            fs::read(ca_cert_path).map_err(|e| anyhow!("Failed to read CA cert: {}", e))?;
 
         if !cache_dir.exists() {
             fs::create_dir_all(cache_dir)
                 .map_err(|e| anyhow!("Failed to create cache dir: {}", e))?;
         }
 
-        info!("Certificate generator initialized with CA from {:?}", ca_key_path);
+        info!(
+            "Certificate generator initialized with CA from {:?}",
+            ca_key_path
+        );
 
         Ok(Self {
             ca_key_pem,
@@ -184,7 +194,10 @@ impl CertificateGenerator {
                         debug!("Certificate cache hit for domain: {}", domain);
                         return Ok((cached.cert_pem.clone(), cached.key_pem.clone()));
                     } else {
-                        debug!("Cached certificate expired for domain: {} (expired at {:?})", domain, expires_at);
+                        debug!(
+                            "Cached certificate expired for domain: {} (expired at {:?})",
+                            domain, expires_at
+                        );
                         // Don't return here - will regenerate below
                     }
                 } else {
@@ -219,7 +232,10 @@ impl CertificateGenerator {
                     if is_cert_valid(&cert) {
                         return Ok::<_, anyhow::Error>((cert, key, true)); // true = from cache
                     } else {
-                        debug!("Disk cached certificate expired for domain: {}", domain_owned);
+                        debug!(
+                            "Disk cached certificate expired for domain: {}",
+                            domain_owned
+                        );
                         // Delete expired files to clean up
                         let _ = fs::remove_file(&cache_path);
                         let _ = fs::remove_file(&key_path);
@@ -240,10 +256,12 @@ impl CertificateGenerator {
         if !from_cache {
             let cache_path = self.cache_dir.join(format!("{}.pem", domain));
             let key_path = self.cache_dir.join(format!("{}.key", domain));
-            
-            tokio::fs::write(&cache_path, &cert_pem).await
+
+            tokio::fs::write(&cache_path, &cert_pem)
+                .await
                 .map_err(|e| anyhow!("Failed to write cert cache: {}", e))?;
-            tokio::fs::write(&key_path, &key_pem).await
+            tokio::fs::write(&key_path, &key_pem)
+                .await
                 .map_err(|e| anyhow!("Failed to write key cache: {}", e))?;
         }
 
@@ -271,7 +289,10 @@ impl CertificateGenerator {
         }
 
         if !from_cache {
-            info!("Generated CA-signed ECDSA P-256 certificate for domain: {}", domain);
+            info!(
+                "Generated CA-signed ECDSA P-256 certificate for domain: {}",
+                domain
+            );
         }
         Ok((cert_pem, key_pem))
     }
@@ -288,7 +309,10 @@ impl CertificateGenerator {
             for entry in fs::read_dir(&self.cache_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                if path.extension().is_some_and(|ext| ext == "pem" || ext == "key") {
+                if path
+                    .extension()
+                    .is_some_and(|ext| ext == "pem" || ext == "key")
+                {
                     fs::remove_file(path)?;
                 }
             }
@@ -327,7 +351,11 @@ impl CertificateGenerator {
 
 /// Generate a certificate signed by CA (blocking operation)
 /// Uses ECDSA P-256 for LibreSSL compatibility
-fn generate_cert_signed_by_ca(domain: &str, ca_key_pem: &[u8], ca_cert_pem: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+fn generate_cert_signed_by_ca(
+    domain: &str,
+    ca_key_pem: &[u8],
+    ca_cert_pem: &[u8],
+) -> Result<(Vec<u8>, Vec<u8>)> {
     let ca_key_str = String::from_utf8_lossy(ca_key_pem);
     let ca_cert_str = String::from_utf8_lossy(ca_cert_pem);
 
@@ -347,34 +375,36 @@ fn generate_cert_signed_by_ca(domain: &str, ca_key_pem: &[u8], ca_cert_pem: &[u8
 
     // Create domain certificate
     let mut params = rcgen::CertificateParams::new(vec![domain.to_string()]);
-    
+
     // Set distinguished name
     params.distinguished_name = rcgen::DistinguishedName::new();
-    params.distinguished_name.push(rcgen::DnType::CommonName, domain);
-    
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, domain);
+
     // Set SAN extension
     params.subject_alt_names = vec![rcgen::SanType::DnsName(domain.to_string())];
-    
+
     // Not a CA
     params.is_ca = rcgen::IsCa::NoCa;
-    
+
     // Key usage for server certificate
     params.key_usages = vec![
         rcgen::KeyUsagePurpose::DigitalSignature,
         rcgen::KeyUsagePurpose::KeyEncipherment,
     ];
-    
+
     // Extended key usage for TLS server
     params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
-    
+
     // Use ECDSA P-256 (same as CA)
     params.alg = alg;
-    
+
     // Set validity period (1 year, starting 24h ago for clock skew)
     let now = OffsetDateTime::now_utc();
     params.not_before = now - Duration::days(1);
     params.not_after = now + Duration::days(DOMAIN_VALIDITY_DAYS);
-    
+
     // Generate ECDSA key pair for domain cert
     let domain_key_pair = rcgen::KeyPair::generate(alg)
         .map_err(|e| anyhow!("Failed to generate domain ECDSA key pair: {}", e))?;
@@ -383,12 +413,12 @@ fn generate_cert_signed_by_ca(domain: &str, ca_key_pem: &[u8], ca_cert_pem: &[u8
     // Generate domain certificate
     let domain_cert = rcgen::Certificate::from_params(params)
         .map_err(|e| anyhow!("Failed to generate domain certificate: {}", e))?;
-    
+
     // Sign with CA
     let cert_pem = domain_cert
         .serialize_pem_with_signer(&ca_cert)
         .map_err(|e| anyhow!("Failed to sign certificate: {}", e))?;
-    
+
     let key_pem = domain_cert.serialize_private_key_pem();
 
     Ok((cert_pem.into_bytes(), key_pem.into_bytes()))

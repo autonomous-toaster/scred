@@ -70,7 +70,9 @@ pub fn build_root_cert_store() -> RootCertStore {
             }
         }
     } else {
-        info!("[TLS_ROOTS] No custom CA certificate configured (set SSL_CERT_FILE or CURL_CA_BUNDLE)");
+        info!(
+            "[TLS_ROOTS] No custom CA certificate configured (set SSL_CERT_FILE or CURL_CA_BUNDLE)"
+        );
     }
 
     root_store

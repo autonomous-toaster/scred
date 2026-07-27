@@ -11,23 +11,23 @@
 
 ## 2. Benchmark Suite
 
-- [ ] 2.1 Rewrite scaling benchmark — data outside b.iter(), cover all 5 tiers
-- [ ] 2.2 Rewrite realistic benchmark — data outside b.iter(), cover all pattern types
-- [ ] 2.3 Add RedactionStream benchmark
+- [x] 2.1 Rewrite scaling benchmark — data outside b.iter(), cover all 5 tiers
+- [x] 2.2 Rewrite realistic benchmark — data outside b.iter(), cover all pattern types
+- [x] 2.3 Add RedactionStream benchmark
 - [x] 2.4 Remove broken pattern_frequency and empty simd_benchmark
-- [ ] 2.5 Add CI benchmark gate to Justfile
-- [ ] 2.6 Add benchmark regression threshold (5%)
+- [x] 2.5 Add CI benchmark gate to Justfile
+- [x] 2.6 Add benchmark regression threshold (5%)
 
 ## 3. Proxy Body Redaction (CRITICAL)
 
-- [ ] 3.1 Wire RedactionStream into scred-proxy body forwarding path
-- [ ] 3.2 Verify proxy body redaction with integration test
+- [x] 3.1 Wire RedactionStream into scred-proxy body forwarding path
+- [x] 3.2 Verify proxy body redaction with integration test
 
 ## 4. CLI Improvements
 
-- [ ] 4.1 Add --output / -o flag to scred-cli
-- [ ] 4.2 Remove tier concept from CLI help (replace with glob examples)
+- [x] 4.1 Add --output / -o flag to scred-cli
+- [x] 4.2 Remove tier concept from CLI help (replace with glob examples)
 
 ## 5. README Rewrite
 
-- [ ] 5.1 Rewrite README with proof of performance, reproduction steps, accurate examples
+- [x] 5.1 Rewrite README with proof of performance, reproduction steps, accurate examples

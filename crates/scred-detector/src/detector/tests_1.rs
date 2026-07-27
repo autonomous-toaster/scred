@@ -37,11 +37,11 @@
 
         // Header: 84 bytes starting with "eyJ"
         token.extend_from_slice(b"eyJ");
-        token.extend_from_slice(&vec![b'A'; 81]); // 81 + 3 = 84 bytes
+        token.extend_from_slice(&[b'A'; 81]); // 81 + 3 = 84 bytes
         token.push(b'.');
 
         // Payload: 1063 bytes of valid base64url
-        token.extend_from_slice(&vec![b'B'; 1063]);
+        token.extend_from_slice(&[b'B'; 1063]);
         token.push(b'.');
 
         // Signature: 342 bytes of valid base64url
@@ -64,7 +64,7 @@
 
         // Add JWT
         text.extend_from_slice(b"eyJ");
-        text.extend_from_slice(&vec![b'A'; 81]);
+        text.extend_from_slice(&[b'A'; 81]);
         text.push(b'.');
         text.extend_from_slice(&vec![b'B'; 1063]);
         text.push(b'.');

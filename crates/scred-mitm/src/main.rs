@@ -41,7 +41,9 @@ fn print_help() {
     println!("    SCRED_LOG_FORMAT=json scred-mitm    # JSON logging");
     println!();
     println!("CONFIGURATION FILE:");
-    println!("    scred-mitm reads from: ./scred.yaml, ~/.scred/config.yaml, /etc/scred/config.yaml");
+    println!(
+        "    scred-mitm reads from: ./scred.yaml, ~/.scred/config.yaml, /etc/scred/config.yaml"
+    );
     println!("    Run 'scred-mitm --config' for configuration file format");
     println!();
 }
@@ -148,16 +150,16 @@ scred-mitm:
   #     headers:
   #       "X-Api-Key": replace
    "#;
-       println!("{}", config.trim());
-   }
+    println!("{}", config.trim());
+}
 
 fn generate_certificates() -> anyhow::Result<()> {
     use scred_mitm::mitm::tls::CertificateGenerator;
     use std::path::Path;
 
     // Load config to get paths
-    let mut config = load_mitm_config_from_file()?
-        .unwrap_or_else(|| Config::load().unwrap_or_default());
+    let config =
+        load_mitm_config_from_file()?.unwrap_or_else(|| Config::load().unwrap_or_default());
 
     let ca_key_path = Path::new(&config.tls.ca_key);
     let ca_cert_path = Path::new(&config.tls.ca_cert);
@@ -180,7 +182,10 @@ fn generate_certificates() -> anyhow::Result<()> {
     println!("CA certificate generated successfully!");
     println!();
     println!("To trust this certificate:");
-    println!("  Linux:   sudo cp {} /usr/local/share/ca-certificates/ && sudo update-ca-certificates", ca_cert_path.display());
+    println!(
+        "  Linux:   sudo cp {} /usr/local/share/ca-certificates/ && sudo update-ca-certificates",
+        ca_cert_path.display()
+    );
     println!("  macOS:   sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain {}", ca_cert_path.display());
 
     Ok(())
@@ -199,7 +204,11 @@ fn load_mitm_config_from_file() -> anyhow::Result<Option<Config>> {
 
         // Listen configuration
         if let Some(port) = mitm_cfg.listen.port {
-            config.proxy.listen = format!("{}:{}", mitm_cfg.listen.address.as_deref().unwrap_or("0.0.0.0"), port);
+            config.proxy.listen = format!(
+                "{}:{}",
+                mitm_cfg.listen.address.as_deref().unwrap_or("0.0.0.0"),
+                port
+            );
         } else if let Some(addr) = &mitm_cfg.listen.address {
             config.proxy.listen = format!("{}:{}", addr, 8080u16);
         }
@@ -253,8 +262,8 @@ async fn main() -> anyhow::Result<()> {
     logging::init_from_env();
 
     // Load config from file if available
-    let mut config = load_mitm_config_from_file()?
-        .unwrap_or_else(|| Config::load().unwrap_or_default());
+    let mut config =
+        load_mitm_config_from_file()?.unwrap_or_else(|| Config::load().unwrap_or_default());
 
     // Apply environment overrides
     if let Ok(listen) = env::var("SCRED_MITM_LISTEN") {
@@ -283,7 +292,10 @@ async fn main() -> anyhow::Result<()> {
     // Start discovery server if policy is enabled
     if let Some(ref engine) = policy {
         if let Some(_updater) = engine.run_discovery() {
-            info!("Discovery server started on port {}", engine.discovery_port());
+            info!(
+                "Discovery server started on port {}",
+                engine.discovery_port()
+            );
         }
         info!("Policy: enabled");
     } else {

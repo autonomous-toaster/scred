@@ -1,7 +1,7 @@
     #[test]
     fn test_pgpass_vs_pgpassword() {
         // Test that both patterns work correctly in different contexts
-        let text1 = b"PGPASS=abc123456";
+        let _text1 = b"PGPASS=abc123456";
     }
 
     // ============================================================================

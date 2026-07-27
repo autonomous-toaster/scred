@@ -53,7 +53,7 @@ impl HttpHeaders {
 /// # Arguments
 /// * `reader` - Async reader
 /// * `has_status_line` - true for response headers (first line is status line like "HTTP/1.1 200 OK")
-///                       false for request headers (all lines are headers)
+///   false for request headers (all lines are headers)
 pub async fn parse_http_headers<R: AsyncReadExt + Unpin>(
     reader: &mut BufReader<R>,
     has_status_line: bool,

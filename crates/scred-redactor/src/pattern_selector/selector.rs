@@ -36,4 +36,3 @@ impl Default for PatternSelector {
 // ============================================================================
 // CompositePatternSelector: Handle mixed filters (tiers + globs + exclusions)
 // ============================================================================
-

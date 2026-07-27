@@ -1,4 +1,16 @@
-async fn forward_via_http1_1(
+use super::{extract_http_response_body, log_detected_secrets, read_response_direct};
+use crate::mitm::config::RedactionMode;
+use anyhow::{anyhow, Result};
+use bytes::Bytes;
+use http::Request;
+use scred_http::upstream_connection::{
+    connect_tcp, establish_tls, get_proxy_url, UpstreamConnectionConfig,
+};
+use scred_redactor::{RedactionEngine, StreamingConfig, StreamingRedactor};
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+pub(crate) async fn forward_via_http1_1(
     request: &Request<Bytes>,
     engine: &Arc<RedactionEngine>,
     _upstream_addr: &str,
@@ -204,7 +216,7 @@ async fn forward_via_http1_1(
 }
 
 /// Helper for HTTP/1.1 with request parts and body (used in main handler)
-async fn forward_via_http1_1_with_body(
+pub(crate) async fn forward_via_http1_1_with_body(
     request_parts: &http::request::Parts,
     request_body: &Bytes,
     engine: &Arc<RedactionEngine>,
@@ -413,24 +425,3 @@ async fn forward_via_http1_1_with_body(
     Ok(response_output)
 }
 
-/// Establish TLS connection to upstream server
-async fn establish_tls_upstream(
-    tcp_stream: TcpStream,
-    host: &str,
-) -> Result<tokio_rustls::client::TlsStream<TcpStream>> {
-    let root_store = crate::build_root_cert_store();
-
-    let client_config = ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-
-    let connector = tokio_rustls::TlsConnector::from(Arc::new(client_config));
-    let server_name =
-        ServerName::try_from(host).map_err(|_| anyhow!("Invalid upstream host: {}", host))?;
-
-    connector
-        .connect(server_name, tcp_stream)
-        .await
-        .map_err(|e| anyhow!("TLS handshake failed: {}", e))
-}

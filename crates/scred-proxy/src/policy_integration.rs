@@ -2,16 +2,14 @@
 //!
 //! Integrates policy system with the forward proxy.
 
-use std::sync::Arc;
-use scred_policy::PolicyEngine;
 use scred_config::FileConfig;
+use scred_policy::PolicyEngine;
+use std::sync::Arc;
 
 /// Initialize policy from config file
 ///
 /// This starts the discovery server if enabled in the config.
-pub fn init_policy_from_config(
-    file_config: &FileConfig,
-) -> Option<Arc<PolicyEngine>> {
+pub fn init_policy_from_config(file_config: &FileConfig) -> Option<Arc<PolicyEngine>> {
     use tracing::{info, warn};
 
     let policy_cfg = &file_config.policy;

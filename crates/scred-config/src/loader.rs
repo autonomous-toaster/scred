@@ -1,5 +1,6 @@
 use crate::*;
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -65,8 +66,7 @@ impl ConfigLoader {
             .map_err(|e| anyhow!("Failed to read config file {}: {}", path.display(), e))?;
 
         let config = if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-            toml::from_str(&content)
-                .map_err(|e| anyhow!("Failed to parse TOML config: {}", e))?
+            toml::from_str(&content).map_err(|e| anyhow!("Failed to parse TOML config: {}", e))?
         } else {
             serde_yaml::from_str(&content)
                 .map_err(|e| anyhow!("Failed to parse YAML config: {}", e))?
@@ -122,7 +122,7 @@ impl ConfigLoader {
                 }
             }
         }
-        
+
         // Validate proxy config
         if let Some(proxy_cfg) = &config.scred_proxy {
             if proxy_cfg.upstream.url.is_none() {
@@ -245,7 +245,6 @@ impl Default for FileConfig {
     }
 }
 
-
 /// Default-deny: block all traffic unless explicitly allowed
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -279,4 +278,3 @@ impl Default for TrafficPolicyConfig {
         }
     }
 }
-

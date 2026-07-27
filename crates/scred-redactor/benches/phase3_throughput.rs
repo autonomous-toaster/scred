@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
 
-use std::fs;
 use std::time::Instant;
 
 fn main() {
@@ -31,7 +30,7 @@ fn generate_test_data() -> Vec<u8> {
     let mut data = String::new();
 
     // AWS Access Keys
-    let aws_keys = vec![
+    let aws_keys = [
         "AKIAIOSFODNN7EXAMPLE",
         "ASIAIOSFODNN7EXAMPLE",
         "ABIAIOSFODNN7EXAMPLE",
@@ -39,25 +38,25 @@ fn generate_test_data() -> Vec<u8> {
     ];
 
     // GitHub PATs
-    let github_tokens = vec![
+    let github_tokens = [
         "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
         "gho_1234567890abcdefghijklmnopqrstuvwxyz",
         "ghu_1234567890abcdefghijklmnopqrstuvwxyz",
     ];
 
     // OpenAI API Keys
-    let openai_keys = vec![
+    let openai_keys = [
         "sk-proj-1234567890abcdefghijklmnopqrstuvwxyz",
         "sk-svcacct-1234567890abcdefghijklmnopqrstuvwxyz",
     ];
 
     // JWT Tokens
-    let jwt_tokens = vec![
+    let jwt_tokens = [
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
     ];
 
     // Bearer tokens
-    let bearer_tokens = vec![
+    let bearer_tokens = [
         "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
     ];
 

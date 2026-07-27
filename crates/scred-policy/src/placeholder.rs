@@ -57,9 +57,9 @@ impl PlaceholderGenerator {
             let placeholder = self.generate_placeholder(name, value);
             self.cache.insert(name.to_string(), placeholder);
         }
-        self.cache.get(name).unwrap_or_else(|| {
-            unreachable!("placeholder was just inserted")
-        })
+        self.cache
+            .get(name)
+            .unwrap_or_else(|| unreachable!("placeholder was just inserted"))
     }
 
     fn generate_placeholder(&self, name: &str, value: &str) -> Placeholder {
@@ -79,10 +79,13 @@ impl PlaceholderGenerator {
         let hash = hasher.finalize();
 
         // Convert to hex
-        let hex = hex::encode(&hash);
+        let hex = hex::encode(hash);
 
         // Calculate needed length (excluding prefix and marker)
-        let needed_len = value.len().saturating_sub(prefix.len()).saturating_sub(SCRED_MARKER.len());
+        let needed_len = value
+            .len()
+            .saturating_sub(prefix.len())
+            .saturating_sub(SCRED_MARKER.len());
 
         // Build placeholder: prefix + "scred-" + hex chars
         let placeholder_value = if needed_len == 0 {
@@ -117,7 +120,7 @@ impl PlaceholderGenerator {
         }
 
         // Find separator position
-        let sep_pos = value.find(|c| c == '_' || c == '-');
+        let sep_pos = value.find(['_', '-']);
 
         if let Some(sep_idx) = sep_pos {
             let separator = match value.chars().nth(sep_idx) {
@@ -130,7 +133,7 @@ impl PlaceholderGenerator {
             if first_part.len() <= 4 && !first_part.is_empty() {
                 // Check for second part after separator
                 let rest = &value[sep_idx + 1..];
-                let second_sep_pos = rest.find(|c| c == '_' || c == '-');
+                let second_sep_pos = rest.find(['_', '-']);
 
                 if let Some(second_sep_idx) = second_sep_pos {
                     let second_part = &rest[..second_sep_idx];

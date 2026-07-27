@@ -53,12 +53,15 @@ impl CachedDnsResolver {
             config,
         }
     }
+}
 
-    /// Create with default configuration (60s TTL, enabled)
-    pub fn default() -> Self {
+impl Default for CachedDnsResolver {
+    fn default() -> Self {
         Self::new(CachedDnsConfig::default())
     }
+}
 
+impl CachedDnsResolver {
     /// Connect to address, using cache for DNS lookups
     ///
     /// PERFORMANCE CRITICAL PATH:

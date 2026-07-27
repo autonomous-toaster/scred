@@ -7,12 +7,7 @@
 //! - Hot-reload support
 //! - Policy system (placeholder replacement + redaction)
 
-use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::env;
-use std::fs;
-use std::path::{Path, PathBuf};
-use tracing::{debug, info, warn};
 
 pub mod hot_reload;
 pub mod loader;
@@ -213,10 +208,18 @@ impl Default for ConnectionPoolConfig {
     }
 }
 
-fn default_max_connections() -> usize { 100 }
-fn default_idle_timeout() -> u64 { 60 }
-fn default_max_requests() -> usize { 1000 }
-fn default_wait_timeout() -> u64 { 30 }
+fn default_max_connections() -> usize {
+    100
+}
+fn default_idle_timeout() -> u64 {
+    60
+}
+fn default_max_requests() -> usize {
+    1000
+}
+fn default_wait_timeout() -> u64 {
+    30
+}
 
 /// Pattern detection and redaction configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -303,9 +306,15 @@ impl Default for CaCertConfig {
 }
 
 // Default value functions for serde
-fn default_cli_mode() -> String { "auto".to_string() }
-fn default_streaming() -> bool { false }
-fn default_true() -> bool { true }
+fn default_cli_mode() -> String {
+    "auto".to_string()
+}
+fn default_streaming() -> bool {
+    false
+}
+fn default_true() -> bool {
+    true
+}
 fn default_detect_patterns() -> Vec<String> {
     vec![
         "CRITICAL".to_string(),
@@ -326,7 +335,6 @@ fn default_allowed_domains() -> Vec<String> {
 fn default_block_message() -> String {
     "Domain not allowed".to_string()
 }
-
 
 fn default_ca_cert_path() -> Option<String> {
     Some("/tmp/scred-ca.pem".to_string())

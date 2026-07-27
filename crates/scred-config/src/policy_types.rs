@@ -16,10 +16,11 @@ use std::collections::HashMap;
 // =============================================================================
 
 /// Action to take on a header
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HeaderAction {
     /// Replace detected secrets with [REDACTED]
+    #[default]
     Redact,
 
     /// Replace placeholders with real secrets
@@ -30,12 +31,6 @@ pub enum HeaderAction {
 
     /// No processing (pass through as-is)
     Passthrough,
-}
-
-impl Default for HeaderAction {
-    fn default() -> Self {
-        Self::Redact
-    }
 }
 
 impl std::fmt::Display for HeaderAction {
@@ -50,10 +45,11 @@ impl std::fmt::Display for HeaderAction {
 }
 
 /// Action to take on request/response body
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BodyAction {
     /// Redact detected secrets
+    #[default]
     Redact,
 
     /// Log detections but don't modify
@@ -61,12 +57,6 @@ pub enum BodyAction {
 
     /// No processing
     Passthrough,
-}
-
-impl Default for BodyAction {
-    fn default() -> Self {
-        Self::Redact
-    }
 }
 
 impl std::fmt::Display for BodyAction {
@@ -350,20 +340,15 @@ pub(crate) fn glob_match(pattern: &str, name: &str) -> bool {
 // =============================================================================
 
 /// Merge strategy for host-specific overrides
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MergeStrategy {
     /// Merge with defaults (additive)
+    #[default]
     Merge,
 
     /// Replace defaults completely
     Replace,
-}
-
-impl Default for MergeStrategy {
-    fn default() -> Self {
-        Self::Merge
-    }
 }
 
 /// Policy for a specific host
@@ -447,7 +432,7 @@ impl HostPolicy {
                         defaults.headers.merge(&self.headers)
                     }
                 };
-                
+
                 HostPolicy {
                     merge: MergeStrategy::Merge,
                     headers,
@@ -482,7 +467,9 @@ pub enum ProviderConfig {
 // DISCOVERY CONFIG
 // =============================================================================
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 /// Discovery API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -513,4 +500,3 @@ impl Default for DiscoveryConfig {
 // =============================================================================
 // UNIFIED POLICY CONFIG
 // =============================================================================
-

@@ -20,7 +20,6 @@
 
     // Environment variable redaction tests
     #[test]
-    #[test]
     fn test_redact_env_client_secret() {
         let text = b"SERVICE_CLIENT_SECRET=abcdef123456";
         let matches = vec![Match::new(0, text.len(), 0)];

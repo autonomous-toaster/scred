@@ -1,8 +1,6 @@
-use super::*;
-
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod unit_tests {
+    use crate::detector::*;
 
     include!("tests_0.rs");
     include!("tests_1.rs");

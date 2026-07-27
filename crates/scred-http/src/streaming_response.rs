@@ -47,6 +47,7 @@ impl Default for StreamingResponseConfig {
 ///
 /// # Returns
 /// Result with stats
+#[allow(clippy::too_many_arguments)]
 pub async fn stream_response_to_client<R, W>(
     upstream_reader: &mut BufReader<R>,
     mut client_writer: W,
@@ -346,9 +347,7 @@ pub struct StreamingStats {
     pub patterns_found: u64,
 }
 
-fn response_is_head_or_bodyless(
-    response_line: &str,
-) -> bool {
+fn response_is_head_or_bodyless(response_line: &str) -> bool {
     let mut parts = response_line.split_whitespace();
     let _http_version = parts.next();
     let status_code = parts

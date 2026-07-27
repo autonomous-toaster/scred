@@ -113,6 +113,7 @@ impl Severity {
         input.split(',').map(|s| Self::from_str(s.trim())).collect()
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s.to_uppercase().as_str() {
             "CRITICAL" | "95" => Ok(Self::Critical),
@@ -168,6 +169,7 @@ impl ServiceCategory {
         input.split(',').map(|s| Self::from_str(s.trim())).collect()
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s.to_lowercase().replace("-", "").as_str() {
             "cloudprovider" => Ok(Self::CloudProvider),
@@ -213,6 +215,7 @@ impl PatternKind {
         input.split(',').map(|s| Self::from_str(s.trim())).collect()
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s.to_lowercase().replace("-", "").as_str() {
             "fixedprefix" => Ok(Self::FixedPrefix),
@@ -256,6 +259,6 @@ impl std::fmt::Display for Origin {
 // ============================================================================
 
 // Re-exports
+pub use composite::CompositePatternSelector;
 pub use filter::PatternFilter;
 pub use selector::PatternSelector;
-pub use composite::CompositePatternSelector;

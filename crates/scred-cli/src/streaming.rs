@@ -31,16 +31,29 @@ pub enum RedactionMode {
 /// * `detect_selector` - Which patterns to detect
 /// * `redact_selector` - Which patterns to redact
 /// * `verbose` - Show statistics
+#[allow(unused_assignments)]
 pub fn stream_and_redact(
     mode: RedactionMode,
     initial_buffer: Option<&[u8]>,
     detect_selector: &PatternSelector,
     redact_selector: &PatternSelector,
     verbose: bool,
+    output_path: Option<&str>,
 ) {
     let start = Instant::now();
 
-    // Create ConfigurableEngine with pattern selectors
+    // Open output file if specified, otherwise use stdout
+    let mut output: Box<dyn Write> = if let Some(path) = output_path {
+        match std::fs::File::create(path) {
+            Ok(file) => Box::new(file),
+            Err(e) => {
+                eprintln!("Error: Cannot create output file '{}': {}", path, e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        Box::new(io::stdout())
+    };
     let engine = Arc::new(RedactionEngine::new(RedactionConfig::default()));
     let config_engine =
         ConfigurableEngine::new(engine, detect_selector.clone(), redact_selector.clone());
@@ -64,7 +77,7 @@ pub fn stream_and_redact(
     // Try to read all data into memory
     const CHUNK_SIZE: usize = 64 * 1024;
     let mut chunk = vec![0u8; CHUNK_SIZE];
-    let mut falls_back_to_streaming = false;
+    let mut _falls_back_to_streaming = false;
 
     loop {
         match io::stdin().read(&mut chunk) {
@@ -80,10 +93,11 @@ pub fn stream_and_redact(
                     if verbose {
                         eprintln!("[stream] Input exceeds 100MB, falling back to streaming");
                     }
-                    falls_back_to_streaming = true;
+                    _falls_back_to_streaming = true;
                     // Process accumulated data and continue with streaming for rest
                     let input_str = String::from_utf8_lossy(&accumulated);
-                    let (read, written) = process_chunk(&input_str, mode, &config_engine);
+                    let (read, written) =
+                        process_chunk(&input_str, mode, &config_engine, &mut *output);
                     total_read += read;
                     total_written += written;
                     accumulated.clear();
@@ -93,8 +107,12 @@ pub fn stream_and_redact(
                         match io::stdin().read(&mut chunk) {
                             Ok(0) => break,
                             Ok(n) => {
-                                let (read, written) =
-                                    process_buffer_chunk(&chunk[..n], mode, &config_engine);
+                                let (read, written) = process_buffer_chunk(
+                                    &chunk[..n],
+                                    mode,
+                                    &config_engine,
+                                    &mut *output,
+                                );
                                 total_read += read;
                                 total_written += written;
                                 if verbose {
@@ -107,7 +125,7 @@ pub fn stream_and_redact(
                             }
                         }
                     }
-                    io::stdout().flush().ok();
+                    output.flush().ok();
 
                     if verbose {
                         let elapsed = start.elapsed();
@@ -128,14 +146,14 @@ pub fn stream_and_redact(
         }
     }
 
-    if !falls_back_to_streaming {
+    if !_falls_back_to_streaming {
         // All data fit in memory - process as single operation (best performance)
         let input_str = String::from_utf8_lossy(&accumulated);
-        let (read, written) = process_chunk(&input_str, mode, &config_engine);
+        let (read, written) = process_chunk(&input_str, mode, &config_engine, &mut *output);
         total_read = read;
         total_written = written;
 
-        io::stdout().flush().ok();
+        output.flush().ok();
 
         if verbose {
             let elapsed = start.elapsed();
@@ -169,11 +187,12 @@ fn process_chunk(
     text: &str,
     mode: RedactionMode,
     config_engine: &ConfigurableEngine,
+    output: &mut dyn Write,
 ) -> (usize, usize) {
     match mode {
         RedactionMode::Text => {
             let result = config_engine.detect_and_redact(text);
-            io::stdout().write_all(result.redacted.as_bytes()).ok();
+            output.write_all(result.redacted.as_bytes()).ok();
             (text.len(), result.redacted.len())
         }
         RedactionMode::Env => {
@@ -181,7 +200,7 @@ fn process_chunk(
             // Instead of detecting/redacting each line individually,
             // we can redact the entire block and then split on newlines
             let result = config_engine.detect_and_redact(text);
-            io::stdout().write_all(result.redacted.as_bytes()).ok();
+            output.write_all(result.redacted.as_bytes()).ok();
 
             // Return byte counts (input might have been modified by redaction)
             (text.len(), result.redacted.len())
@@ -196,20 +215,22 @@ fn process_chunk(
 /// - Env mode: Apply line-by-line environment variable redaction
 ///
 /// Returns: (bytes_read, bytes_written)
+#[allow(unused_assignments)]
 fn process_buffer_chunk(
     buffer: &[u8],
     mode: RedactionMode,
     config_engine: &ConfigurableEngine,
+    output: &mut dyn Write,
 ) -> (usize, usize) {
     let input_str = String::from_utf8_lossy(buffer);
     let bytes_read = buffer.len();
-    let bytes_written;
+    let mut bytes_written = 0;
 
     match mode {
         RedactionMode::Text => {
             // Pattern-based redaction
             let result = config_engine.detect_and_redact(&input_str);
-            io::stdout().write_all(result.redacted.as_bytes()).ok();
+            output.write_all(result.redacted.as_bytes()).ok();
             bytes_written = result.redacted.len();
         }
         RedactionMode::Env => {
@@ -217,8 +238,8 @@ fn process_buffer_chunk(
             let mut total_written = 0;
             for line in input_str.lines() {
                 let redacted = crate::env_mode::redact_env_line_configurable(line, config_engine);
-                io::stdout().write_all(redacted.as_bytes()).ok();
-                io::stdout().write_all(b"\n").ok();
+                output.write_all(redacted.as_bytes()).ok();
+                output.write_all(b"\n").ok();
                 total_written += redacted.len() + 1;
             }
             bytes_written = total_written;

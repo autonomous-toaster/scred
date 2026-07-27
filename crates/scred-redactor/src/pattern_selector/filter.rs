@@ -39,16 +39,17 @@ impl PatternFilter {
 
     /// Parse a single filter from string
     /// Examples: "CRITICAL", "mysql*", "!test-*", "exclude:dummy-*"
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Self, String> {
         let s = s.trim();
 
         // Handle exclusion patterns
-        if s.starts_with('!') {
-            return Ok(PatternFilter::Exclude(s[1..].to_string()));
+        if let Some(rest) = s.strip_prefix('!') {
+            return Ok(PatternFilter::Exclude(rest.to_string()));
         }
 
-        if s.starts_with("exclude:") {
-            return Ok(PatternFilter::Exclude(s[8..].to_string()));
+        if let Some(rest) = s.strip_prefix("exclude:") {
+            return Ok(PatternFilter::Exclude(rest.to_string()));
         }
 
         // Handle tier names (case-insensitive)
@@ -66,4 +67,3 @@ impl PatternFilter {
         Ok(PatternFilter::GlobName(s.to_string()))
     }
 }
-

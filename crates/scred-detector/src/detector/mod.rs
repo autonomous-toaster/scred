@@ -196,7 +196,6 @@ pub fn get_charset_lut(charset: Charset) -> &'static CharsetLut {
 }
 
 /// Calculate optimal threshold for simple_prefix based on CPU core count
-
 pub mod detect_all;
 pub mod jwt;
 pub mod redact;
