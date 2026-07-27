@@ -238,3 +238,144 @@ fn is_chunked(headers: &HashMap<String, String>) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn make_headers(pairs: Vec<(&str, &str)>) -> HashMap<String, String> {
+        pairs.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn test_http_request_get_header() {
+        let req = HttpRequest {
+            method: "GET".to_string(),
+            path: "/".to_string(),
+            version: "HTTP/1.1".to_string(),
+            headers: make_headers(vec![
+                ("Host", "example.com"),
+                ("Content-Type", "text/html"),
+            ]),
+            body: Vec::new(),
+        };
+        assert_eq!(req.get_header("Host"), Some("example.com".to_string()));
+        assert_eq!(req.get_header("Content-Type"), Some("text/html".to_string()));
+        assert_eq!(req.get_header("X-Missing"), None);
+    }
+
+    #[test]
+    fn test_http_request_content_length() {
+        let req = HttpRequest {
+            method: "POST".to_string(),
+            path: "/api".to_string(),
+            version: "HTTP/1.1".to_string(),
+            headers: make_headers(vec![("Content-Length", "42")]),
+            body: vec![0u8; 42],
+        };
+        assert_eq!(req.content_length(), Some(42));
+    }
+
+    #[test]
+    fn test_http_request_content_length_missing() {
+        let req = HttpRequest {
+            method: "GET".to_string(),
+            path: "/".to_string(),
+            version: "HTTP/1.1".to_string(),
+            headers: HashMap::new(),
+            body: Vec::new(),
+        };
+        assert_eq!(req.content_length(), None);
+    }
+
+    #[test]
+    fn test_http_request_is_chunked() {
+        let req = HttpRequest {
+            method: "POST".to_string(),
+            path: "/upload".to_string(),
+            version: "HTTP/1.1".to_string(),
+            headers: make_headers(vec![("Transfer-Encoding", "chunked")]),
+            body: Vec::new(),
+        };
+        assert!(req.is_chunked());
+    }
+
+    #[test]
+    fn test_http_request_is_not_chunked() {
+        let req = HttpRequest {
+            method: "GET".to_string(),
+            path: "/".to_string(),
+            version: "HTTP/1.1".to_string(),
+            headers: HashMap::new(),
+            body: Vec::new(),
+        };
+        assert!(!req.is_chunked());
+    }
+
+    #[test]
+    fn test_http_request_all_text() {
+        let req = HttpRequest {
+            method: "GET".to_string(),
+            path: "/path".to_string(),
+            version: "HTTP/1.1".to_string(),
+            headers: make_headers(vec![("Host", "example.com")]),
+            body: b"body data".to_vec(),
+        };
+        let text = req.all_text();
+        assert!(text.contains("GET /path HTTP/1.1"));
+        assert!(text.contains("Host: example.com"));
+        assert!(text.contains("body data"));
+    }
+
+    #[test]
+    fn test_http_response_get_header() {
+        let resp = HttpResponse {
+            version: "HTTP/1.1".to_string(),
+            status_code: 200,
+            reason: "OK".to_string(),
+            headers: make_headers(vec![("Content-Type", "application/json")]),
+            body: Vec::new(),
+        };
+        assert_eq!(resp.get_header("Content-Type"), Some("application/json".to_string()));
+    }
+
+    #[test]
+    fn test_http_response_content_length() {
+        let resp = HttpResponse {
+            version: "HTTP/1.1".to_string(),
+            status_code: 200,
+            reason: "OK".to_string(),
+            headers: make_headers(vec![("Content-Length", "100")]),
+            body: vec![0u8; 100],
+        };
+        assert_eq!(resp.content_length(), Some(100));
+    }
+
+    #[test]
+    fn test_http_response_is_chunked() {
+        let resp = HttpResponse {
+            version: "HTTP/1.1".to_string(),
+            status_code: 200,
+            reason: "OK".to_string(),
+            headers: make_headers(vec![("Transfer-Encoding", "chunked")]),
+            body: Vec::new(),
+        };
+        assert!(resp.is_chunked());
+    }
+
+    #[test]
+    fn test_http_response_all_text() {
+        let resp = HttpResponse {
+            version: "HTTP/1.1".to_string(),
+            status_code: 404,
+            reason: "Not Found".to_string(),
+            headers: make_headers(vec![("Content-Type", "text/html")]),
+            body: b"<h1>404</h1>".to_vec(),
+        };
+        let text = resp.all_text();
+        assert!(text.contains("HTTP/1.1 404 Not Found"));
+        assert!(text.contains("Content-Type: text/html"));
+        assert!(text.contains("<h1>404</h1>"));
+    }
+}
