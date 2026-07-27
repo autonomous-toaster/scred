@@ -1,6 +1,5 @@
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod h2_forwarder_tests {
     use std::sync::Arc;
     use scred_redactor::{RedactionConfig, RedactionEngine};
     use crate::mitm::config::RedactionMode;

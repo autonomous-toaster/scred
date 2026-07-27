@@ -414,6 +414,4 @@ async fn try_forward_h2(
 }
 
 #[cfg(test)]
-
-#[cfg(test)]
 pub(crate) mod tests;
