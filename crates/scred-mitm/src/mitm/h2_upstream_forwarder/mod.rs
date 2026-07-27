@@ -244,18 +244,8 @@ pub async fn handle_upstream_h2_connection(
     }
 }
 
-/// Try to forward via HTTP/2 direct connection
-async fn try_forward_h2(
-    request: Request<Bytes>,
-    engine: Arc<RedactionEngine>,
-    host: &str,
-    mode: RedactionMode,
-    detect_patterns: &scred_http::PatternSelector,
-    _redact_patterns: &scred_http::PatternSelector,
-) -> Result<Vec<u8>> {
-    let (request_parts, request_body) = request.into_parts();
-
-    // Use unified connection logic with proxy support
+/// Connect to upstream via H2 and establish TLS with ALPN h2
+async fn connect_h2_upstream(host: &str) -> Result<(client::SendRequest<Bytes>, tokio::task::JoinHandle<()>)> {
     let proxy_url = get_proxy_url(host, true);
     let conn_config = UpstreamConnectionConfig::https(host, 443);
     let conn_config = if let Some(ref proxy) = proxy_url {
@@ -269,148 +259,145 @@ async fn try_forward_h2(
     let tls_stream = establish_tls_h2(tcp_stream, host).await?;
     tracing::debug!("[H2 Upstream] TLS handshake complete with {}", host);
 
-    let (mut send_request, connection) = client::handshake(tls_stream).await?;
+    let (send_request, connection) = client::handshake(tls_stream).await?;
     tracing::debug!("[H2 Upstream] H2 client handshake complete");
 
-    // Wrap connection in a handle to manage its lifecycle
     let connection_handle = tokio::spawn(async move {
         if let Err(e) = connection.await {
             tracing::debug!("[H2 Upstream] Connection driver ended: {}", e);
         }
     });
 
-    // Build request for upstream with body (if present)
+    Ok((send_request, connection_handle))
+}
+
+/// Send H2 request with optional body
+async fn send_h2_request(
+    send_request: &mut client::SendRequest<Bytes>,
+    request_parts: http::request::Parts,
+    request_body: Bytes,
+    connection_handle: &tokio::task::JoinHandle<()>,
+) -> Result<(http::response::Response<()>, h2::RecvStream)> {
+    let has_body = !request_body.is_empty();
     let upstream_request = http::Request::from_parts(request_parts, ());
 
-    // Determine if we have a body to send
-    let has_body = !request_body.is_empty();
-
-    // Send the request to upstream (end_stream=true if no body)
     let (response_future, mut send_stream) = send_request
         .send_request(upstream_request, !has_body)
         .map_err(|e| {
-            tracing::warn!("[H2 Upstream] Failed to send request: {}", e);
-            // Abort the connection task - we're exiting this h2 connection
             connection_handle.abort();
             anyhow!("Failed to send request: {}", e)
         })?;
 
-    // Send body if present
     if has_body {
-        tracing::debug!(
-            "[H2 Upstream] Sending request body: {} bytes",
-            request_body.len()
-        );
-        match send_stream.send_data(request_body, true) {
-            Ok(_) => {}
-            Err(e) => {
-                tracing::warn!("[H2 Upstream] Failed to send body: {}", e);
-                connection_handle.abort();
-                return Err(anyhow!("Failed to send body: {}", e));
-            }
-        }
+        tracing::debug!("[H2 Upstream] Sending request body: {} bytes", request_body.len());
+        send_stream.send_data(request_body, true).map_err(|e| {
+            connection_handle.abort();
+            anyhow!("Failed to send body: {}", e)
+        })?;
     }
 
-    // Wait for response headers
-    // If the connection closes before sending headers, this will return an error
     let response = match response_future.await {
         Ok(r) => r,
         Err(e) => {
-            // Connection closed before response headers - this is normal for some servers
             let err_msg = e.to_string();
-            if err_msg.contains("EOF")
-                || err_msg.contains("unexpected end of file")
-                || err_msg.contains("connection closed")
-            {
-                tracing::debug!(
-                    "[H2 Upstream] Server closed connection before sending response headers"
-                );
-                // This is NOT a catastrophic error - fallback will handle it
+            if err_msg.contains("EOF") || err_msg.contains("unexpected end of file") || err_msg.contains("connection closed") {
                 connection_handle.abort();
                 return Err(anyhow!("H2 connection closed before response: {}", e));
-            } else {
-                tracing::warn!("[H2 Upstream] Error waiting for response headers: {}", e);
-                connection_handle.abort();
-                return Err(anyhow!("Response error: {}", e));
             }
+            connection_handle.abort();
+            return Err(anyhow!("Response error: {}", e));
         }
     };
 
-    let (response_parts, mut recv_stream) = response.into_parts();
+    let (response_parts, recv_stream) = response.into_parts();
+    tracing::info!("[H2 Upstream] Received H2 response: status={}", response_parts.status);
 
-    tracing::info!(
-        "[H2 Upstream] Received H2 response: status={}",
-        response_parts.status
-    );
+    Ok((http::Response::from_parts(response_parts, ()), recv_stream))
+}
 
-    // Read response body from h2 stream
-    let mut response_body = Vec::new();
+/// Read response body from H2 stream
+async fn read_h2_response_body(recv_stream: &mut h2::RecvStream) -> Result<Vec<u8>> {
+    let mut body = Vec::new();
     let mut chunks_received = 0;
+
     loop {
         match recv_stream.data().await {
             Some(Ok(chunk)) => {
                 chunks_received += 1;
-                response_body.extend_from_slice(&chunk);
-                tracing::debug!(
-                    "[H2 Upstream] Received response chunk #{}: {} bytes",
-                    chunks_received,
-                    chunk.len()
-                );
-                tracing::debug!(
-                    "[H2 Upstream] Total response body so far: {} bytes",
-                    response_body.len()
-                );
+                body.extend_from_slice(&chunk);
+                tracing::debug!("[H2 Upstream] Received response chunk #{}: {} bytes", chunks_received, chunk.len());
             }
             Some(Err(e)) => {
-                // Check if it's a connection reset or other recoverable error
                 let err_msg = e.to_string();
                 if err_msg.contains("unexpected end of file") || err_msg.contains("EOF") {
-                    // Connection closed - this is often normal for some servers
-                    tracing::warn!(
-                        "[H2 Upstream] Connection closed by upstream ({}). Got {} bytes",
-                        e,
-                        response_body.len()
-                    );
-                    // Don't fail - return what we got
+                    tracing::warn!("[H2 Upstream] Connection closed by upstream ({}). Got {} bytes", e, body.len());
                     break;
-                } else {
-                    // Other errors should still fail
-                    return Err(anyhow!("Failed to read response body: {}", e));
                 }
+                return Err(anyhow!("Failed to read response body: {}", e));
             }
             None => {
-                // Stream ended normally
                 tracing::debug!("[H2 Upstream] Response stream ended");
                 break;
             }
         }
     }
 
-    tracing::info!(
-        "[H2 Upstream] H2 response body received: {} bytes",
-        response_body.len()
-    );
+    tracing::info!("[H2 Upstream] H2 response body received: {} bytes", body.len());
+    Ok(body)
+}
 
-    // Apply redaction based on mode
+/// Apply redaction to H2 response based on mode
+fn apply_h2_response_redaction(
+    response_body: &[u8],
+    engine: &Arc<RedactionEngine>,
+    mode: RedactionMode,
+    detect_patterns: &scred_http::PatternSelector,
+) -> Result<Vec<u8>> {
     if mode.should_redact() {
         tracing::debug!("[H2 Upstream] Mode: REDACT - Applying redaction to H2 response");
-        let response_str = String::from_utf8_lossy(&response_body);
+        let response_str = String::from_utf8_lossy(response_body);
         let result = engine.redact(&response_str);
-        tracing::info!(
-            "[H2 Upstream] Redacted H2 response: {} bytes -> {} bytes ({} matches)",
-            response_body.len(),
-            result.redacted.len(),
-            result.matches.len()
-        );
+        tracing::info!("[H2 Upstream] Redacted H2 response: {} bytes -> {} bytes ({} matches)",
+            response_body.len(), result.redacted.len(), result.matches.len());
         Ok(result.redacted.into_bytes())
     } else if mode.should_detect() {
         tracing::debug!("[H2 Upstream] Mode: DETECT - Scanning H2 response for secrets");
-        log_detected_secrets(&engine, &response_body, detect_patterns);
-        Ok(response_body)
+        log_detected_secrets(engine, response_body, detect_patterns);
+        Ok(response_body.to_vec())
     } else {
         tracing::debug!("[H2 Upstream] Mode: PASSTHROUGH - No redaction applied");
-        Ok(response_body)
+        Ok(response_body.to_vec())
     }
+}
+
+/// Try to forward via HTTP/2 direct connection
+async fn try_forward_h2(
+    request: Request<Bytes>,
+    engine: Arc<RedactionEngine>,
+    host: &str,
+    mode: RedactionMode,
+    detect_patterns: &scred_http::PatternSelector,
+    _redact_patterns: &scred_http::PatternSelector,
+) -> Result<Vec<u8>> {
+    let (request_parts, request_body) = request.into_parts();
+
+    // Connect to upstream via H2
+    let (mut send_request, connection_handle) = connect_h2_upstream(host).await?;
+
+    // Send request with optional body
+    let (_response, mut recv_stream) = send_h2_request(
+        &mut send_request,
+        request_parts,
+        request_body,
+        &connection_handle,
+    )
+    .await?;
+
+    // Read response body
+    let response_body = read_h2_response_body(&mut recv_stream).await?;
+
+    // Apply redaction based on mode
+    apply_h2_response_redaction(&response_body, &engine, mode, detect_patterns)
 }
 
 #[cfg(test)]
