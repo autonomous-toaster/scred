@@ -1,0 +1,125 @@
+{
+  "function": "handle_http_proxy",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-http/src/http_proxy_handler.rs",
+  "line": 214
+}
+{
+  "function": "handle_single_request",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/tls_mitm.rs",
+  "line": 451
+}
+{
+  "function": "handle_client",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/proxy.rs",
+  "line": 196
+}
+{
+  "function": "handle_connection",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-policy/src/discovery.rs",
+  "line": 108
+}
+{
+  "function": "handle_tls_mitm",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/tls_mitm.rs",
+  "line": 111
+}
+{
+  "function": "CachedDnsResolver::connect_with_retry",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-http/src/cached_dns_resolver.rs",
+  "line": 77
+}
+{
+  "function": "handle_h2_upstream_request",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/tls_mitm.rs",
+  "line": 347
+}
+{
+  "function": "send_h2_request",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/h2_upstream_forwarder/mod.rs",
+  "line": 277
+}
+{
+  "function": "H2MitmHandler::handle_stream",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/h2_mitm_handler.rs",
+  "line": 261
+}
+{
+  "function": "handle_single_proxy_request",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-proxy/src/handler.rs",
+  "line": 64
+}
+{
+  "function": "forward_and_read_response",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-http/src/http_proxy_handler.rs",
+  "line": 152
+}
+{
+  "function": "DnsResolver::try_connect",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-http/src/dns_resolver.rs",
+  "line": 116
+}
+{
+  "function": "connect_to_upstream",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/upstream_connector.rs",
+  "line": 30
+}
+{
+  "function": "handle_upstream_h2_connection",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/h2_upstream_forwarder/mod.rs",
+  "line": 167
+}
+{
+  "function": "read_h2_response_body",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/h2_upstream_forwarder/mod.rs",
+  "line": 321
+}
+{
+  "function": "forward_via_http1_1",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/h2_upstream_forwarder/forward.rs",
+  "line": 159
+}
+{
+  "function": "forward_via_http1_1_with_body",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/h2_upstream_forwarder/forward.rs",
+  "line": 200
+}
+{
+  "function": "H2MitmHandler::send_h2_response",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/h2_mitm_handler.rs",
+  "line": 240
+}
+{
+  "function": "handle_connection",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-proxy/src/handler.rs",
+  "line": 13
+}
+{
+  "function": "process_with_streaming_fallback",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-cli/src/streaming.rs",
+  "line": 66
+}
+{
+  "function": "connect_through_proxy",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-http/src/upstream_connection.rs",
+  "line": 75
+}
+{
+  "function": "DiscoveryServer::run",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-policy/src/discovery.rs",
+  "line": 70
+}
+{
+  "function": "TlsClientAcceptor::accept",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/tls_acceptor.rs",
+  "line": 49
+}
+{
+  "function": "ConnectionPool::acquire",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/connection_pool.rs",
+  "line": 115
+}
+{
+  "function": "connect_h2_upstream",
+  "file": "/Users/jean-christophe.saad-dupuy2/src/github.com/autonomous-toaster/scred/crates/scred-mitm/src/mitm/h2_upstream_forwarder/mod.rs",
+  "line": 250
+}

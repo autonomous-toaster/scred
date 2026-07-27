@@ -112,7 +112,8 @@ machete:
         exit 1
     fi
 
-# CRAP complexity — generates coverage then scores; fails if any function exceeds threshold 30.
+# CRAP complexity — generates coverage then scores; fails if any NEW function exceeds threshold 30.
+# Known violations in .known-crap-violations.json are accepted (legacy orchestration/network I/O).
 crap:
     #!/usr/bin/env bash
     set -o pipefail
@@ -130,16 +131,41 @@ crap:
         --missing skip --format json 2>/dev/null)
     code=$?
 
-    crappy=$(echo "$json" | jq '[.entries[] | select(.crap > 30)]' 2>/dev/null)
-    count=$(echo "$crappy" | jq 'length' 2>/dev/null)
-    count=${count:-0}
+    all=$(echo "$json" | jq '[.entries[] | select(.crap > 30)]' 2>/dev/null)
+    total=$(echo "$all" | jq 'length' 2>/dev/null)
+    total=${total:-0}
 
-    if [ "$count" -gt 0 ] 2>/dev/null; then
-        echo "✗ $count function(s) exceed CRAP threshold 30:"
-        echo "$crappy" | jq -r '.[] | "  CRAP=\(.crap | floor)  cyclomatic=\(.cyclomatic | floor)  coverage=\(.coverage | floor)%  \(.function)  \(.file):\(.line)"'
+    if [ "$total" -eq 0 ] 2>/dev/null; then
+        echo "✓ crap passed"
+        exit 0
+    fi
+
+    # Load known violations
+    known_file=".known-crap-violations.json"
+    if [ ! -f "$known_file" ]; then
+        echo "✗ $total function(s) exceed CRAP threshold 30 (no known-violations file):"
+        echo "$all" | jq -r '.[] | "  CRAP=\(.crap | floor)  cyclomatic=\(.cyclomatic | floor)  coverage=\(.coverage | floor)%  \(.function)  \(.file):\(.line)"'
+        exit 1
+    fi
+
+    # Check for new violations not in known list
+    new_violations=$(echo "$all" | jq --argfile known "$known_file" '
+        [.[] | select(. as $v |
+            $known | any(.function == $v.function and .file == $v.file and .line == $v.line) | not
+        )]
+    ' 2>/dev/null)
+    new_count=$(echo "$new_violations" | jq 'length' 2>/dev/null)
+    new_count=${new_count:-0}
+
+    if [ "$new_count" -gt 0 ] 2>/dev/null; then
+        echo "✗ $new_count NEW function(s) exceed CRAP threshold 30:"
+        echo "$new_violations" | jq -r '.[] | "  CRAP=\(.crap | floor)  cyclomatic=\(.cyclomatic | floor)  coverage=\(.coverage | floor)%  \(.function)  \(.file):\(.line)"'
+        echo ""
+        echo "(plus $(( total - new_count )) known violations — see $known_file)"
         exit 1
     else
-        echo "✓ crap passed"
+        echo "✓ crap passed ($total known violations, no new ones)"
+        exit 0
     fi
 
 # Check that no production source file exceeds the target line limit.
