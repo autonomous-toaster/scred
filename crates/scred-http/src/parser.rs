@@ -378,4 +378,74 @@ mod tests {
         assert!(text.contains("Content-Type: text/html"));
         assert!(text.contains("<h1>404</h1>"));
     }
+
+    #[tokio::test]
+    async fn test_parse_request_basic_get() {
+        let data = b"GET /path HTTP/1.1
+Host: example.com
+
+";
+        let mut reader = &data[..];
+        let req = parse_request(&mut reader).await.unwrap();
+        assert_eq!(req.method, "GET");
+        assert_eq!(req.path, "/path");
+        assert_eq!(req.version, "HTTP/1.1");
+        assert_eq!(req.headers.get("Host").unwrap(), "example.com");
+    }
+
+    #[tokio::test]
+    async fn test_parse_request_post_with_body() {
+        let data = b"POST /api/data HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\nContent-Length: 10\r\n\r\nrawbody123";
+        let mut reader = &data[..];
+        let req = parse_request(&mut reader).await.unwrap();
+        assert_eq!(req.method, "POST");
+        assert_eq!(req.path, "/api/data");
+        assert_eq!(req.headers.get("Content-Type").unwrap(), "application/json");
+    }
+
+    #[tokio::test]
+    async fn test_parse_request_invalid_line() {
+        let data = b"INVALID
+";
+        let mut reader = &data[..];
+        let result = parse_request(&mut reader).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_parse_response_basic_ok() {
+        let data = b"HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 5
+
+hello";
+        let mut reader = &data[..];
+        let resp = parse_response(&mut reader).await.unwrap();
+        assert_eq!(resp.status_code, 200);
+        assert_eq!(resp.reason, "OK");
+        assert_eq!(resp.version, "1.1");
+        assert_eq!(resp.headers.get("Content-Type").unwrap(), "text/html");
+    }
+
+    #[tokio::test]
+    async fn test_parse_response_not_found() {
+        let data = b"HTTP/1.1 404 Not Found
+Content-Type: text/html
+Content-Length: 0
+
+";
+        let mut reader = &data[..];
+        let resp = parse_response(&mut reader).await.unwrap();
+        assert_eq!(resp.status_code, 404);
+        assert_eq!(resp.reason, "Not Found");
+    }
+
+    #[tokio::test]
+    async fn test_parse_response_invalid_line() {
+        let data = b"INVALID
+";
+        let mut reader = &data[..];
+        let result = parse_response(&mut reader).await;
+        assert!(result.is_err());
+    }
 }
