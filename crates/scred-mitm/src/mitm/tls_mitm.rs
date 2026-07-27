@@ -609,4 +609,77 @@ where
     handler.handle_connection(client_conn, host).await
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[test]
+    fn test_handle_h2_downgrade_no_preface() {
+        // Test that non-H2 preface returns None
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let (mut client, mut server) = tokio::io::duplex(1024);
+            
+            // Write a normal HTTP request line
+            server.write_all(b"GET / HTTP/1.1\r\n").await.unwrap();
+            
+            let result = handle_h2_downgrade(&mut client, "GET / HTTP/1.1").await.unwrap();
+            assert!(result.is_none(), "Non-H2 preface should return None");
+        });
+    }
+
+    #[test]
+    fn test_handle_h2_downgrade_with_preface() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let (mut client, mut server) = tokio::io::duplex(4096);
+            
+            // Write H2 preface + SETTINGS frame + actual request
+            server.write_all(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n").await.unwrap();
+            // SETTINGS frame: length=0, type=4, flags=0, stream=0
+            server.write_all(&[0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00]).await.unwrap();
+            // Actual HTTP/1.1 request
+            server.write_all(b"GET / HTTP/1.1\r\n").await.unwrap();
+            
+            let result = handle_h2_downgrade(&mut client, "PRI * HTTP/2.0").await.unwrap();
+            assert!(result.is_some(), "H2 preface should return Some");
+            if let Some(line) = result {
+                assert_eq!(line, "GET / HTTP/1.1");
+            }
+        });
+    }
+
+    #[test]
+    fn test_handle_h2_downgrade_empty_after_preface() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let (mut client, mut server) = tokio::io::duplex(4096);
+            
+            // Write H2 preface + SETTINGS frame + empty line
+            server.write_all(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n").await.unwrap();
+            server.write_all(&[0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00]).await.unwrap();
+            server.write_all(b"\r\n").await.unwrap();
+            
+            let result = handle_h2_downgrade(&mut client, "PRI * HTTP/2.0").await.unwrap();
+            assert!(result.is_some(), "Should return Some even for empty");
+            if let Some(line) = result {
+                assert!(line.is_empty(), "Should return empty string");
+            }
+        });
+    }
+
+
+    #[test]
+    fn test_connect_upstream_tls_invalid_host() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result = rt.block_on(async {
+            connect_upstream_tls("http://invalid", "").await
+        });
+        assert!(result.is_err(), "Empty host should fail");
+    }
+
+    #[test]
+    fn test_log_redaction_mode() {
+        log_redaction_mode();
+    }
+}
