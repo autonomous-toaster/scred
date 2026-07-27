@@ -547,4 +547,84 @@ mod composite_selector_tests {
         // Type matching currently returns true for all
         assert!(selector.matches(&meta));
     }
+
+    #[test]
+    fn test_service_category_name_cloud_provider() {
+        assert_eq!(ServiceCategory::CloudProvider.name(), "CloudProvider");
+    }
+
+    #[test]
+    fn test_service_category_name_payment_processor() {
+        assert_eq!(ServiceCategory::PaymentProcessor.name(), "PaymentProcessor");
+    }
+
+    #[test]
+    fn test_service_category_name_code_host() {
+        assert_eq!(ServiceCategory::CodeHost.name(), "CodeHost");
+    }
+
+    #[test]
+    fn test_service_category_name_database() {
+        assert_eq!(ServiceCategory::Database.name(), "Database");
+    }
+
+    #[test]
+    fn test_service_category_name_messaging() {
+        assert_eq!(ServiceCategory::Messaging.name(), "Messaging");
+    }
+
+    #[test]
+    fn test_service_category_name_infrastructure() {
+        assert_eq!(ServiceCategory::Infrastructure.name(), "Infrastructure");
+    }
+
+    #[test]
+    fn test_service_category_name_authentication() {
+        assert_eq!(ServiceCategory::Authentication.name(), "Authentication");
+    }
+
+    #[test]
+    fn test_service_category_name_monitoring() {
+        assert_eq!(ServiceCategory::Monitoring.name(), "Monitoring");
+    }
+
+    #[test]
+    fn test_service_category_name_development() {
+        assert_eq!(ServiceCategory::Development.name(), "Development");
+    }
+
+    #[test]
+    fn test_service_category_name_ai() {
+        assert_eq!(ServiceCategory::AI.name(), "AI");
+    }
+
+    #[test]
+    fn test_service_category_name_other() {
+        assert_eq!(ServiceCategory::Other.name(), "Other");
+    }
+
+    #[test]
+    fn test_service_category_from_str_cloud_provider() {
+        assert!(matches!(ServiceCategory::from_str("cloudprovider").unwrap(), ServiceCategory::CloudProvider));
+    }
+
+    #[test]
+    fn test_service_category_from_str_payment() {
+        assert!(matches!(ServiceCategory::from_str("paymentprocessor").unwrap(), ServiceCategory::PaymentProcessor));
+    }
+
+    #[test]
+    fn test_service_category_from_str_codehost() {
+        assert!(matches!(ServiceCategory::from_str("codehost").unwrap(), ServiceCategory::CodeHost));
+    }
+
+    #[test]
+    fn test_service_category_from_str_database() {
+        assert!(matches!(ServiceCategory::from_str("database").unwrap(), ServiceCategory::Database));
+    }
+
+    #[test]
+    fn test_service_category_from_str_invalid() {
+        assert!(ServiceCategory::from_str("invalid").is_err());
+    }
 }
