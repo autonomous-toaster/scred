@@ -471,4 +471,80 @@ mod composite_selector_tests {
         assert_eq!(format!("{}", Severity::Critical), "CRITICAL (95%)");
         assert_eq!(format!("{}", Severity::High), "HIGH (85%)");
     }
+
+    fn make_metadata(name: &str, tier: RiskTier) -> PatternMetadata {
+        PatternMetadata {
+            name: name.to_string(),
+            tier,
+            category: crate::metadata_cache::PatternCategory::SimplePrefix,
+            risk_score: tier.risk_score(),
+            ffi_path: crate::metadata_cache::FFIPath::MatchPrefix,
+            prefix: None,
+            prefix_len: 0,
+            charset: crate::metadata_cache::Charset::Alphanumeric,
+            min_length: 0,
+            max_length: 100,
+            fixed_length: None,
+            regex_pattern: None,
+            example_secret: String::new(),
+            tags: vec![],
+        }
+    }
+
+    #[test]
+    fn test_pattern_selector_matches_all() {
+        let selector = PatternSelector::All;
+        let meta = make_metadata("test", RiskTier::Critical);
+        assert!(selector.matches(&meta));
+    }
+
+    #[test]
+    fn test_pattern_selector_matches_none() {
+        let selector = PatternSelector::None;
+        let meta = make_metadata("test", RiskTier::Critical);
+        assert!(!selector.matches(&meta));
+    }
+
+    #[test]
+    fn test_pattern_selector_matches_tiers() {
+        let selector = PatternSelector::Tiers(vec![RiskTier::Critical]);
+        let meta = make_metadata("test", RiskTier::Critical);
+        assert!(selector.matches(&meta));
+        let meta2 = make_metadata("test", RiskTier::ApiKeys);
+        assert!(!selector.matches(&meta2));
+    }
+
+    #[test]
+    fn test_pattern_selector_matches_patterns() {
+        let selector = PatternSelector::Patterns(vec!["jwt".to_string()]);
+        let meta = make_metadata("jwt", RiskTier::Critical);
+        assert!(selector.matches(&meta));
+        let meta2 = make_metadata("other", RiskTier::Critical);
+        assert!(!selector.matches(&meta2));
+    }
+
+    #[test]
+    fn test_pattern_selector_matches_tags() {
+        let selector = PatternSelector::Tags(vec!["auth".to_string()]);
+        let meta = make_metadata("test", RiskTier::Critical);
+        // Tags matching depends on metadata.tags which is empty
+        assert!(!selector.matches(&meta));
+    }
+
+    #[test]
+    fn test_pattern_selector_matches_wildcard() {
+        let selector = PatternSelector::Wildcard("jwt*".to_string());
+        let meta = make_metadata("jwt_token", RiskTier::Critical);
+        assert!(selector.matches(&meta));
+        let meta2 = make_metadata("other", RiskTier::Critical);
+        assert!(!selector.matches(&meta2));
+    }
+
+    #[test]
+    fn test_pattern_selector_matches_type() {
+        let selector = PatternSelector::Type(vec!["credential".to_string()]);
+        let meta = make_metadata("test", RiskTier::Critical);
+        // Type matching currently returns true for all
+        assert!(selector.matches(&meta));
+    }
 }
