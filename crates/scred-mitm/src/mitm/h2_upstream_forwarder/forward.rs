@@ -237,3 +237,49 @@ pub(crate) async fn forward_via_http1_1_with_body(
     }
 }
 
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_read_http1_response_redacted_basic() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, duplex};
+        
+        let (mut stream_write, mut stream_read) = duplex(65536);
+        
+        // Write HTTP response data
+        stream_write.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello").await.unwrap();
+        drop(stream_write);
+        
+        let engine = std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: false },
+        ));
+        
+        let result = read_http1_response_redacted(&mut stream_read, &engine).await;
+        assert!(result.is_ok(), "read_http1_response_redacted failed: {:?}", result);
+        
+        let output = result.unwrap();
+        let output_str = String::from_utf8_lossy(&output);
+        assert!(output_str.contains("hello"), "Should contain body data");
+    }
+
+    #[tokio::test]
+    async fn test_read_http1_response_redacted_empty() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, duplex};
+        
+        let (mut stream_write, mut stream_read) = duplex(65536);
+        stream_write.write_all(b"").await.unwrap();
+        drop(stream_write);
+        
+        let engine = std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: false },
+        ));
+        
+        let result = read_http1_response_redacted(&mut stream_read, &engine).await;
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.is_empty());
+    }
+}
