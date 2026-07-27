@@ -1,9 +1,9 @@
 ## Phase 1: Fix Compilation Errors
 
-- [ ] 1.1 Fix missing imports (BufReader, Arc, TlsConnector, etc.)
-- [ ] 1.2 Fix generic argument mismatches (Result<T, E> vs Result<T>)
-- [ ] 1.3 Fix type resolution errors (PolicyEngine, RedactionStream, h2 modules)
-- [ ] 1.4 Verify cargo check --workspace --all-targets passes
+- [x] 1.1 Fix missing imports (BufReader, Arc, TlsConnector, etc.)
+- [x] 1.2 Fix generic argument mismatches (Result<T, E> vs Result<T>)
+- [x] 1.3 Fix type resolution errors (PolicyEngine, RedactionStream, h2 modules)
+- [x] 1.4 Verify cargo check --workspace --all-targets passes
 
 ## Phase 2: Test Infrastructure
 

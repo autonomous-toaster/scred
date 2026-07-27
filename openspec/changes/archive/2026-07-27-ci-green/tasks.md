@@ -22,7 +22,7 @@
 
 ## 5. Verify
 
-- [ ] 5.1 Run just ci and confirm zero violations
+- [x] 5.1 Run just ci and confirm zero violations
 
 ## Notes
 
