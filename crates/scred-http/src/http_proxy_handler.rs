@@ -523,11 +523,75 @@ Location: https://other.com/path
 
     #[test]
     fn test_extract_header_value() {
-        let headers = "Host: example.com
-Content-Type: text/plain
-";
+        let headers = "Host: example.com\nContent-Type: text/plain\n";
         assert_eq!(extract_header_value(headers, "Host"), Some("example.com".to_string()));
         assert_eq!(extract_header_value(headers, "Content-Type"), Some("text/plain".to_string()));
         assert_eq!(extract_header_value(headers, "X-Missing"), None);
+    }
+
+    #[test]
+    fn test_inject_proxy_headers_no_headers() {
+        let config = HttpProxyConfig {
+            add_via_header: false,
+            add_scred_header: false,
+        };
+        let stats = scred_redactor::StreamingStats::default();
+        let result = inject_proxy_headers("HTTP/1.1 200 OK\r\n\r\n", &stats, "HTTP/1.1 200 OK\r\n\r\n", &config).unwrap();
+        assert!(result.contains("HTTP/1.1 200 OK"));
+    }
+
+    #[test]
+    fn test_inject_proxy_headers_via() {
+        let config = HttpProxyConfig {
+            add_via_header: true,
+            add_scred_header: false,
+        };
+        let stats = scred_redactor::StreamingStats::default();
+        let result = inject_proxy_headers("HTTP/1.1 200 OK\r\n\r\n", &stats, "HTTP/1.1 200 OK\r\n\r\n", &config).unwrap();
+        assert!(result.contains("Via: 1.1 scred-proxy"));
+    }
+
+    #[test]
+    fn test_inject_proxy_headers_scred_redacted() {
+        let config = HttpProxyConfig {
+            add_via_header: false,
+            add_scred_header: true,
+        };
+        let stats = scred_redactor::StreamingStats {
+            patterns_found: 3,
+            ..Default::default()
+        };
+        let result = inject_proxy_headers("HTTP/1.1 200 OK\r\n\r\n", &stats, "HTTP/1.1 200 OK\r\noriginal body\r\n", &config).unwrap();
+        assert!(result.contains("X-SCRED-Redacted: true"));
+        assert!(result.contains("3 patterns"));
+    }
+
+    #[test]
+    fn test_inject_proxy_headers_scred_no_secrets() {
+        let config = HttpProxyConfig {
+            add_via_header: false,
+            add_scred_header: true,
+        };
+        let stats = scred_redactor::StreamingStats::default();
+        let result = inject_proxy_headers("HTTP/1.1 200 OK\r\n\r\n", &stats, "HTTP/1.1 200 OK\r\n\r\n", &config).unwrap();
+        assert!(result.contains("X-SCRED-Redacted: false"));
+    }
+
+    #[test]
+    fn test_inject_proxy_headers_empty_response() {
+        let config = HttpProxyConfig {
+            add_via_header: true,
+            add_scred_header: true,
+        };
+        let stats = scred_redactor::StreamingStats::default();
+        let result = inject_proxy_headers("", &stats, "", &config).unwrap();
+        assert!(result.contains("Via: 1.1 scred-proxy"));
+    }
+
+    #[test]
+    fn test_http_proxy_config_default() {
+        let config = HttpProxyConfig::default();
+        assert!(config.add_via_header);
+        assert!(config.add_scred_header);
     }
 }
