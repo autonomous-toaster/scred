@@ -720,4 +720,39 @@ mod tests {
         assert!(output_str.contains("HTTP/1.1 200 OK"), "Should contain status line");
         assert!(output_str.contains("Content-Type: text/plain"), "Should contain content-type");
     }
+
+    #[tokio::test]
+    async fn test_handle_h2_downgrade_not_h2() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, duplex};
+        
+        let (mut client_write, mut client_read) = duplex(65536);
+        
+        // Write a regular HTTP/1.1 request (not H2 preface)
+        client_write.write_all(b"GET /path HTTP/1.1\r\nHost: example.com\r\n\r\n").await.unwrap();
+        drop(client_write);
+        
+        let result = handle_h2_downgrade(&mut client_read, "GET /path HTTP/1.1").await.unwrap();
+        assert!(result.is_none(), "Should not detect H2 preface");
+    }
+
+    #[tokio::test]
+    async fn test_handle_h2_downgrade_h2_preface() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, duplex};
+        
+        let (mut client_write, mut client_read) = duplex(65536);
+        
+        // The H2 preface is passed as request_line parameter, not read from stream
+        // Write SETTINGS frame header (length=0) followed by actual HTTP/1.1 request
+        // SETTINGS frame: length=0, type=4(SETTINGS), flags=0, stream_id=0
+        client_write.write_all(&[0, 0, 0, 4, 0, 0, 0, 0, 0]).await.unwrap();
+        // Actual HTTP/1.1 request
+        client_write.write_all(b"GET /path HTTP/1.1\r\n").await.unwrap();
+        drop(client_write);
+        
+        let result = handle_h2_downgrade(&mut client_read, "PRI * HTTP/2.0").await.unwrap();
+        assert!(result.is_some(), "Should detect H2 preface and return HTTP/1.1 request");
+        if let Some(line) = result {
+            assert!(line.contains("GET /path"), "Should return the actual request line");
+        }
+    }
 }
