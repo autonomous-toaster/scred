@@ -484,4 +484,37 @@ mod tests {
         output_read.read_to_end(&mut output_data).await.unwrap();
         assert_eq!(output_data, b"hello world", "Should contain original data");
     }
+
+    #[tokio::test]
+    async fn test_forward_with_policy_basic() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, BufReader, duplex};
+        use std::sync::Arc;
+        
+        let (mut client_write, mut client_read) = duplex(65536);
+        let (mut upstream_write, mut upstream_read) = duplex(65536);
+        
+        // Write client request headers
+        client_write.write_all(b"Host: example.com\r\nContent-Type: text/plain\r\n\r\n").await.unwrap();
+        drop(client_write);
+        
+        let engine = Arc::new(scred_policy::PolicyEngine::new(scred_config::PolicyConfig { enabled: false, providers: vec![], ..Default::default() }).unwrap());
+        let mut client_buf_reader = BufReader::new(&mut client_read);
+        
+        let result = forward_with_policy(
+            &mut client_buf_reader,
+            &mut upstream_write,
+            "GET /path HTTP/1.1",
+            &engine,
+            "example.com",
+        ).await;
+        assert!(result.is_ok(), "forward_with_policy failed: {:?}", result);
+        
+        // Read what was sent to upstream
+        drop(upstream_write);
+        let mut upstream_data = Vec::new();
+        upstream_read.read_to_end(&mut upstream_data).await.unwrap();
+        let upstream_str = String::from_utf8_lossy(&upstream_data);
+        assert!(upstream_str.contains("GET /path HTTP/1.1"), "Should contain request line");
+        assert!(upstream_str.contains("Host: example.com"), "Should contain host header");
+    }
 }
