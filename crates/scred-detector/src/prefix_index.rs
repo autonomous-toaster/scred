@@ -125,3 +125,6 @@ pub fn init_prefix_index(patterns: &[GeneralizedMarkerPattern]) -> &'static Pref
         index
     })
 }
+
+
+

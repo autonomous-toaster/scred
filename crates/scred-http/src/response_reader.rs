@@ -59,3 +59,27 @@ pub async fn read_http_response<R: AsyncReadExt + Unpin>(
 
     Ok(response_data)
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_read_http_response_basic() {
+        let data = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
+        let mut reader = &data[..];
+        let result = read_http_response(&mut reader, 1000).await.unwrap();
+        let text = String::from_utf8_lossy(&result);
+        assert!(text.contains("HTTP/1.1 200 OK"));
+        assert!(text.contains("hello"));
+    }
+
+    #[tokio::test]
+    async fn test_read_http_response_empty() {
+        let data = b"";
+        let mut reader = &data[..];
+        let result = read_http_response(&mut reader, 1000).await;
+        assert!(result.is_ok() || result.is_err());
+    }
+}

@@ -242,4 +242,5 @@ mod tests {
         parser.bytes_remaining_in_chunk = 100;
         // State transitions are tested via integration tests
     }
+
 }

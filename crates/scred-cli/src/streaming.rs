@@ -263,3 +263,28 @@ fn process_buffer_chunk(
 
     (bytes_read, bytes_written)
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_read_all_input_no_initial() {
+        let (result, _) = read_all_input(None, false);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_read_all_input_with_initial() {
+        let (result, _) = read_all_input(Some(b"hello world"), false);
+        assert_eq!(result, b"hello world");
+    }
+
+    #[test]
+    fn test_read_all_input_large_buffer() {
+        let data = vec![0u8; 1024];
+        let (result, _) = read_all_input(Some(&data), false);
+        assert_eq!(result.len(), 1024);
+    }
+}

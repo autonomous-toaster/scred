@@ -162,5 +162,38 @@ mod tests {
         assert_eq!(req.host, "example.com");
         assert_eq!(req.port, 443);
     }
+
+    #[tokio::test]
+    async fn test_parse_connect_request_basic() {
+        let data = b"CONNECT example.com:443 HTTP/1.1\r\nHost: example.com\r\n\r\n";
+        let mut reader = &data[..];
+        let req = parse_connect_request(&mut reader).await.unwrap();
+        assert_eq!(req.host, "example.com");
+        assert_eq!(req.port, 443);
+    }
+
+    #[tokio::test]
+    async fn test_parse_connect_request_no_port() {
+        let data = b"CONNECT example.com HTTP/1.1\r\nHost: example.com\r\n\r\n";
+        let mut reader = &data[..];
+        let result = parse_connect_request(&mut reader).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_parse_connect_request_invalid() {
+        let data = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n";
+        let mut reader = &data[..];
+        let result = parse_connect_request(&mut reader).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_parse_connect_request_empty() {
+        let data = b"";
+        let mut reader = &data[..];
+        let result = parse_connect_request(&mut reader).await;
+        assert!(result.is_err());
+    }
 }
 
