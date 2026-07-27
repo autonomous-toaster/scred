@@ -28,6 +28,8 @@ use rustls::{ClientConfig, RootCertStore, ServerName};
 use tokio_rustls::TlsConnector;
 use scred_http::h2::alpn::HttpProtocol;
 use scred_http::upstream_h2_client::{extract_upstream_protocol, UpstreamConnectionInfo};
+use scred_redactor::StreamingRedactor;
+use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
 
 /// Execute REAL TLS MITM with full streaming support (Phase 6)
 ///
@@ -206,6 +208,238 @@ pub async fn handle_tls_mitm(
 /// 5. Apply per-chunk redaction with pattern detection
 ///
 /// Returns Err with UnexpectedEof when client closes connection
+
+/// Handle HTTP/2 connection preface downgrade
+/// Detects H2 preface and skips SETTINGS frame, returning the actual HTTP/1.1 request line
+async fn handle_h2_downgrade<RW: AsyncReadExt + AsyncWriteExt + Unpin>(
+    client_tls: &mut RW,
+    request_line: &str,
+) -> std::io::Result<Option<String>> {
+    if !request_line.starts_with("PRI * HTTP/2.0") {
+        return Ok(None);
+    }
+    
+    warn!(
+        "Client sent HTTP/2 preface; initiating transparent downgrade to HTTP/1.1 (RFC 7540 Section 3.4)"
+    );
+    
+    // Read and skip the SETTINGS frame
+    let mut frame_header = [0u8; 9];
+    match client_tls.read(&mut frame_header).await {
+        Ok(n) if n == 9 => {
+            let frame_len = ((frame_header[0] as u32) << 16) 
+                          | ((frame_header[1] as u32) << 8) 
+                          | (frame_header[2] as u32);
+            if frame_len > 0 {
+                let mut payload = vec![0u8; frame_len as usize];
+                let _ = client_tls.read_exact(&mut payload).await;
+            }
+            debug!("Skipped HTTP/2 preface + SETTINGS frame ({} bytes payload)", frame_len);
+        }
+        Ok(n) => warn!("Only read {} bytes of frame header; continuing anyway", n),
+        Err(e) => warn!("Failed to read h2 SETTINGS frame: {}; continuing anyway", e),
+    }
+    
+    // Read the actual HTTP/1.1 request line
+    let actual_line = read_request_line(client_tls).await?;
+    if actual_line.is_empty() {
+        warn!("No HTTP/1.1 request after h2 preface; closing connection");
+        return Ok(Some(String::new()));
+    }
+    
+    warn!("HTTP/2 downgrade successful; continuing with HTTP/1.1");
+    Ok(Some(actual_line))
+}
+
+/// Connect to upstream server with TLS
+async fn connect_upstream_tls(
+    upstream_addr: &str,
+    target_host: &str,
+) -> std::io::Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
+    let is_upstream_proxy = upstream_addr.contains("://");
+    
+    let upstream_tcp = match if is_upstream_proxy {
+        connect_through_proxy(upstream_addr, target_host, 443).await
+    } else {
+        DnsResolver::connect_with_retry(&format!("{}:443", target_host)).await
+    } {
+        Ok(stream) => {
+            info!("Connected to upstream {}", upstream_addr);
+            stream
+        }
+        Err(e) => {
+            error!("Failed to connect to upstream {}: {}", upstream_addr, e);
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+        }
+    };
+    
+    let mut root_store = RootCertStore::empty();
+    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        )
+    }));
+    let mut client_config = ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    
+    use scred_http::h2::alpn::alpn_protocols;
+    client_config.alpn_protocols = alpn_protocols();
+    
+    let connector = TlsConnector::from(Arc::new(client_config));
+    let server_name = ServerName::try_from(target_host)
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid upstream host"))?;
+    
+    info!("[TLS] Starting upstream TLS handshake with server_name={}", target_host);
+    connector
+        .connect(server_name, upstream_tcp)
+        .await
+        .map_err(|e| {
+            error!("[TLS] Upstream TLS handshake FAILED: {}", e);
+            std::io::Error::new(std::io::ErrorKind::Other, format!("upstream TLS failed: {}", e))
+        })
+}
+
+/// Forward response body without redaction
+async fn forward_response_no_redaction<U: AsyncReadExt + AsyncWriteExt + Unpin, C: AsyncReadExt + AsyncWriteExt + Unpin>(
+    upstream: &mut U,
+    client_tls: &mut C,
+    response_line: &str,
+) -> std::io::Result<()> {
+    let mut upstream_buf_reader = BufReader::new(&mut *upstream);
+    
+    let headers = scred_http::http_headers::parse_http_headers(&mut upstream_buf_reader, true)
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    
+    client_tls.write_all(format!("{}\r\n", response_line).as_bytes()).await?;
+    client_tls.write_all(headers.raw_headers.as_bytes()).await?;
+    client_tls.write_all(b"\r\n").await?;
+    
+    let mut buffer = vec![0u8; 65536];
+    loop {
+        match upstream_buf_reader.get_mut().read(&mut buffer).await {
+            Ok(0) => break,
+            Ok(n) => client_tls.write_all(&buffer[..n]).await?,
+            Err(e) => {
+                warn!("Error reading response body: {}", e);
+                return Err(e);
+            }
+        }
+    }
+    
+    client_tls.flush().await
+}
+
+/// Handle HTTP/2 upstream request forwarding
+/// Builds an H2 request from H1.1 request line and forwards via h2::client
+async fn handle_h2_upstream_request<RW: AsyncWriteExt + Unpin>(
+    client_tls: &mut RW,
+    request_line: &str,
+    target_host: &str,
+    upstream_addr: &str,
+    redaction_engine: Arc<scred_redactor::RedactionEngine>,
+    redact_responses: bool,
+) -> std::io::Result<bool> {
+    use http::Request;
+    use bytes::Bytes;
+    use crate::mitm::config::RedactionMode;
+    use crate::mitm::h2_upstream_forwarder::handle_upstream_h2_connection;
+    
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or("GET");
+    let path = parts.next().unwrap_or("/");
+    
+    let request = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("host", target_host)
+        .body(Bytes::new())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    
+    let mode = if redact_responses {
+        RedactionMode::Redact
+    } else {
+        RedactionMode::Passthrough
+    };
+    let detect_patterns = scred_http::PatternSelector::default();
+    let redact_patterns = scred_http::PatternSelector::default();
+    
+    match handle_upstream_h2_connection(
+        request,
+        redaction_engine.clone(),
+        upstream_addr.to_string(),
+        target_host,
+        mode,
+        detect_patterns,
+        redact_patterns,
+    ).await {
+        Ok(response_body) => {
+            let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", 
+                response_body.len(), String::from_utf8_lossy(&response_body));
+            client_tls.write_all(response.as_bytes()).await?;
+            client_tls.flush().await?;
+            Ok(true)
+        }
+        Err(e) => {
+            error!("[HTTP/2 Upstream] Failed to forward request: {}", e);
+            client_tls.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await?;
+            client_tls.flush().await?;
+            Ok(true)
+        }
+    }
+}
+
+/// Stream request to upstream with redaction
+async fn stream_request_with_redaction<RW: AsyncReadExt + AsyncWriteExt + Unpin>(
+    client_tls: &mut RW,
+    upstream: &mut (impl AsyncReadExt + AsyncWriteExt + Unpin),
+    request_line: &str,
+    redactor: Arc<StreamingRedactor>,
+) -> std::io::Result<()> {
+    let request_config = StreamingRequestConfig::default();
+    let mut client_buf_reader = BufReader::new(&mut *client_tls);
+    
+    stream_request_to_upstream(
+        &mut client_buf_reader,
+        upstream,
+        request_line,
+        redactor,
+        request_config,
+    ).await.map(|_| ()).map_err(|e| {
+        warn!("Failed to stream request to upstream: {}", e);
+        std::io::Error::new(std::io::ErrorKind::Other, e)
+    })
+}
+
+/// Stream response to client with redaction
+async fn stream_response_with_redaction<RW: AsyncReadExt + AsyncWriteExt + Unpin>(
+    upstream: &mut (impl AsyncReadExt + AsyncWriteExt + Unpin),
+    client_tls: &mut RW,
+    response_line: &str,
+    redactor: Arc<StreamingRedactor>,
+) -> std::io::Result<()> {
+    let response_config = StreamingResponseConfig::default();
+    let mut upstream_buf_reader = BufReader::new(&mut *upstream);
+    
+    stream_response_to_client(
+        &mut upstream_buf_reader,
+        client_tls,
+        response_line,
+        redactor,
+        response_config,
+        None,
+        None,
+        Some("https"),
+    ).await.map(|_| ()).map_err(|e| {
+        error!("Failed to stream response to client with redaction: {}", e);
+        std::io::Error::new(std::io::ErrorKind::Other, e)
+    })
+}
+
 async fn handle_single_request<RW>(
     client_tls: &mut RW,
     target_host: &str,
@@ -227,110 +461,25 @@ where
     }
     
     // HTTP/2 Downgrade: Skip H2 preface and continue with HTTP/1.1
-    // Per RFC 7540 Section 3.4: When server doesn't send h2 frames, client auto-downgrades
-    if request_line.starts_with("PRI * HTTP/2.0") {
-        warn!(
-            "Client sent HTTP/2 preface; initiating transparent downgrade to HTTP/1.1 (RFC 7540 Section 3.4)"
-        );
-        
-        // The client sends HTTP/2 connection preface, then a SETTINGS frame
-        // Preface: "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" (24 bytes, already read as request_line)
-        // SETTINGS frame: 9-byte header + variable payload
-        
-        // Read and skip the SETTINGS frame
-        let mut frame_header = [0u8; 9];
-        match client_tls.read(&mut frame_header).await {
-            Ok(n) if n == 9 => {
-                // Parse frame length (first 3 bytes, big-endian)
-                let frame_len = ((frame_header[0] as u32) << 16) 
-                              | ((frame_header[1] as u32) << 8) 
-                              | (frame_header[2] as u32);
-                
-                // Skip frame payload
-                if frame_len > 0 {
-                    let mut payload = vec![0u8; frame_len as usize];
-                    let _ = client_tls.read_exact(&mut payload).await;
-                }
-                
-                debug!("Skipped HTTP/2 preface + SETTINGS frame ({} bytes payload)", frame_len);
-            }
-            Ok(n) => {
-                warn!("Only read {} bytes of frame header; continuing anyway", n);
-            }
-            Err(e) => {
-                warn!("Failed to read h2 SETTINGS frame: {}; continuing anyway", e);
-            }
-        }
-        
-        // Read the actual HTTP/1.1 request line that follows
-        request_line = read_request_line(client_tls).await?;
-        if request_line.is_empty() {
-            warn!("No HTTP/1.1 request after h2 preface; closing connection");
+    if let Some(downgraded_line) = handle_h2_downgrade(client_tls, &request_line).await? {
+        if downgraded_line.is_empty() {
             return Ok(true);
         }
-        
+        request_line = downgraded_line;
         warn!("HTTP/2 downgrade successful; continuing with HTTP/1.1");
     }
     
     debug!("[streaming] Request line: {}", request_line);
     
     // Step 2: Connect to upstream server
-    let is_upstream_proxy = upstream_addr.contains("://");
-
-    debug!("Connecting to upstream: {} (proxy_mode={})", upstream_addr, is_upstream_proxy);
-
-    let upstream_tcp = match if is_upstream_proxy {
-        connect_through_proxy(upstream_addr, target_host, 443).await
-    } else {
-        DnsResolver::connect_with_retry(&format!("{}:443", target_host)).await
-    } {
-        Ok(stream) => {
-            info!("Connected to upstream {}", upstream_addr);
-            stream
-        }
+    let mut upstream = match connect_upstream_tls(upstream_addr, target_host).await {
+        Ok(stream) => stream,
         Err(e) => {
-            error!("Failed to connect to upstream {}: {}", upstream_addr, e);
             let error_response = "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n";
             let _ = client_tls.write_all(error_response.as_bytes()).await;
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+            return Err(e);
         }
     };
-
-    let mut root_store = RootCertStore::empty();
-    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
-    let mut client_config = ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-
-    // Add ALPN support to upstream connection
-    // Phase 1: Advertise both h2 and http/1.1
-    // - If upstream negotiates h2: use h2_reader + H2Transcoder to convert to http/1.1
-    // - If upstream negotiates http/1.1: use existing streaming path
-    // - Redaction applied after transcode (zero changes to redaction logic)
-    //
-    // This enables transparent h2 upstream support while keeping downstream HTTP/1.1 only
-    use scred_http::h2::alpn::alpn_protocols;
-    client_config.alpn_protocols = alpn_protocols();
-
-    let connector = TlsConnector::from(Arc::new(client_config));
-    let server_name = ServerName::try_from(target_host)
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid upstream host"))?;
-    
-    info!("[TLS] Starting upstream TLS handshake with server_name={}", target_host);
-    let mut upstream = connector
-        .connect(server_name, upstream_tcp)
-        .await
-        .map_err(|e| {
-            error!("[TLS] Upstream TLS handshake FAILED: {}", e);
-            std::io::Error::new(std::io::ErrorKind::Other, format!("upstream TLS failed: {}", e))
-        })?;
     
     // Extract and log upstream protocol negotiation
     let upstream_alpn = upstream.get_ref().1.alpn_protocol();
@@ -342,55 +491,14 @@ where
     // Check upstream protocol - if HTTP/2, we need different handling
     if matches!(upstream_protocol, HttpProtocol::Http2) {
         info!("[HTTP/2 Upstream] HTTP/2 upstream detected - forwarding via h2::client");
-        
-        use http::Request;
-        use bytes::Bytes;
-        use crate::mitm::config::RedactionMode;
-        use crate::mitm::h2_upstream_forwarder::handle_upstream_h2_connection;
-        
-        // Build an H2 request from the H1.1 request line
-        let mut parts = request_line.split_whitespace();
-        let method = parts.next().unwrap_or("GET");
-        let path = parts.next().unwrap_or("/");
-        
-        let request = Request::builder()
-            .method(method)
-            .uri(path)
-            .header("host", target_host)
-            .body(Bytes::new())
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-        
-        let mode = if redact_responses {
-            RedactionMode::Redact
-        } else {
-            RedactionMode::Passthrough
-        };
-        let detect_patterns = scred_http::PatternSelector::default();
-        let redact_patterns = scred_http::PatternSelector::default();
-        
-        match handle_upstream_h2_connection(
-            request,
-            redaction_engine.clone(),
-            upstream_addr.to_string(),
+        return handle_h2_upstream_request(
+            client_tls,
+            &request_line,
             target_host,
-            mode,
-            detect_patterns,
-            redact_patterns,
-        ).await {
-            Ok(response_body) => {
-                // Send H1.1 response to client
-                let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", response_body.len(), String::from_utf8_lossy(&response_body));
-                client_tls.write_all(response.as_bytes()).await?;
-                client_tls.flush().await?;
-                return Ok(true);
-            }
-            Err(e) => {
-                error!("[HTTP/2 Upstream] Failed to forward request: {}", e);
-                client_tls.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await?;
-                client_tls.flush().await?;
-                return Ok(true);
-            }
-        }
+            upstream_addr,
+            redaction_engine,
+            redact_responses,
+        ).await;
     }
 
 
@@ -398,28 +506,8 @@ where
     let redactor = Arc::new(StreamingRedactor::with_defaults(redaction_engine));
     
     // Step 4: Stream request to upstream with redaction
-    let request_config = StreamingRequestConfig::default();
-    
     info!("[Request] About to stream request line: {}", request_line);
-    {
-        let mut client_buf_reader = BufReader::new(&mut *client_tls);
-        match stream_request_to_upstream(
-            &mut client_buf_reader,
-            &mut upstream,
-            &request_line,
-            redactor.clone(),
-            request_config,
-        ).await {
-            Ok(stats) => {
-                debug!("[streaming] Request streamed: {} bytes read, {} bytes written", 
-                       stats.bytes_read, stats.bytes_written);
-            }
-            Err(e) => {
-                warn!("Failed to stream request to upstream: {}", e);
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
-            }
-        }
-    }
+    stream_request_with_redaction(client_tls, &mut upstream, &request_line, redactor.clone()).await?;
     
     info!("[streaming] About to read response line from upstream");
     let response_line = read_response_line(&mut upstream).await?;
@@ -433,71 +521,13 @@ where
     let mut upstream_buf_reader = BufReader::new(&mut upstream);
     
     if redact_responses {
-        // Stream response with redaction
-        let response_config = StreamingResponseConfig::default();
-        
         info!("[streaming] Streaming response WITH redaction enabled");
-        
-        match stream_response_to_client(
-            &mut upstream_buf_reader,
-            client_tls,
-            &response_line,
-            redactor.clone(),
-            response_config,
-            None,  // Don't rewrite for MITM - redirects naturally go through MITM again
-            None,
-            Some("https"),  // MITM clients always use HTTPS
-        ).await {
-            Ok(stats) => {
-                info!("[streaming] Response streamed to client: {} bytes read, {} bytes written", 
-                      stats.bytes_read, stats.bytes_written);
-            }
-            Err(e) => {
-                error!("Failed to stream response to client with redaction: {}", e);
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
-            }
-        }
+        stream_response_with_redaction(&mut upstream, client_tls, &response_line, redactor.clone()).await?;
     }
     else {
         // Stream response without redaction
         info!("Response redaction DISABLED - forwarding as-is");
-        
-        // Parse headers
-        let headers = scred_http::http_headers::parse_http_headers(&mut upstream_buf_reader, true)
-            .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        
-        // Forward response line
-        client_tls
-            .write_all(format!("{}\r\n", response_line).as_bytes())
-            .await?;
-        
-        // Forward headers
-        client_tls
-            .write_all(headers.raw_headers.as_bytes())
-            .await?;
-        client_tls
-            .write_all(b"\r\n")
-            .await?;
-        
-        // Forward body in chunks (no redaction)
-        let mut buffer = vec![0u8; 65536];
-        loop {
-            match upstream_buf_reader.get_mut().read(&mut buffer).await {
-                Ok(0) => break,  // EOF
-                Ok(n) => {
-                    client_tls
-                        .write_all(&buffer[..n])
-                        .await?;
-                }
-                Err(e) => {
-                    warn!("Error reading response body: {}", e);
-                    return Err(e);
-                }
-            }
-        }
-        
-        client_tls.flush().await?;
+        forward_response_no_redaction(&mut upstream, client_tls, &response_line).await?;
     }
     
     Ok(true)
