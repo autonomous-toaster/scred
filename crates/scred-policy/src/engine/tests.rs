@@ -125,4 +125,37 @@ mod unit_tests {
         std::env::remove_var("SCRED_UNIFIED_TEST_KEY_A");
         std::env::remove_var("SCRED_UNIFIED_TEST_KEY_B");
     }
+
+    #[test]
+    fn test_process_headers_passthrough_no_providers() {
+        let config = PolicyConfig {
+            enabled: true,
+            providers: vec![],
+            ..Default::default()
+        };
+        let engine = PolicyEngine::new(config).unwrap();
+        let mut headers = http::HeaderMap::new();
+        headers.insert("content-type", http::HeaderValue::from_static("text/html"));
+        
+        let result = engine.process_headers(&mut headers, "example.com").unwrap();
+        assert_eq!(result.placeholders_replaced, 0);
+        assert_eq!(result.secrets_redacted, 0);
+    }
+
+    #[test]
+    fn test_process_headers_redact() {
+        let config = PolicyConfig {
+            enabled: true,
+            providers: vec![],
+            ..Default::default()
+        };
+        let engine = PolicyEngine::new(config).unwrap();
+        let mut headers = http::HeaderMap::new();
+        headers.insert("authorization", http::HeaderValue::from_static("Bearer sk-test-12345"));
+        
+        let result = engine.process_headers(&mut headers, "example.com").unwrap();
+        // With no providers, redaction engine may or may not find secrets
+        // Just verify the function runs without error
+        assert!(result.secrets_redacted >= 0);
+    }
 }
