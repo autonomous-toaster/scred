@@ -208,3 +208,44 @@ pub struct StreamingStats {
     pub chunks_processed: u64,
     pub patterns_found: u64,
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_stream_request_body_content_length_basic() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, BufReader, duplex};
+        
+        let (mut client_write, mut client_read) = duplex(65536);
+        let (mut upstream_write, mut upstream_read) = duplex(65536);
+        
+        // Write body data to client stream
+        client_write.write_all(b"hello").await.unwrap();
+        drop(client_write);
+        
+        let engine = std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: false },
+        ));
+        let redactor = std::sync::Arc::new(scred_redactor::StreamingRedactor::new(engine, Default::default()));
+        let config = StreamingRequestConfig::default();
+        
+        let mut client_buf_reader = BufReader::new(&mut client_read);
+        
+        let result = stream_request_body_content_length(
+            &mut client_buf_reader,
+            &mut upstream_write,
+            5,
+            redactor,
+            &config,
+        ).await;
+        assert!(result.is_ok(), "stream_request_body_content_length failed: {:?}", result);
+        
+        // Read what was sent to upstream
+        drop(upstream_write);
+        let mut upstream_data = Vec::new();
+        upstream_read.read_to_end(&mut upstream_data).await.unwrap();
+        assert_eq!(upstream_data, b"hello", "Should contain body data");
+    }
+}
