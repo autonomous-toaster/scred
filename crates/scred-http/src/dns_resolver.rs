@@ -165,3 +165,33 @@ impl DnsResolver {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_scheme_http() {
+        assert_eq!(DnsResolver::strip_scheme("http://example.com:8080"), "example.com:8080");
+    }
+
+    #[test]
+    fn test_strip_scheme_https() {
+        assert_eq!(DnsResolver::strip_scheme("https://example.com:443"), "example.com:443");
+    }
+
+    #[test]
+    fn test_strip_scheme_no_scheme() {
+        assert_eq!(DnsResolver::strip_scheme("example.com:8080"), "example.com:8080");
+    }
+
+    #[test]
+    fn test_strip_scheme_socks5() {
+        assert_eq!(DnsResolver::strip_scheme("socks5://proxy:1080"), "proxy:1080");
+    }
+
+    #[test]
+    fn test_strip_scheme_empty() {
+        assert_eq!(DnsResolver::strip_scheme(""), "");
+    }
+}
