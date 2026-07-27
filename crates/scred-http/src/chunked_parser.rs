@@ -264,4 +264,18 @@ mod tests {
         assert!(result.is_ok());
         assert!(parser.is_complete());
     }
+
+    #[tokio::test]
+    async fn test_next_chunk_end_of_stream() {
+        let engine = std::sync::Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: false },
+        ));
+        let redactor = std::sync::Arc::new(scred_redactor::StreamingRedactor::new(engine.clone(), Default::default()));
+        let data = b"0\r\n\r\n";
+        let mut reader = tokio::io::BufReader::new(&data[..]);
+        let mut parser = ChunkedParser::new();
+        parser.init_stream(engine);
+        let (chunk, stats) = parser.next_chunk(&mut reader, redactor).await.unwrap();
+        assert!(chunk.is_empty());
+    }
 }
