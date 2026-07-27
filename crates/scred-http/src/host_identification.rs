@@ -63,53 +63,59 @@ pub struct HostSources {
 impl HostIdentification {
     /// Determine host from collected sources using mitmproxy priority
     pub fn from_sources(sources: &HostSources) -> Result<Self> {
-        let mut alt_sources = HashMap::new();
-        let mut selected_host = None;
-        let mut selected_port = 443; // default HTTPS port
-        let mut source = HostSource::Unknown;
+        let alt_sources = Self::collect_alt_sources(sources);
+        let (selected_host, selected_port, source) = Self::select_host_by_priority(sources)?;
 
+        // Validate consistency
+        let sources_consistent = Self::validate_sources(&selected_host, sources);
+        if !sources_consistent {
+            warn!(
+                "Host identification sources are inconsistent. Using {} source: {}",
+                source, selected_host
+            );
+        }
+
+        Ok(HostIdentification {
+            host: selected_host,
+            port: selected_port,
+            source,
+            alt_sources,
+            sources_consistent,
+        })
+    }
+
+    /// Select host from sources by priority: CONNECT > SNI > HTTP Host > Certificate CN
+    fn select_host_by_priority(sources: &HostSources) -> Result<(String, u16, HostSource)> {
         // Priority 1: CONNECT request (most authoritative)
         if let Some((host, port)) = &sources.connect_host {
             debug!("Using host from CONNECT request: {}:{}", host, port);
-            selected_host = Some(host.clone());
-            selected_port = *port;
-            source = HostSource::ConnectRequest;
+            return Ok((host.clone(), *port, HostSource::ConnectRequest));
         }
 
-        // Priority 2: TLS SNI (if no CONNECT)
-        if selected_host.is_none() {
-            if let Some(host) = &sources.sni_host {
-                debug!("Using host from SNI: {}", host);
-                selected_host = Some(host.clone());
-                selected_port = 443;
-                source = HostSource::ServerNameIndication;
-            }
+        // Priority 2: TLS SNI
+        if let Some(host) = &sources.sni_host {
+            debug!("Using host from SNI: {}", host);
+            return Ok((host.clone(), 443, HostSource::ServerNameIndication));
         }
 
-        // Priority 3: HTTP Host header (if no CONNECT/SNI)
-        if selected_host.is_none() {
-            if let Some((host, port)) = &sources.http_host {
-                debug!("Using host from HTTP Host header: {}:{}", host, port);
-                selected_host = Some(host.clone());
-                selected_port = *port;
-                source = HostSource::HttpHostHeader;
-            }
+        // Priority 3: HTTP Host header
+        if let Some((host, port)) = &sources.http_host {
+            debug!("Using host from HTTP Host header: {}:{}", host, port);
+            return Ok((host.clone(), *port, HostSource::HttpHostHeader));
         }
 
         // Priority 4: Certificate CN (fallback)
-        if selected_host.is_none() {
-            if let Some(cn) = &sources.cert_cn {
-                debug!("Using host from certificate CN: {}", cn);
-                selected_host = Some(cn.clone());
-                selected_port = 443;
-                source = HostSource::CertificateCN;
-            }
+        if let Some(cn) = &sources.cert_cn {
+            debug!("Using host from certificate CN: {}", cn);
+            return Ok((cn.clone(), 443, HostSource::CertificateCN));
         }
 
-        let host =
-            selected_host.ok_or_else(|| anyhow!("No host identification source available"))?;
+        Err(anyhow!("No host identification source available"))
+    }
 
-        // Collect all sources for validation
+    /// Collect all sources for validation
+    fn collect_alt_sources(sources: &HostSources) -> HashMap<String, String> {
+        let mut alt_sources = HashMap::new();
         if let Some((h, p)) = &sources.connect_host {
             alt_sources.insert("connect".to_string(), format!("{}:{}", h, p));
         }
@@ -122,24 +128,7 @@ impl HostIdentification {
         if let Some(cn) = &sources.cert_cn {
             alt_sources.insert("cert_cn".to_string(), cn.clone());
         }
-
-        // Validate consistency
-        let sources_consistent = Self::validate_sources(&host, sources);
-        if !sources_consistent {
-            warn!(
-                "Host identification sources are inconsistent. \
-                 Using {} source: {}",
-                source, host
-            );
-        }
-
-        Ok(HostIdentification {
-            host,
-            port: selected_port,
-            source,
-            alt_sources,
-            sources_consistent,
-        })
+        alt_sources
     }
 
     /// Validate that multiple sources agree on the host
