@@ -135,4 +135,29 @@ mod h2_forwarder_tests {
         let err = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
         assert!(!crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&err));
     }
+
+    #[tokio::test]
+    async fn test_read_response_direct_basic() {
+        let data = b"HTTP/1.1 200 OK\r\n\r\n";
+        let mut reader = &data[..];
+        let result = crate::mitm::h2_upstream_forwarder::read_response_direct(&mut reader).await.unwrap();
+        assert!(String::from_utf8_lossy(&result).contains("HTTP/1.1 200 OK"));
+    }
+
+    #[tokio::test]
+    async fn test_read_response_direct_empty() {
+        let data = b"";
+        let mut reader = &data[..];
+        let result = crate::mitm::h2_upstream_forwarder::read_response_direct(&mut reader).await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_read_response_direct_multi_chunk() {
+        let data = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
+        let mut reader = &data[..];
+        let result = crate::mitm::h2_upstream_forwarder::read_response_direct(&mut reader).await.unwrap();
+        let text = String::from_utf8_lossy(&result);
+        assert!(text.contains("hello"));
+    }
 }

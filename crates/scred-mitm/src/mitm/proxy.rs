@@ -311,3 +311,56 @@ async fn send_error_response(
     writer.flush().await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_host_from_request_full_url_http() {
+        let result = extract_host_from_request("GET http://example.com/path HTTP/1.1");
+        assert_eq!(result, Some("example.com".to_string()));
+    }
+
+    #[test]
+    fn test_extract_host_from_request_full_url_https() {
+        let result = extract_host_from_request("GET https://example.com:8443/path HTTP/1.1");
+        assert_eq!(result, Some("example.com".to_string()));
+    }
+
+    #[test]
+    fn test_extract_host_from_request_relative_path() {
+        let result = extract_host_from_request("GET /path HTTP/1.1");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_host_from_request_empty() {
+        let result = extract_host_from_request("");
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_read_first_line_basic() {
+        let data = b"GET /path HTTP/1.1\r\n";
+        let mut reader = &data[..];
+        let line = read_first_line(&mut reader).await.unwrap();
+        assert_eq!(line, Some("GET /path HTTP/1.1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_read_first_line_empty() {
+        let data = b"";
+        let mut reader = &data[..];
+        let line = read_first_line(&mut reader).await.unwrap();
+        assert_eq!(line, None);
+    }
+
+    #[tokio::test]
+    async fn test_read_first_line_too_long() {
+        let data = vec![b'a'; 2000];
+        let mut reader = &data[..];
+        let line = read_first_line(&mut reader).await.unwrap();
+        assert_eq!(line, None);
+    }
+}
