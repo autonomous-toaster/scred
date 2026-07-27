@@ -48,6 +48,168 @@ impl Default for HttpProxyConfig {
 /// * `upstream_host` - Optional upstream hostname (for header rewriting)
 /// * `redact_selector` - Optional selector to filter which patterns are redacted
 /// * `config` - Proxy configuration (headers, options)
+
+/// Union type for upstream connections (direct or via proxy)
+pub enum UpstreamConnection {
+    Direct(crate::pooled_dns_resolver::PooledTcpStream),
+    Proxy(tokio::net::TcpStream),
+}
+
+/// Read HTTP headers from client request
+async fn read_http_headers<R: AsyncReadExt + Unpin>(
+    reader: &mut R,
+) -> std::io::Result<Vec<String>> {
+    let mut headers = Vec::new();
+    let mut line = String::new();
+    let mut buf_reader = BufReader::new(reader);
+    
+    loop {
+        line.clear();
+        buf_reader.read_line(&mut line).await?;
+        if line.trim().is_empty() {
+            break;
+        }
+        headers.push(line.clone());
+    }
+    
+    Ok(headers)
+}
+
+/// Normalize Host header: rewrite to upstream target or inject if missing
+fn normalize_host_header(
+    headers_str: &mut String,
+    upstream_host: Option<&str>,
+    upstream_addr: &str,
+) {
+    if let Some(upstream_host_name) = upstream_host {
+        header_rewriter::replace_header_value(headers_str, "Host", upstream_host_name);
+        header_rewriter::inject_header_if_missing(headers_str, "Host", upstream_host_name);
+        info!("Host header normalized: {}", upstream_host_name);
+    } else if header_rewriter::extract_header_value(headers_str, "Host").is_none() {
+        let upstream_hostname = upstream_addr.split(':').next().unwrap_or(upstream_addr);
+        header_rewriter::inject_header_if_missing(headers_str, "Host", upstream_hostname);
+        info!("Host header injected from upstream_addr: {}", upstream_hostname);
+    }
+}
+
+/// Read request body if Content-Length header is present
+async fn read_request_body<R: AsyncReadExt + Unpin>(
+    reader: &mut R,
+    headers_str: &str,
+) -> std::io::Result<Vec<u8>> {
+    if let Some(content_length_str) = extract_header_value(headers_str, "content-length") {
+        if let Ok(content_length) = content_length_str.parse::<usize>() {
+            let mut body = vec![0u8; content_length];
+            reader.read_exact(&mut body).await?;
+            return Ok(body);
+        }
+    }
+    Ok(Vec::new())
+}
+
+/// Apply redaction to text using optional selector
+fn redact_text(
+    text: &str,
+    engine: &Arc<RedactionEngine>,
+    selector: Option<&crate::PatternSelector>,
+) -> (String, u64) {
+    if let Some(sel) = selector {
+        let config_engine = crate::ConfigurableEngine::new(
+            engine.clone(),
+            crate::PatternSelector::All,
+            sel.clone(),
+        );
+        let result = config_engine.redact_only(text);
+        let all_result = engine.redact(text);
+        (result, all_result.warnings.len() as u64)
+    } else {
+        let streaming_config = StreamingConfig::default();
+        let streaming_redactor = StreamingRedactor::new(engine.clone(), streaming_config);
+        let (redacted, stats) = streaming_redactor.redact_buffer(text.as_bytes());
+        (redacted, stats.patterns_found)
+    }
+}
+
+/// Connect to upstream server (direct or via proxy)
+async fn connect_upstream(
+    upstream_addr: &str,
+    target_host: &str,
+    target_port: u16,
+    resolver: &Arc<crate::OptimizedDnsResolver>,
+) -> Result<UpstreamConnection> {
+    if upstream_addr.contains("://") {
+        Ok(UpstreamConnection::Proxy(
+            connect_through_proxy(upstream_addr, target_host, target_port).await?,
+        ))
+    } else {
+        Ok(UpstreamConnection::Direct(
+            resolver.connect_with_retry(upstream_addr).await?,
+        ))
+    }
+}
+
+/// Forward request to upstream and read response
+async fn forward_and_read_response(
+    upstream: &mut UpstreamConnection,
+    request: &str,
+) -> std::io::Result<Vec<u8>> {
+    macro_rules! call_upstream {
+        ($conn:expr, $method:ident($($arg:expr),*)) => {
+            match $conn {
+                UpstreamConnection::Direct(ref mut s) => s.$method($($arg),*).await?,
+                UpstreamConnection::Proxy(ref mut s) => s.$method($($arg),*).await?,
+            }
+        };
+    }
+    
+    call_upstream!(upstream, write_all(request.as_bytes()));
+    call_upstream!(upstream, flush());
+    
+    let mut response = Vec::new();
+    let mut buf = [0u8; 4096];
+    
+    loop {
+        let n = match upstream {
+            UpstreamConnection::Direct(s) => s.read(&mut buf).await?,
+            UpstreamConnection::Proxy(s) => s.read(&mut buf).await?,
+        };
+        if n == 0 {
+            break;
+        }
+        response.extend_from_slice(&buf[..n]);
+    }
+    
+    Ok(response)
+}
+
+/// Rewrite Location headers to point back to proxy
+fn rewrite_location_header(
+    response: &str,
+    upstream_host: Option<&str>,
+    first_line: &str,
+    proxy_host: &str,
+) -> String {
+    let Some(upstream_hostname) = upstream_host else {
+        debug!("No upstream_host provided, skipping Location header rewriting");
+        return response.to_string();
+    };
+    
+    let client_scheme = if first_line.contains("https") { "https" } else { "http" };
+    let mut result = response.to_string();
+    
+    if let Some(location) = header_rewriter::extract_header_value(&result, "Location") {
+        if location_rewriter::should_rewrite_location(&location, upstream_hostname) {
+            let rewritten = location_rewriter::rewrite_location_to_proxy(
+                &location, client_scheme, proxy_host,
+            );
+            header_rewriter::replace_header_value(&mut result, "Location", &rewritten);
+            info!("Rewriting Location header: {} → {}", location, rewritten);
+        }
+    }
+    
+    result
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_http_proxy(
     mut client_read: tokio::net::tcp::OwnedReadHalf,
@@ -84,60 +246,15 @@ pub async fn handle_http_proxy(
     );
 
     // Read all headers from client
-    let mut client_headers = Vec::new();
     let mut header_buf = BufReader::new(&mut client_read);
-    let mut line = String::new();
-
-    // Read headers until blank line
-    loop {
-        line.clear();
-        header_buf.read_line(&mut line).await?;
-        if line.trim().is_empty() {
-            break;
-        }
-        client_headers.push(line.clone());
-    }
+    let client_headers = read_http_headers(&mut header_buf).await?;
 
     // Read body if Content-Length present
-    let mut body = Vec::new();
     let mut headers_str = client_headers.join("");
+    let body = read_request_body(&mut header_buf, &headers_str).await?;
 
-    // Normalize Host header: rewrite to upstream target or inject if missing
-    if let Some(upstream_host_name) = upstream_host {
-        // Rewrite Host header to upstream target
-        header_rewriter::replace_header_value(&mut headers_str, "Host", upstream_host_name);
-        debug!(
-            "Rewrote Host header to upstream target: {}",
-            upstream_host_name
-        );
-
-        // If Host header was missing (replace_header_value does nothing), inject it
-        header_rewriter::inject_header_if_missing(&mut headers_str, "Host", upstream_host_name);
-        info!("Host header normalized: {}", upstream_host_name);
-    } else {
-        // No upstream_host provided, but ensure Host header is present for HTTP/1.1
-        if header_rewriter::extract_header_value(&headers_str, "Host").is_none() {
-            debug!(
-                "Host header missing, extracting from upstream_addr: {}",
-                upstream_addr
-            );
-            // Try to extract hostname from upstream_addr (format: "host:port")
-            let upstream_hostname = upstream_addr.split(':').next().unwrap_or(upstream_addr);
-            header_rewriter::inject_header_if_missing(&mut headers_str, "Host", upstream_hostname);
-            info!(
-                "Host header injected from upstream_addr: {}",
-                upstream_hostname
-            );
-        }
-    }
-
-    if let Some(content_length_str) = extract_header_value(&headers_str, "content-length") {
-        if let Ok(content_length) = content_length_str.parse::<usize>() {
-            let mut body_buf = vec![0u8; content_length];
-            header_buf.read_exact(&mut body_buf).await?;
-            body = body_buf;
-        }
-    }
+    // Normalize Host header
+    normalize_host_header(&mut headers_str, upstream_host, upstream_addr);
 
     // Combine request for redaction
     let mut full_request = format!("{}\r\n{}\r\n", first_line, headers_str);
@@ -145,30 +262,18 @@ pub async fn handle_http_proxy(
         full_request.push_str(&String::from_utf8_lossy(&body));
     }
 
-    // REDACT request using ConfigurableEngine if selector provided, otherwise StreamingRedactor
-    let (redacted_request, redaction_stats_patterns) = if let Some(ref selector) = redact_selector {
-        // Use ConfigurableEngine with selector for filtered redaction
-        let config_engine = crate::ConfigurableEngine::new(
-            redaction_engine.clone(),
-            crate::PatternSelector::All, // Detect all patterns for statistics
-            selector.clone(),            // But only redact selected patterns
-        );
-        let result = config_engine.redact_only(&full_request);
-        let all_result = redaction_engine.redact(&full_request);
-        (result, all_result.warnings.len() as u64)
-    } else {
-        // No selector: use StreamingRedactor to redact all patterns
-        let streaming_config = StreamingConfig::default();
-        let streaming_redactor = StreamingRedactor::new(redaction_engine.clone(), streaming_config);
-        let (redacted, stats) = streaming_redactor.redact_buffer(full_request.as_bytes());
-        (redacted, stats.patterns_found)
-    };
+    // REDACT request
+    let (redacted_request, patterns_found) = redact_text(
+        &full_request,
+        &redaction_engine,
+        redact_selector.as_ref(),
+    );
 
     let redaction_stats = scred_redactor::streaming::StreamingStats {
         bytes_read: full_request.len() as u64,
         bytes_written: redacted_request.len() as u64,
         chunks_processed: 1,
-        patterns_found: redaction_stats_patterns,
+        patterns_found,
         errors: 0,
     };
 
@@ -187,79 +292,24 @@ pub async fn handle_http_proxy(
     }
 
     // Connect to upstream server or upstream proxy
-    // Use union type to handle both TcpStream and PooledTcpStream
-    enum UpstreamConnection {
-        Direct(crate::pooled_dns_resolver::PooledTcpStream),
-        Proxy(tokio::net::TcpStream),
-    }
+    let mut upstream = connect_upstream(upstream_addr, &target_host, target_port, &resolver).await?;
 
-    let conn = if upstream_addr.contains("://") {
-        UpstreamConnection::Proxy(
-            connect_through_proxy(upstream_addr, &target_host, target_port).await?,
-        )
-    } else {
-        UpstreamConnection::Direct(resolver.connect_with_retry(upstream_addr).await?)
-    };
-
-    // Helper macro to call method on either variant
-    macro_rules! call_upstream {
-        ($conn:expr, $method:ident($($arg:expr),*)) => {
-            match $conn {
-                UpstreamConnection::Direct(ref mut s) => s.$method($($arg),*).await?,
-                UpstreamConnection::Proxy(ref mut s) => s.$method($($arg),*).await?,
-            }
-        };
-    }
-
-    let mut upstream = conn;
-
-    // Forward redacted request to upstream
-    call_upstream!(upstream, write_all(redacted_request.as_bytes()));
-    call_upstream!(upstream, flush());
-
-    // Read response from upstream
-    let mut response_buf = Vec::new();
-    let mut buf = [0u8; 4096];
-
-    loop {
-        let n = match &mut upstream {
-            UpstreamConnection::Direct(s) => s.read(&mut buf).await?,
-            UpstreamConnection::Proxy(s) => s.read(&mut buf).await?,
-        };
-        if n == 0 {
-            break;
-        }
-        response_buf.extend_from_slice(&buf[..n]);
-    }
-
+    // Forward redacted request to upstream and read response
+    let response_buf = forward_and_read_response(&mut upstream, &redacted_request).await?;
     let response_str = String::from_utf8_lossy(&response_buf).to_string();
 
-    // REDACT response using ConfigurableEngine if selector provided, otherwise StreamingRedactor
-    let (redacted_response, redaction_stats_response_patterns) = if let Some(ref selector) =
-        redact_selector
-    {
-        // Use ConfigurableEngine with selector for filtered redaction
-        let config_engine = crate::ConfigurableEngine::new(
-            redaction_engine.clone(),
-            crate::PatternSelector::All, // Detect all patterns for statistics
-            selector.clone(),            // But only redact selected patterns
-        );
-        let result = config_engine.redact_only(&response_str);
-        let all_result = redaction_engine.redact(&response_str);
-        (result, all_result.warnings.len() as u64)
-    } else {
-        // No selector: use StreamingRedactor to redact all patterns
-        let streaming_config = StreamingConfig::default();
-        let streaming_redactor = StreamingRedactor::new(redaction_engine.clone(), streaming_config);
-        let (redacted, stats) = streaming_redactor.redact_buffer(response_str.as_bytes());
-        (redacted, stats.patterns_found)
-    };
+    // REDACT response
+    let (redacted_response, response_patterns) = redact_text(
+        &response_str,
+        &redaction_engine,
+        redact_selector.as_ref(),
+    );
 
     let redaction_stats_response = scred_redactor::streaming::StreamingStats {
         bytes_read: response_str.len() as u64,
         bytes_written: redacted_response.len() as u64,
         chunks_processed: 1,
-        patterns_found: redaction_stats_response_patterns,
+        patterns_found: response_patterns,
         errors: 0,
     };
 
@@ -277,46 +327,13 @@ pub async fn handle_http_proxy(
         );
     }
 
-    // Rewrite Location headers to point back to proxy (if applicable)
-    let mut final_response = redacted_response.clone();
-
-    if let Some(upstream_hostname) = upstream_host {
-        // Determine client scheme and proxy host for Location rewriting
-        let client_scheme = if first_line.contains("https") {
-            "https"
-        } else {
-            "http"
-        };
-        let proxy_host = upstream_addr; // Use the upstream_addr as proxy_host for rewriting
-
-        // Check if response contains a Location header
-        if let Some(location) = header_rewriter::extract_header_value(&final_response, "Location") {
-            if location_rewriter::should_rewrite_location(&location, upstream_hostname) {
-                let rewritten_location = location_rewriter::rewrite_location_to_proxy(
-                    &location,
-                    client_scheme,
-                    proxy_host,
-                );
-
-                header_rewriter::replace_header_value(
-                    &mut final_response,
-                    "Location",
-                    &rewritten_location,
-                );
-                info!(
-                    "Rewriting Location header: {} → {}",
-                    location, rewritten_location
-                );
-            } else {
-                debug!(
-                    "Location header does not point to upstream, keeping as-is: {}",
-                    location
-                );
-            }
-        }
-    } else {
-        debug!("No upstream_host provided, skipping Location header rewriting");
-    }
+    // Rewrite Location headers to point back to proxy
+    let final_response = rewrite_location_header(
+        &redacted_response,
+        upstream_host,
+        first_line,
+        upstream_addr,
+    );
 
     // Add proxy detection headers to response
     let final_response = if config.add_via_header || config.add_scred_header {

@@ -14,12 +14,12 @@
 ## Phase 3: Top 10 CRAP Reduction
 
 ### handle_h2_client_transcoding (CRAP: 7656 → target: <30)
-- [ ] 3.1.1 Write characterization test for current behavior
-- [ ] 3.1.2 Extract parse_h2_frame() helper
-- [ ] 3.1.3 Extract dispatch_frame_type() helper
-- [ ] 3.1.4 Extract transcode_headers_frame() helper
-- [ ] 3.1.5 Extract transcode_data_frame() helper
-- [ ] 3.1.6 Write unit tests for extracted helpers
+- [x] 3.1.1 Write characterization test for current behavior
+- [x] 3.1.2 Extract parse_h2_frame() helper
+- [x] 3.1.3 Extract dispatch_frame_type() helper
+- [x] 3.1.4 Extract transcode_headers_frame() helper
+- [x] 3.1.5 Extract transcode_data_frame() helper
+- [x] 3.1.6 Write unit tests for extracted helpers
 - [ ] 3.1.7 Verify CRAP score < 30
 
 ### handle_single_request (CRAP: 3782 → target: <30)
