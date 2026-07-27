@@ -144,74 +144,69 @@ impl PatternSelector {
 
     /// Get all matching pattern names from cache
     pub fn get_matching_patterns(&self, cache: &MetadataCache) -> Vec<String> {
-        let mut matching = Vec::new();
-
         match self {
-            PatternSelector::All => {
-                // Get all pattern names
-                for name in cache.all_pattern_names() {
-                    matching.push(name.clone());
-                }
-            }
+            PatternSelector::All => Self::collect_all_patterns(cache),
+            PatternSelector::None => Vec::new(),
+            PatternSelector::Tiers(tiers) => Self::collect_tier_patterns(cache, tiers),
+            PatternSelector::Patterns(names) => Self::collect_named_patterns(cache, names),
+            PatternSelector::Tags(tags) => Self::collect_tagged_patterns(cache, tags),
+            PatternSelector::Wildcard(pattern) => self.collect_wildcard_patterns(cache, pattern),
+            PatternSelector::Regex(_) => Vec::new(),
+            PatternSelector::Type(_) => Self::collect_all_patterns(cache),
+        }
+    }
 
-            PatternSelector::None => {
-                // No patterns match
-            }
+    /// Collect all pattern names from cache
+    fn collect_all_patterns(cache: &MetadataCache) -> Vec<String> {
+        cache.all_pattern_names().cloned().collect()
+    }
 
-            PatternSelector::Tiers(tiers) => {
-                // Get patterns for each tier
-                for tier in tiers {
-                    if let Some(patterns) = cache.get_patterns_by_tier(tier) {
-                        matching.extend_from_slice(patterns);
+    /// Collect patterns matching specified tiers
+    fn collect_tier_patterns(cache: &MetadataCache, tiers: &[RiskTier]) -> Vec<String> {
+        let mut matching = Vec::new();
+        for tier in tiers {
+            if let Some(patterns) = cache.get_patterns_by_tier(tier) {
+                matching.extend_from_slice(patterns);
+            }
+        }
+        matching
+    }
+
+    /// Collect patterns matching specified names
+    fn collect_named_patterns(cache: &MetadataCache, names: &[String]) -> Vec<String> {
+        let mut matching = Vec::new();
+        for name in names {
+            if cache.get_pattern(name).is_some() {
+                matching.push(name.to_string());
+            }
+        }
+        matching
+    }
+
+    /// Collect patterns matching specified tags (deduplicated)
+    fn collect_tagged_patterns(cache: &MetadataCache, tags: &[String]) -> Vec<String> {
+        let mut matching = Vec::new();
+        let mut seen = HashSet::new();
+        for tag in tags {
+            if let Some(patterns) = cache.get_patterns_by_tag(tag) {
+                for pattern_name in patterns {
+                    if seen.insert(pattern_name.clone()) {
+                        matching.push(pattern_name.clone());
                     }
-                }
-            }
-
-            PatternSelector::Patterns(names) => {
-                // Filter to only specified names
-                for name in names {
-                    if cache.get_pattern(name).is_some() {
-                        matching.push(name.to_string());
-                    }
-                }
-            }
-
-            PatternSelector::Tags(tags) => {
-                // Collect all patterns with matching tags
-                let mut seen = HashSet::new();
-                for tag in tags {
-                    if let Some(patterns) = cache.get_patterns_by_tag(tag) {
-                        for pattern_name in patterns {
-                            if seen.insert(pattern_name.clone()) {
-                                matching.push(pattern_name.clone());
-                            }
-                        }
-                    }
-                }
-            }
-
-            PatternSelector::Wildcard(pattern) => {
-                // Find all patterns matching wildcard
-                for (name, _) in cache.all_patterns() {
-                    if self.wildcard_match_name(pattern, name) {
-                        matching.push(name.clone());
-                    }
-                }
-            }
-
-            PatternSelector::Regex(_regex_patterns) => {
-                // Regex patterns - simplified for now
-            }
-
-            PatternSelector::Type(_types) => {
-                // Type filtering happens at detector level
-                // For now, return all patterns
-                for name in cache.all_pattern_names() {
-                    matching.push(name.clone());
                 }
             }
         }
+        matching
+    }
 
+    /// Collect patterns matching a wildcard pattern
+    fn collect_wildcard_patterns(&self, cache: &MetadataCache, pattern: &str) -> Vec<String> {
+        let mut matching = Vec::new();
+        for (name, _) in cache.all_patterns() {
+            if self.wildcard_match_name(pattern, name) {
+                matching.push(name.clone());
+            }
+        }
         matching
     }
 
