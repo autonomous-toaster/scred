@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tracing::warn;
 
 pub mod async_reader;
-pub mod legacy;
+pub mod streaming_redactor;
 pub mod tests;
 
 // ============================================================================
@@ -311,5 +311,5 @@ const MAX_ITERATIONS_PER_POLL: u32 = 8;
 /// ```
 // Re-exports
 pub use async_reader::{AsyncRedactionReader, StreamingConfig};
-pub use legacy::FrameRingRedactor;
-pub use legacy::StreamingRedactor;
+pub use streaming_redactor::FrameRingRedactor;
+pub use streaming_redactor::StreamingRedactor;
