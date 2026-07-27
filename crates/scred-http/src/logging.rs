@@ -67,3 +67,14 @@ pub fn init_from_env() {
         eprintln!("Failed to initialize logging: {}", e);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_init_from_env_does_not_panic() {
+        // init_from_env() should not panic
+        init_from_env();
+    }
+}
