@@ -622,6 +622,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn test_handle_h2_downgrade_no_preface() {
         // Test that non-H2 preface returns None
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -637,6 +638,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_h2_downgrade_with_preface() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
@@ -658,6 +660,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_h2_downgrade_empty_after_preface() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {

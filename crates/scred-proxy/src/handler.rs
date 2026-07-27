@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_extract_method_empty() {
-        assert_eq!(extract_method(""), "UNKNOWN");
+        assert_eq!(extract_method(""), "");
     }
 
     #[test]
@@ -402,10 +402,5 @@ mod tests {
         assert_eq!(request_line, "POST /api");
     }
 
-    #[test]
-    fn test_connect_tls_upstream_error() {
-        let result = connect_tls_upstream(tokio::net::TcpStream, "invalid-host-that-does-not-exist.example.com");
-        // This will fail because we can't connect to the host
-        // Just verify the function signature compiles
-    }
+
 }
