@@ -5,7 +5,7 @@ use scred_http::OptimizedDnsResolver;
 use scred_policy::PolicyEngine;
 use scred_redactor::streaming::RedactionStream;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{copy, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use tracing::{debug, info};
@@ -17,8 +17,6 @@ pub async fn handle_connection(
     peer_addr: std::net::SocketAddr,
     policy: Option<Arc<PolicyEngine>>,
 ) -> Result<()> {
-    use tokio::io::copy;
-
     let (client_read, mut client_write) = stream.into_split();
     let mut client_reader = BufReader::with_capacity(256 * 1024, client_read);
     let mut request_count = 0;
@@ -46,96 +44,93 @@ pub async fn handle_connection(
             request_path
         );
 
-        let upstream_addr = config.upstream.authority();
-        let rewritten_request_line = config.upstream.rewrite_request_line(&first_line)?;
-
-        let tcp_stream = resolver.connect_with_retry(&upstream_addr).await?;
-
-        if config.upstream.scheme == "https" {
-            let mut upstream = connect_tls_upstream(tcp_stream, &config.upstream.host).await?;
-
-            // Forward request with policy processing
-            if let Some(ref engine) = policy {
-                forward_with_policy(
-                    &mut client_reader,
-                    &mut upstream,
-                    &rewritten_request_line,
-                    engine,
-                    &config.upstream.host,
-                )
-                .await?;
-                // Forward request body with redaction
-                forward_body_redacted(
-                    &mut client_reader,
-                    &mut upstream,
-                    engine,
-                    &config.upstream.host,
-                )
-                .await?;
-            } else {
-                // No policy - simple forwarding
-                forward_simple(&mut client_reader, &mut upstream, &rewritten_request_line).await?;
-                // Forward request body without redaction
-                copy(&mut client_reader, &mut upstream).await?;
-            }
-
-            // Read and forward response with redaction
-            let mut upstream_buf = BufReader::new(upstream);
-            if let Some(ref engine) = policy {
-                forward_response_redacted(
-                    &mut upstream_buf,
-                    &mut client_write,
-                    engine,
-                    &config.upstream.host,
-                )
-                .await?;
-            } else {
-                copy(&mut upstream_buf, &mut client_write).await?;
-            }
-        } else {
-            let mut upstream = tcp_stream;
-
-            if let Some(ref engine) = policy {
-                forward_with_policy(
-                    &mut client_reader,
-                    &mut upstream,
-                    &rewritten_request_line,
-                    engine,
-                    &config.upstream.host,
-                )
-                .await?;
-                // Forward request body with redaction
-                forward_body_redacted(
-                    &mut client_reader,
-                    &mut upstream,
-                    engine,
-                    &config.upstream.host,
-                )
-                .await?;
-            } else {
-                forward_simple(&mut client_reader, &mut upstream, &rewritten_request_line).await?;
-                // Forward request body without redaction
-                copy(&mut client_reader, &mut upstream).await?;
-            }
-
-            // Read and forward response with redaction
-            let mut upstream_buf = BufReader::new(upstream);
-            if let Some(ref engine) = policy {
-                forward_response_redacted(
-                    &mut upstream_buf,
-                    &mut client_write,
-                    engine,
-                    &config.upstream.host,
-                )
-                .await?;
-            } else {
-                copy(&mut upstream_buf, &mut client_write).await?;
-            }
-        }
+        handle_single_proxy_request(
+            &mut client_reader,
+            &mut client_write,
+            &first_line,
+            &config,
+            &resolver,
+            &policy,
+        )
+        .await?;
 
         client_write.flush().await?;
     }
 
+    Ok(())
+}
+
+/// Handle a single proxy request (forward to upstream with optional policy)
+async fn handle_single_proxy_request<R, W>(
+    client_reader: &mut BufReader<R>,
+    client_write: &mut W,
+    first_line: &str,
+    config: &ProxyConfig,
+    resolver: &Arc<OptimizedDnsResolver>,
+    policy: &Option<Arc<PolicyEngine>>,
+) -> Result<()>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    let upstream_addr = config.upstream.authority();
+    let rewritten_request_line = config.upstream.rewrite_request_line(first_line)?;
+
+    let tcp_stream = resolver.connect_with_retry(&upstream_addr).await?;
+
+    if config.upstream.scheme == "https" {
+        let mut upstream = connect_tls_upstream(tcp_stream, &config.upstream.host).await?;
+        forward_request(client_reader, &mut upstream, &rewritten_request_line, policy, &config.upstream.host).await?;
+        let mut upstream_buf = BufReader::new(upstream);
+        forward_response(&mut upstream_buf, client_write, policy, &config.upstream.host).await?;
+    } else {
+        let mut upstream = tcp_stream;
+        forward_request(client_reader, &mut upstream, &rewritten_request_line, policy, &config.upstream.host).await?;
+        let mut upstream_buf = BufReader::new(upstream);
+        forward_response(&mut upstream_buf, client_write, policy, &config.upstream.host).await?;
+    }
+
+    Ok(())
+}
+
+/// Forward request to upstream (with or without policy)
+async fn forward_request<R, W>(
+    client_reader: &mut BufReader<R>,
+    upstream: &mut W,
+    request_line: &str,
+    policy: &Option<Arc<PolicyEngine>>,
+    host: &str,
+) -> Result<()>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    if let Some(ref engine) = policy {
+        forward_with_policy(client_reader, upstream, request_line, engine, host).await?;
+        forward_body_redacted(client_reader, upstream, engine, host).await?;
+    } else {
+        forward_simple(client_reader, upstream, request_line).await?;
+        copy(client_reader, upstream).await?;
+    }
+    Ok(())
+}
+
+/// Forward response to client (with or without redaction)
+async fn forward_response<R, W>(
+    upstream_reader: &mut BufReader<R>,
+    client_write: &mut W,
+    policy: &Option<Arc<PolicyEngine>>,
+    host: &str,
+) -> Result<()>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    if let Some(ref engine) = policy {
+        forward_response_redacted(upstream_reader, client_write, engine, host).await?;
+    } else {
+        copy(upstream_reader, client_write).await?;
+    }
     Ok(())
 }
 
