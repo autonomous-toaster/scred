@@ -343,4 +343,19 @@ mod tests {
         let result = ConfigLoader::apply_env_overrides(config);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_check_config_file_missing() {
+        let result = ConfigLoader::check_config_file(Some("/nonexistent/config.yaml"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_no_config() {
+        // When no config file exists, load should return default config
+        let result = ConfigLoader::load();
+        // May succeed with default or fail depending on environment
+        // Just verify it doesn't panic
+        let _ = result;
+    }
 }
