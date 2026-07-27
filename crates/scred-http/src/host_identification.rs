@@ -228,3 +228,116 @@ pub fn extract_sni_from_clienthello(_data: &[u8]) -> Option<String> {
     // which provides SNI info through the TLS connection
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_sources(
+        connect: Option<(&str, u16)>,
+        sni: Option<&str>,
+        http: Option<(&str, u16)>,
+        cert: Option<&str>,
+    ) -> HostSources {
+        HostSources {
+            connect_host: connect.map(|(h, p)| (h.to_string(), p)),
+            sni_host: sni.map(|s| s.to_string()),
+            http_host: http.map(|(h, p)| (h.to_string(), p)),
+            cert_cn: cert.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn test_select_host_connect_priority() {
+        let sources = make_sources(
+            Some(("connect.com", 443)),
+            Some("sni.com"),
+            Some(("http.com", 80)),
+            Some("cert.com"),
+        );
+        let (host, port, source) = HostIdentification::select_host_by_priority(&sources).unwrap();
+        assert_eq!(host, "connect.com");
+        assert_eq!(port, 443);
+        assert_eq!(source, HostSource::ConnectRequest);
+    }
+
+    #[test]
+    fn test_select_host_sni_fallback() {
+        let sources = make_sources(None, Some("sni.com"), Some(("http.com", 80)), Some("cert.com"));
+        let (host, port, source) = HostIdentification::select_host_by_priority(&sources).unwrap();
+        assert_eq!(host, "sni.com");
+        assert_eq!(source, HostSource::ServerNameIndication);
+    }
+
+    #[test]
+    fn test_select_host_http_fallback() {
+        let sources = make_sources(None, None, Some(("http.com", 8080)), Some("cert.com"));
+        let (host, port, source) = HostIdentification::select_host_by_priority(&sources).unwrap();
+        assert_eq!(host, "http.com");
+        assert_eq!(port, 8080);
+        assert_eq!(source, HostSource::HttpHostHeader);
+    }
+
+    #[test]
+    fn test_select_host_cert_fallback() {
+        let sources = make_sources(None, None, None, Some("cert.com"));
+        let (host, port, source) = HostIdentification::select_host_by_priority(&sources).unwrap();
+        assert_eq!(host, "cert.com");
+        assert_eq!(port, 443);
+        assert_eq!(source, HostSource::CertificateCN);
+    }
+
+    #[test]
+    fn test_select_host_no_sources() {
+        let sources = make_sources(None, None, None, None);
+        assert!(HostIdentification::select_host_by_priority(&sources).is_err());
+    }
+
+    #[test]
+    fn test_collect_alt_sources_all() {
+        let sources = make_sources(
+            Some(("c.com", 443)),
+            Some("s.com"),
+            Some(("h.com", 80)),
+            Some("cert.com"),
+        );
+        let alt = HostIdentification::collect_alt_sources(&sources);
+        assert_eq!(alt.len(), 4);
+        assert_eq!(alt.get("connect").unwrap(), "c.com:443");
+        assert_eq!(alt.get("sni").unwrap(), "s.com");
+        assert_eq!(alt.get("http_host").unwrap(), "h.com:80");
+        assert_eq!(alt.get("cert_cn").unwrap(), "cert.com");
+    }
+
+    #[test]
+    fn test_collect_alt_sources_partial() {
+        let sources = make_sources(None, Some("s.com"), None, None);
+        let alt = HostIdentification::collect_alt_sources(&sources);
+        assert_eq!(alt.len(), 1);
+        assert_eq!(alt.get("sni").unwrap(), "s.com");
+    }
+
+    #[test]
+    fn test_from_sources_connect() {
+        let sources = make_sources(Some(("example.com", 443)), None, None, None);
+        let id = HostIdentification::from_sources(&sources).unwrap();
+        assert_eq!(id.host, "example.com");
+        assert_eq!(id.port, 443);
+        assert_eq!(id.source, HostSource::ConnectRequest);
+    }
+
+    #[test]
+    fn test_from_sources_no_sources() {
+        let sources = make_sources(None, None, None, None);
+        assert!(HostIdentification::from_sources(&sources).is_err());
+    }
+
+    #[test]
+    fn test_host_source_display() {
+        assert_eq!(format!("{}", HostSource::ConnectRequest), "CONNECT request");
+        assert_eq!(format!("{}", HostSource::ServerNameIndication), "TLS SNI");
+        assert_eq!(format!("{}", HostSource::HttpHostHeader), "HTTP Host header");
+        assert_eq!(format!("{}", HostSource::CertificateCN), "Certificate CN");
+        assert_eq!(format!("{}", HostSource::Unknown), "Unknown");
+    }
+}

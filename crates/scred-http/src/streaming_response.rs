@@ -376,3 +376,90 @@ fn response_is_head_or_bodyless(response_line: &str) -> bool {
     // Note: text/event-stream (SSE) and streaming responses DO have a body!
     (100..200).contains(&status_code) || status_code == 204 || status_code == 304
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_response_is_head_or_bodyless_1xx() {
+        assert!(response_is_head_or_bodyless("HTTP/1.1 101 Switching Protocols"));
+    }
+
+    #[test]
+    fn test_response_is_head_or_bodyless_204() {
+        assert!(response_is_head_or_bodyless("HTTP/1.1 204 No Content"));
+    }
+
+    #[test]
+    fn test_response_is_head_or_bodyless_304() {
+        assert!(response_is_head_or_bodyless("HTTP/1.1 304 Not Modified"));
+    }
+
+    #[test]
+    fn test_response_is_head_or_bodyless_200() {
+        assert!(!response_is_head_or_bodyless("HTTP/1.1 200 OK"));
+    }
+
+    #[test]
+    fn test_response_is_head_or_bodyless_404() {
+        assert!(!response_is_head_or_bodyless("HTTP/1.1 404 Not Found"));
+    }
+
+    #[test]
+    fn test_response_is_head_or_bodyless_500() {
+        assert!(!response_is_head_or_bodyless("HTTP/1.1 500 Internal Server Error"));
+    }
+
+    #[test]
+    fn test_normalize_location_header_no_location() {
+        let mut headers = vec![
+            ("Content-Type".to_string(), "text/html".to_string()),
+        ];
+        normalize_location_header(&mut headers, None, None, None);
+        assert_eq!(headers.len(), 1);
+    }
+
+    #[test]
+    fn test_normalize_location_header_removes_default_https_port() {
+        let mut headers = vec![
+            ("Location".to_string(), "https://example.com:443/path".to_string()),
+        ];
+        normalize_location_header(&mut headers, None, None, None);
+        assert_eq!(headers[0].1, "https://example.com/path");
+    }
+
+    #[test]
+    fn test_normalize_location_header_removes_default_http_port() {
+        let mut headers = vec![
+            ("Location".to_string(), "http://example.com:80/path".to_string()),
+        ];
+        normalize_location_header(&mut headers, None, None, None);
+        assert_eq!(headers[0].1, "http://example.com/path");
+    }
+
+    #[test]
+    fn test_normalize_location_header_keeps_non_default_port() {
+        let mut headers = vec![
+            ("Location".to_string(), "https://example.com:8443/path".to_string()),
+        ];
+        normalize_location_header(&mut headers, None, None, None);
+        assert_eq!(headers[0].1, "https://example.com:8443/path");
+    }
+
+    #[test]
+    fn test_streaming_stats_default() {
+        let stats = StreamingStats::default();
+        assert_eq!(stats.bytes_read, 0);
+        assert_eq!(stats.bytes_written, 0);
+        assert_eq!(stats.chunks_processed, 0);
+        assert_eq!(stats.patterns_found, 0);
+    }
+
+    #[test]
+    fn test_streaming_response_config_default() {
+        let config = StreamingResponseConfig::default();
+        assert!(!config.debug);
+        assert!(config.add_scred_header);
+    }
+}

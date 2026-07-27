@@ -462,3 +462,72 @@ async fn send_error_response(
     write.flush().await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_host_header_with_upstream() {
+        let mut headers = "Host: original.com
+".to_string();
+        normalize_host_header(&mut headers, Some("upstream.com"), "upstream.com:8080");
+        assert!(headers.contains("upstream.com"));
+    }
+
+    #[test]
+    fn test_normalize_host_header_missing() {
+        let mut headers = String::new();
+        normalize_host_header(&mut headers, None, "example.com:80");
+        assert!(headers.contains("example.com"));
+    }
+
+    #[test]
+    fn test_rewrite_location_header_no_upstream() {
+        let response = "HTTP/1.1 302 Found
+Location: https://example.com/redirect
+
+";
+        let result = rewrite_location_header(response, None, "GET / HTTP/1.1", "proxy:8080");
+        assert_eq!(result, response);
+    }
+
+    #[test]
+
+
+    #[test]
+    fn test_rewrite_location_header_https_scheme() {
+        let response = "HTTP/1.1 302 Found
+Location: https://other.com/path
+
+";
+        let result = rewrite_location_header(response, Some("upstream.com"), "CONNECT example.com:443 HTTP/1.1", "proxy:8080");
+        assert!(result.contains("https"));
+    }
+
+    #[test]
+    fn test_parse_proxy_url_http() {
+        let (host, port, path) = parse_proxy_url("http://example.com:8080/path?q=1").unwrap();
+        assert_eq!(host, "example.com");
+        assert_eq!(port, 8080);
+        assert_eq!(path, "/path?q=1");
+    }
+
+    #[test]
+    fn test_parse_proxy_url_https_default_port() {
+        let (host, port, path) = parse_proxy_url("https://example.com/path").unwrap();
+        assert_eq!(host, "example.com");
+        assert_eq!(port, 80);
+        assert_eq!(path, "/path");
+    }
+
+    #[test]
+    fn test_extract_header_value() {
+        let headers = "Host: example.com
+Content-Type: text/plain
+";
+        assert_eq!(extract_header_value(headers, "Host"), Some("example.com".to_string()));
+        assert_eq!(extract_header_value(headers, "Content-Type"), Some("text/plain".to_string()));
+        assert_eq!(extract_header_value(headers, "X-Missing"), None);
+    }
+}

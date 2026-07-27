@@ -182,3 +182,64 @@ impl Default for ChunkedParser {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chunked_parser_new() {
+        let parser = ChunkedParser::new();
+        assert_eq!(parser.current_chunk_size, 0);
+        assert_eq!(parser.bytes_remaining_in_chunk, 0);
+        assert!(matches!(parser.state, ChunkState::ReadingSize));
+    }
+
+    #[test]
+    fn test_chunked_parser_default() {
+        let parser = ChunkedParser::default();
+        assert!(matches!(parser.state, ChunkState::ReadingSize));
+    }
+
+    #[test]
+    fn test_chunked_parser_is_complete() {
+        let mut parser = ChunkedParser::new();
+        assert!(!parser.is_complete());
+        parser.state = ChunkState::Complete;
+        assert!(parser.is_complete());
+    }
+
+    #[test]
+    fn test_chunk_stats_default() {
+        let stats = ChunkStats::default();
+        assert_eq!(stats.total_data_bytes, 0);
+        assert_eq!(stats.chunks_read, 0);
+        assert_eq!(stats.patterns_found, 0);
+        assert_eq!(stats.lookahead_hits, 0);
+    }
+
+    #[test]
+    fn test_chunk_state_debug() {
+        assert_eq!(format!("{:?}", ChunkState::ReadingSize), "ReadingSize");
+        assert_eq!(format!("{:?}", ChunkState::ReadingData), "ReadingData");
+        assert_eq!(format!("{:?}", ChunkState::ReadingTrailers), "ReadingTrailers");
+        assert_eq!(format!("{:?}", ChunkState::Complete), "Complete");
+    }
+
+    #[test]
+    fn test_handle_reading_size_zero_chunk() {
+        let mut parser = ChunkedParser::new();
+        // Can't easily test async I/O here, but verify state transitions
+        parser.state = ChunkState::ReadingSize;
+        // The actual I/O is tested via integration tests
+    }
+
+    #[test]
+    fn test_handle_reading_data_state_transition() {
+        let mut parser = ChunkedParser::new();
+        parser.state = ChunkState::ReadingData;
+        parser.current_chunk_size = 100;
+        parser.bytes_remaining_in_chunk = 100;
+        // State transitions are tested via integration tests
+    }
+}

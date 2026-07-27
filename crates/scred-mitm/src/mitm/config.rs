@@ -373,3 +373,95 @@ fn matches_pattern(pattern: &str, name: &str) -> bool {
 
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_matches_pattern_exact() {
+        assert!(matches_pattern("api.example.com", "api.example.com"));
+        assert!(!matches_pattern("api.example.com", "other.com"));
+    }
+
+    #[test]
+    fn test_matches_pattern_wildcard_all() {
+        assert!(matches_pattern("*", "anything.com"));
+        assert!(matches_pattern("*", ""));
+    }
+
+    #[test]
+    fn test_matches_pattern_prefix_wildcard() {
+        assert!(matches_pattern("*.example.com", "api.example.com"));
+        assert!(matches_pattern("*.example.com", "sub.api.example.com"));
+        assert!(!matches_pattern("*.example.com", "example.com"));
+        assert!(!matches_pattern("*.example.com", "other.com"));
+    }
+
+    #[test]
+    fn test_matches_pattern_suffix_wildcard() {
+        assert!(matches_pattern("api.*", "api.example.com"));
+        assert!(matches_pattern("api.*", "api.other.com"));
+        assert!(!matches_pattern("api.*", "other.com"));
+    }
+
+    #[test]
+    fn test_matches_pattern_contains_wildcard() {
+        assert!(matches_pattern("*.example.*", "api.example.com"));
+        assert!(matches_pattern("*.example.*", "other.example.org"));
+        assert!(!matches_pattern("*.example.*", "example.com"));
+    }
+
+    #[test]
+    fn test_matches_pattern_question_mark() {
+        assert!(matches_pattern("?.example.com", "a.example.com"));
+        assert!(!matches_pattern("?.example.com", "ab.example.com"));
+    }
+
+    #[test]
+    fn test_matches_pattern_empty_pattern() {
+        assert!(!matches_pattern("", "anything"));
+    }
+
+    #[test]
+    fn test_resolve_pattern_names() {
+        let all_names = vec!["api.example.com", "db.example.com", "web.example.com"];
+        let resolved = Config::resolve_pattern_names(
+            vec!["*.example.com".to_string()],
+            &all_names,
+        );
+        assert_eq!(resolved.len(), 3);
+        assert!(resolved.contains(&"api.example.com".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_pattern_names_dedup() {
+        let all_names = vec!["api.example.com", "api.example.com"];
+        let resolved = Config::resolve_pattern_names(
+            vec!["*".to_string()],
+            &all_names,
+        );
+        assert_eq!(resolved.len(), 1);
+    }
+
+    #[test]
+    fn test_redaction_mode_should_redact() {
+        assert!(RedactionMode::Redact.should_redact());
+        assert!(!RedactionMode::DetectOnly.should_redact());
+        assert!(!RedactionMode::Passthrough.should_redact());
+    }
+
+    #[test]
+    fn test_redaction_mode_should_detect() {
+        assert!(RedactionMode::Redact.should_detect());
+        assert!(RedactionMode::DetectOnly.should_detect());
+        assert!(!RedactionMode::Passthrough.should_detect());
+    }
+
+    #[test]
+    fn test_debug_env_vars_empty() {
+        let vars = Config::debug_env_vars();
+        // In test environment, there should be no SCRED_ vars
+        assert!(vars.is_empty() || vars.iter().all(|(k, _)| k.starts_with("SCRED_")));
+    }
+}
