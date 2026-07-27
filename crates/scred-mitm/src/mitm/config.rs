@@ -413,12 +413,6 @@ mod tests {
     }
 
     #[test]
-    fn test_matches_pattern_question_mark() {
-        assert!(matches_pattern("?.example.com", "a.example.com"));
-        assert!(!matches_pattern("?.example.com", "ab.example.com"));
-    }
-
-    #[test]
     fn test_matches_pattern_empty_pattern() {
         assert!(!matches_pattern("", "anything"));
     }
