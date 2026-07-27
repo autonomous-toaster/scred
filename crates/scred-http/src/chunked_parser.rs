@@ -243,4 +243,25 @@ mod tests {
         // State transitions are tested via integration tests
     }
 
+    #[tokio::test]
+    async fn test_handle_reading_trailers_empty() {
+        let data = b"\r\n";
+        let mut reader = tokio::io::BufReader::new(&data[..]);
+        let mut parser = ChunkedParser::new();
+        parser.state = ChunkState::ReadingTrailers;
+        let result = parser.handle_reading_trailers(&mut reader).await;
+        assert!(result.is_ok());
+        assert!(parser.is_complete());
+    }
+
+    #[tokio::test]
+    async fn test_handle_reading_trailers_with_headers() {
+        let data = b"X-Extra: value\r\n\r\n";
+        let mut reader = tokio::io::BufReader::new(&data[..]);
+        let mut parser = ChunkedParser::new();
+        parser.state = ChunkState::ReadingTrailers;
+        let result = parser.handle_reading_trailers(&mut reader).await;
+        assert!(result.is_ok());
+        assert!(parser.is_complete());
+    }
 }
