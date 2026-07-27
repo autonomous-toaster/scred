@@ -113,6 +113,138 @@ impl H2MitmHandler {
         Ok(())
     }
 
+    /// Read complete request body from h2::RecvStream
+    async fn read_h2_body(recv_stream: &mut h2::RecvStream) -> Result<Vec<u8>> {
+        let mut body = Vec::new();
+        while let Some(chunk) = recv_stream.data().await {
+            let chunk = chunk?;
+            body.extend_from_slice(&chunk);
+        }
+        tracing::debug!("[H2] Request body received: {} bytes", body.len());
+        Ok(body)
+    }
+
+    /// Apply redaction to request body with selector support
+    fn redact_h2_body(
+        body: &[u8],
+        engine: &Arc<RedactionEngine>,
+        redact_patterns: &scred_http::PatternSelector,
+    ) -> Bytes {
+        if body.is_empty() {
+            return Bytes::new();
+        }
+        let body_str = String::from_utf8_lossy(body);
+        let redacted = if !matches!(redact_patterns, scred_http::PatternSelector::None) {
+            let selective_engine = Arc::new(RedactionEngine::with_selector(
+                engine.config().clone(),
+                redact_patterns.clone(),
+            ));
+            selective_engine.redact(&body_str)
+        } else {
+            engine.redact(&body_str)
+        };
+        Bytes::from(redacted.redacted.into_bytes())
+    }
+
+    /// Process H2 headers with policy actions (Replace, Redact, Detect, Passthrough)
+    fn process_h2_headers(
+        headers: &http::HeaderMap,
+        host: &str,
+        policy: &Option<Arc<PolicyEngine>>,
+    ) -> http::HeaderMap {
+        let mut result = http::HeaderMap::new();
+
+        for (name, value) in headers {
+            let name_str = name.as_str().to_lowercase();
+
+            if matches!(
+                name_str.as_str(),
+                "connection"
+                    | "transfer-encoding"
+                    | "upgrade"
+                    | "te"
+                    | "trailer"
+                    | "proxy-authenticate"
+                    | "proxy-authorization"
+            ) {
+                tracing::debug!("[H2] Skipping hop-by-hop header: {}", name);
+                continue;
+            }
+
+            let processed_value = if let Some(ref engine) = policy {
+                use scred_config::HeaderAction;
+                let resolved = engine.resolve_for_host(host);
+                let action = resolved.header_action(name.as_str());
+                let value_str = value.to_str().unwrap_or("");
+
+                match action {
+                    HeaderAction::Replace => {
+                        let mut value_bytes = value_str.as_bytes().to_vec();
+                        let (_, count) = engine
+                            .create_placeholder_automaton()
+                            .replace_placeholders(&mut value_bytes, host, |_, _| true);
+                        if count > 0 {
+                            tracing::info!(
+                                "[H2 policy] Replaced {} placeholder(s) in header: {}",
+                                count, name
+                            );
+                        }
+                        http::HeaderValue::from_bytes(&value_bytes).unwrap_or(value.clone())
+                    }
+                    HeaderAction::Redact => {
+                        let redacted = engine.redaction_engine().redact(value_str);
+                        if !redacted.matches.is_empty() {
+                            tracing::debug!(
+                                "[H2 policy] Redacted {} secret(s) in header: {}",
+                                redacted.matches.len(), name
+                            );
+                        }
+                        http::HeaderValue::from_str(&redacted.redacted).unwrap_or(value.clone())
+                    }
+                    HeaderAction::Detect => {
+                        let redacted = engine.redaction_engine().redact(value_str);
+                        if !redacted.matches.is_empty() {
+                            for m in &redacted.matches {
+                                tracing::info!(
+                                    "[H2 policy] Detected {} in header: {}",
+                                    m.pattern_type, name
+                                );
+                            }
+                        }
+                        value.clone()
+                    }
+                    HeaderAction::Passthrough => value.clone(),
+                }
+            } else {
+                value.clone()
+            };
+
+            result.insert(name.clone(), processed_value);
+        }
+
+        result
+    }
+
+    /// Send HTTP/2 response to client
+    fn send_h2_response(
+        respond: &mut server::SendResponse<Bytes>,
+        response_bytes: &[u8],
+    ) -> Result<()> {
+        let response = match Response::builder().status(200).body(()) {
+            Ok(r) => r,
+            Err(e) => unreachable!("valid HTTP status: {}", e),
+        };
+        let mut send = respond.send_response(response, false)?;
+
+        if !response_bytes.is_empty() {
+            send.send_data(Bytes::from(response_bytes.to_vec()), true)?;
+        } else {
+            send.send_data(Bytes::new(), true)?;
+        }
+
+        Ok(())
+    }
+
     /// Handle individual stream
     #[allow(clippy::too_many_arguments)]
     async fn handle_stream(
@@ -146,113 +278,21 @@ impl H2MitmHandler {
         tracing::debug!("[H2 Stream] {} {} (authority: {})", method, uri, authority);
 
         // Read complete request body from h2::RecvStream
-        let mut request_body = Vec::new();
-        while let Some(chunk) = recv_stream.data().await {
-            let chunk = chunk?;
-            request_body.extend_from_slice(&chunk);
-            tracing::debug!("[H2] Received body chunk: {} bytes", chunk.len());
-        }
-        tracing::debug!("[H2] Request body received: {} bytes", request_body.len());
+        let request_body = Self::read_h2_body(&mut recv_stream).await?;
 
-        // Apply redaction to request body if present with selector support
-        let redacted_body = if !request_body.is_empty() {
-            let body_str = String::from_utf8_lossy(&request_body);
-            let redacted = if !matches!(redact_patterns, scred_http::PatternSelector::None) {
-                let selective_engine = Arc::new(RedactionEngine::with_selector(
-                    engine.config().clone(),
-                    redact_patterns.clone(),
-                ));
-                selective_engine.redact(&body_str)
-            } else {
-                engine.redact(&body_str)
-            };
-            Bytes::from(redacted.redacted.into_bytes())
-        } else {
-            Bytes::new()
-        };
+        // Apply redaction to request body
+        let redacted_body = Self::redact_h2_body(&request_body, &engine, &redact_patterns);
 
-        // Build upstream request with ALL client headers
+        // Process headers with policy actions
+        let processed_headers = Self::process_h2_headers(&request_parts.headers, host, &policy);
+
+        // Build upstream request
         let mut builder = http::Request::builder()
             .method(request_parts.method.clone())
             .uri(request_parts.uri.clone());
 
-        // Process each header according to its HeaderAction from policy
-        // Uses per-header action: Replace, Redact, Detect, or Passthrough
-        for (name, value) in &request_parts.headers {
-            let name_str = name.as_str().to_lowercase();
-
-            // Skip hop-by-hop headers (RFC 7230)
-            if matches!(
-                name_str.as_str(),
-                "connection"
-                    | "transfer-encoding"
-                    | "upgrade"
-                    | "te"
-                    | "trailer"
-                    | "proxy-authenticate"
-                    | "proxy-authorization"
-            ) {
-                tracing::debug!("[H2] Skipping hop-by-hop header: {}", name);
-                continue;
-            }
-
-            // Determine header action from policy or default to Passthrough
-            let processed_value = if let Some(ref engine) = policy {
-                use scred_config::HeaderAction;
-                let resolved = engine.resolve_for_host(host);
-                let action = resolved.header_action(name.as_str());
-                let value_str = value.to_str().unwrap_or("");
-
-                match action {
-                    HeaderAction::Replace => {
-                        let mut value_bytes = value_str.as_bytes().to_vec();
-                        let (_, count) = engine
-                            .create_placeholder_automaton()
-                            .replace_placeholders(&mut value_bytes, host, |_, _| true);
-                        if count > 0 {
-                            tracing::info!(
-                                "[H2 policy] Replaced {} placeholder(s) in header: {}",
-                                count,
-                                name
-                            );
-                        }
-                        http::HeaderValue::from_bytes(&value_bytes).unwrap_or(value.clone())
-                    }
-                    HeaderAction::Redact => {
-                        let redacted = engine.redaction_engine().redact(value_str);
-                        if !redacted.matches.is_empty() {
-                            tracing::debug!(
-                                "[H2 policy] Redacted {} secret(s) in header: {}",
-                                redacted.matches.len(),
-                                name
-                            );
-                        }
-                        http::HeaderValue::from_str(&redacted.redacted).unwrap_or(value.clone())
-                    }
-                    HeaderAction::Detect => {
-                        let redacted = engine.redaction_engine().redact(value_str);
-                        if !redacted.matches.is_empty() {
-                            for m in &redacted.matches {
-                                tracing::info!(
-                                    "[H2 policy] Detected {} in header: {}",
-                                    m.pattern_type,
-                                    name
-                                );
-                            }
-                        }
-                        value.clone()
-                    }
-                    HeaderAction::Passthrough => value.clone(),
-                }
-            } else {
-                value.clone()
-            };
-
-            builder = builder.header(name.clone(), processed_value);
-            tracing::debug!(
-                "[H2] Forwarding header: {} (value hidden for security)",
-                name
-            );
+        for (name, value) in &processed_headers {
+            builder = builder.header(name.clone(), value.clone());
         }
 
         let upstream_request = builder
@@ -276,39 +316,15 @@ impl H2MitmHandler {
                     "[H2 MITM] Got response from upstream: {} bytes",
                     response_bytes.len()
                 );
-
-                // Build HTTP/2 response
-                let response = match Response::builder().status(200).body(()) {
-                    Ok(r) => r,
-                    Err(e) => unreachable!("valid HTTP status: {}", e),
-                };
-                let mut send = respond.send_response(response, false)?;
-
-                if !response_bytes.is_empty() {
-                    tracing::debug!(
-                        "[H2 MITM] Sending response data: {} bytes",
-                        response_bytes.len()
-                    );
-                    send.send_data(Bytes::from(response_bytes), true)?;
-                } else {
-                    tracing::warn!("[H2 MITM] WARNING: Response body is empty!");
-                    send.send_data(Bytes::new(), true)?;
-                }
-
-                Ok(())
+                Self::send_h2_response(&mut respond, &response_bytes)
             }
             Err(e) => {
-                // Send error response with diagnostic info
                 tracing::error!("[H2] Upstream forwarding failed: {}", e);
-                let error_msg = format!("502 Bad Gateway: {}", e);
-                tracing::error!("[H2] Sending {} to client", error_msg);
-
                 let response = match Response::builder().status(502).body(()) {
                     Ok(r) => r,
                     Err(e) => unreachable!("valid HTTP status: {}", e),
                 };
                 let _send = respond.send_response(response, true)?;
-
                 Ok(())
             }
         }
