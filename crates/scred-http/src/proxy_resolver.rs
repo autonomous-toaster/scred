@@ -331,4 +331,65 @@ mod tests {
         assert!(!format!("{:?}", all).is_empty());
         assert!(!format!("{:?}", host).is_empty());
     }
+
+    #[test]
+    fn test_parse_no_proxy_list_empty() {
+        let result = parse_no_proxy_list("");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_no_proxy_list_wildcard() {
+        let result = parse_no_proxy_list("*");
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], NoProxyEntry::All));
+    }
+
+    #[test]
+    fn test_parse_no_proxy_list_localhost() {
+        let result = parse_no_proxy_list("localhost");
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], NoProxyEntry::Localhost));
+    }
+
+    #[test]
+    fn test_parse_no_proxy_list_domain() {
+        let result = parse_no_proxy_list(".example.com");
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], NoProxyEntry::Suffix(_)));
+    }
+
+    #[test]
+    fn test_parse_no_proxy_list_hostname() {
+        let result = parse_no_proxy_list("internal-service");
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], NoProxyEntry::Host(_)));
+    }
+
+    #[test]
+    fn test_parse_no_proxy_list_multiple() {
+        let result = parse_no_proxy_list("localhost, .example.com, internal-service");
+        assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_no_proxy_list_ip_range() {
+        let result = parse_no_proxy_list("10/8");
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], NoProxyEntry::IpRange(_)));
+    }
+
+    #[test]
+    fn test_parse_no_proxy_list_127_0_0_1() {
+        let result = parse_no_proxy_list("127.0.0.1");
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], NoProxyEntry::Localhost));
+    }
+
+    #[test]
+    fn test_parse_no_proxy_list_ipv6() {
+        let result = parse_no_proxy_list("::1");
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], NoProxyEntry::Localhost));
+    }
 }
