@@ -120,14 +120,13 @@ async fn handle_connection(
 
     // Parse request line
     let request_line = request.lines().next().unwrap_or("");
-    let parts: Vec<&str> = request_line.split_whitespace().collect();
-    if parts.len() < 3 {
-        send_error(&mut stream, 400, "Bad Request").await?;
-        return Ok(());
-    }
-
-    let method = parts[0];
-    let path = parts[1];
+    let (method, path) = match parse_request_line(request_line) {
+        Some((m, p)) => (m, p),
+        None => {
+            send_error(&mut stream, 400, "Bad Request").await?;
+            return Ok(());
+        }
+    };
 
     // Only support GET /placeholders
     if method != "GET" {
@@ -141,9 +140,7 @@ async fn handle_connection(
     }
 
     // Check Accept header for JSON
-    let accept_json = request.lines().any(|line| {
-        line.to_lowercase().starts_with("accept:") && line.contains("application/json")
-    });
+    let accept_json = check_accept_json(request);
 
     // Build response using the method
     let placeholders_map = server.get_placeholders();
@@ -154,6 +151,23 @@ async fn handle_connection(
     }
 
     Ok(())
+}
+
+/// Parse method and path from an HTTP request line
+fn parse_request_line(line: &str) -> Option<(&str, &str)> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    Some((parts[0], parts[1]))
+}
+
+/// Check if the request headers indicate JSON acceptance
+fn check_accept_json(request: &str) -> bool {
+    request.lines().any(|line| {
+        let lower = line.to_lowercase();
+        lower.starts_with("accept:") && lower.contains("application/json")
+    })
 }
 
 async fn send_text_response(
@@ -257,5 +271,46 @@ mod tests {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         assert!(retrieved.contains_key("TEST_KEY"));
+    }
+
+    #[test]
+    fn test_parse_request_line_valid() {
+        let (method, path) = parse_request_line("GET /placeholders HTTP/1.1").unwrap();
+        assert_eq!(method, "GET");
+        assert_eq!(path, "/placeholders");
+    }
+
+    #[test]
+    fn test_parse_request_line_no_path() {
+        assert!(parse_request_line("GET").is_none());
+    }
+
+    #[test]
+    fn test_parse_request_line_empty() {
+        assert!(parse_request_line("").is_none());
+    }
+
+    #[test]
+    fn test_check_accept_json_true() {
+        let request = "GET /placeholders HTTP/1.1\r\nAccept: application/json\r\n\r\n";
+        assert!(check_accept_json(request));
+    }
+
+    #[test]
+    fn test_check_accept_json_false() {
+        let request = "GET /placeholders HTTP/1.1\r\nAccept: text/plain\r\n\r\n";
+        assert!(!check_accept_json(request));
+    }
+
+    #[test]
+    fn test_check_accept_json_no_accept() {
+        let request = "GET /placeholders HTTP/1.1\r\n\r\n";
+        assert!(!check_accept_json(request));
+    }
+
+    #[test]
+    fn test_check_accept_json_case_insensitive() {
+        let request = "GET /placeholders HTTP/1.1\r\nAccept: Application/Json\r\n\r\n";
+        assert!(check_accept_json(request));
     }
 }
