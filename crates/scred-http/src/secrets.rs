@@ -114,4 +114,109 @@ mod tests {
         assert_eq!(rule.allowed_hosts.len(), 1);
         assert_eq!(rule.action, "REDACT");
     }
+
+    #[test]
+    fn test_should_redact_no_rules() {
+        let config = SecretsConfig {
+            patterns: vec![],
+            rules: HashMap::new(),
+        };
+        assert!(config.should_redact("anything", None));
+    }
+
+    #[test]
+    fn test_should_redact_allow_action() {
+        let mut rules = HashMap::new();
+        rules.insert("test-secret".to_string(), SecretRule {
+            allowed_hosts: vec![],
+            allowed_in: vec![],
+            action: "ALLOW".to_string(),
+        });
+        let config = SecretsConfig {
+            patterns: vec!["test-secret".to_string()],
+            rules,
+        };
+        assert!(!config.should_redact("test-secret", None));
+    }
+
+    #[test]
+    fn test_should_redact_redact_action() {
+        let mut rules = HashMap::new();
+        rules.insert("secret".to_string(), SecretRule {
+            allowed_hosts: vec![],
+            allowed_in: vec![],
+            action: "REDACT".to_string(),
+        });
+        let config = SecretsConfig {
+            patterns: vec!["secret".to_string()],
+            rules,
+        };
+        assert!(config.should_redact("secret", None));
+    }
+
+    #[test]
+    fn test_should_redact_block_action() {
+        let mut rules = HashMap::new();
+        rules.insert("blocked".to_string(), SecretRule {
+            allowed_hosts: vec![],
+            allowed_in: vec![],
+            action: "BLOCK".to_string(),
+        });
+        let config = SecretsConfig {
+            patterns: vec!["blocked".to_string()],
+            rules,
+        };
+        assert!(config.should_redact("blocked", None));
+    }
+
+    #[test]
+    fn test_should_redact_unknown_action_defaults_to_redact() {
+        let mut rules = HashMap::new();
+        rules.insert("unknown".to_string(), SecretRule {
+            allowed_hosts: vec![],
+            allowed_in: vec![],
+            action: "UNKNOWN".to_string(),
+        });
+        let config = SecretsConfig {
+            patterns: vec!["unknown".to_string()],
+            rules,
+        };
+        assert!(config.should_redact("unknown", None));
+    }
+
+    #[test]
+    fn test_should_redact_no_rule_for_secret() {
+        let mut rules = HashMap::new();
+        rules.insert("other".to_string(), SecretRule {
+            allowed_hosts: vec![],
+            allowed_in: vec![],
+            action: "ALLOW".to_string(),
+        });
+        let config = SecretsConfig {
+            patterns: vec!["other".to_string()],
+            rules,
+        };
+        // No rule for "test-secret", should default to redact
+        assert!(config.should_redact("test-secret", None));
+    }
+
+    #[test]
+    fn test_allowed_in_location() {
+        let rule = SecretRule {
+            allowed_hosts: vec![],
+            allowed_in: vec!["header:Authorization".to_string()],
+            action: "ALLOW".to_string(),
+        };
+        assert!(rule.allowed_in.contains(&"header:Authorization".to_string()));
+    }
+
+    #[test]
+    fn test_allowed_on_host() {
+        let rule = SecretRule {
+            allowed_hosts: vec!["example.com".to_string()],
+            allowed_in: vec![],
+            action: "ALLOW".to_string(),
+        };
+        assert!(rule.allowed_hosts.contains(&"example.com".to_string()));
+    }
 }

@@ -124,3 +124,43 @@ pub async fn tunnel(mut client: TcpStream, mut upstream: TcpStream) -> io::Resul
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_host_port_valid() {
+        let (host, port) = parse_host_port("example.com:443").unwrap();
+        assert_eq!(host, "example.com");
+        assert_eq!(port, 443);
+    }
+
+    #[test]
+    fn test_parse_host_port_no_port() {
+        assert!(parse_host_port("example.com").is_err());
+    }
+
+    #[test]
+    fn test_parse_host_port_ipv6() {
+        let (host, port) = parse_host_port("[::1]:8080").unwrap();
+        assert_eq!(host, "[::1]");
+        assert_eq!(port, 8080);
+    }
+
+    #[test]
+    fn test_parse_host_port_invalid() {
+        assert!(parse_host_port("").is_err());
+    }
+
+    #[test]
+    fn test_connect_request_struct() {
+        let req = ConnectRequest {
+            host: "example.com".to_string(),
+            port: 443,
+            
+        };
+        assert_eq!(req.host, "example.com");
+        assert_eq!(req.port, 443);
+    }
+}
+
