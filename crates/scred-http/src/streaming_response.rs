@@ -462,4 +462,81 @@ mod tests {
         assert!(!config.debug);
         assert!(config.add_scred_header);
     }
+
+    #[tokio::test]
+    async fn test_forward_response_headers_basic() {
+        let mut output = Vec::new();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+        let redactor = StreamingRedactor::new(engine, Default::default());
+        let config = StreamingResponseConfig {
+            add_scred_header: false,
+            ..Default::default()
+        };
+        let headers = vec![
+            ("Content-Type".to_string(), "text/html".to_string()),
+        ];
+        let stats = forward_response_headers(
+            &mut output,
+            "HTTP/1.1 200 OK",
+            &headers,
+            &redactor,
+            &config,
+        ).await.unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("HTTP/1.1 200 OK"));
+        assert!(result.contains("Content-Type: text/html"));
+        assert!(result.contains("Connection: close"));
+    }
+
+    #[tokio::test]
+    async fn test_forward_response_headers_strips_content_length() {
+        let mut output = Vec::new();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+        let redactor = StreamingRedactor::new(engine, Default::default());
+        let config = StreamingResponseConfig {
+            add_scred_header: false,
+            ..Default::default()
+        };
+        let headers = vec![
+            ("Content-Length".to_string(), "100".to_string()),
+            ("Content-Type".to_string(), "text/plain".to_string()),
+        ];
+        let stats = forward_response_headers(
+            &mut output,
+            "HTTP/1.1 200 OK",
+            &headers,
+            &redactor,
+            &config,
+        ).await.unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(!result.contains("Content-Length"));
+        assert!(result.contains("Content-Type: text/plain"));
+    }
+
+    #[tokio::test]
+    async fn test_forward_response_headers_adds_scred() {
+        let mut output = Vec::new();
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+        let redactor = StreamingRedactor::new(engine, Default::default());
+        let config = StreamingResponseConfig {
+            add_scred_header: true,
+            ..Default::default()
+        };
+        let headers = vec![];
+        let stats = forward_response_headers(
+            &mut output,
+            "HTTP/1.1 200 OK",
+            &headers,
+            &redactor,
+            &config,
+        ).await.unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("X-SCRED-Redacted"));
+    }
 }
