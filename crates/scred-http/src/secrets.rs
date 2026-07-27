@@ -90,3 +90,28 @@ impl SecretsConfig {
         }
     }
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_secrets_config_default() {
+        let config = SecretsConfig::default();
+        assert!(!config.patterns.is_empty());
+        assert!(config.rules.is_empty());
+    }
+
+    #[test]
+    fn test_secret_rule_fields() {
+        let rule = SecretRule {
+            allowed_hosts: vec!["example.com".to_string()],
+            allowed_in: vec!["header:Authorization".to_string()],
+            action: "REDACT".to_string(),
+        };
+        assert_eq!(rule.allowed_hosts.len(), 1);
+        assert_eq!(rule.action, "REDACT");
+    }
+}

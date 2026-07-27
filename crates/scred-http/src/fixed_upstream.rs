@@ -111,3 +111,54 @@ impl RootPathExt for String {
         }
     }
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fixed_upstream_parse_https() {
+        let upstream = FixedUpstream::parse("https://api.example.com:443").unwrap();
+        assert_eq!(upstream.host, "api.example.com");
+        assert_eq!(upstream.port, 443);
+        assert_eq!(upstream.scheme, "https");
+    }
+
+    #[test]
+    fn test_fixed_upstream_parse_http_default_port() {
+        let upstream = FixedUpstream::parse("http://example.com").unwrap();
+        assert_eq!(upstream.host, "example.com");
+        assert_eq!(upstream.port, 80);
+        assert_eq!(upstream.scheme, "http");
+    }
+
+    #[test]
+    fn test_fixed_upstream_parse_invalid() {
+        assert!(FixedUpstream::parse("://invalid").is_err());
+    }
+
+    #[test]
+    fn test_fixed_upstream_authority() {
+        let upstream = FixedUpstream {
+            scheme: "https".to_string(),
+            host: "example.com".to_string(),
+            port: 443,
+            base_path: String::new(),
+        };
+        assert_eq!(upstream.authority(), "example.com:443");
+    }
+
+    #[test]
+    fn test_fixed_upstream_rewrite_request_line() {
+        let upstream = FixedUpstream {
+            scheme: "http".to_string(),
+            host: "example.com".to_string(),
+            port: 8080,
+            base_path: String::new(),
+        };
+        let result = upstream.rewrite_request_line("GET /path HTTP/1.1").unwrap();
+        assert_eq!(result, "GET /path HTTP/1.1");
+    }
+}

@@ -200,3 +200,27 @@ fn calculate_env_score(content: &str) -> f32 {
     // Clamp to 0.0-1.0 range
     score.min(1.0)
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_format_empty() {
+        let result = detect_format(b"");
+        assert!(matches!(result.mode, DetectionMode::TextFormat));
+    }
+
+    #[test]
+    fn test_detection_result_fields() {
+        let result = DetectionResult {
+            mode: DetectionMode::EnvFormat,
+            score: 0.95,
+            reason: "test".to_string(),
+        };
+        assert_eq!(result.score, 0.95);
+        assert_eq!(result.reason, "test");
+    }
+}
