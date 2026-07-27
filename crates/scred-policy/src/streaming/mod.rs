@@ -519,3 +519,6 @@ impl ReplacementTracker {
         &self.replacements
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,9 +1,9 @@
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used)]
-    use super::*;
+#![allow(clippy::unwrap_used)]
+use super::*;
+use std::collections::HashMap;
+use crate::placeholder::PlaceholderGenerator;
 
-    fn test_generator() -> PlaceholderGenerator {
+fn test_generator() -> PlaceholderGenerator {
         PlaceholderGenerator::new("test-seed")
     }
 
@@ -71,6 +71,59 @@ mod tests {
     }
 
     #[test]
+    fn test_replace_placeholders_empty_values() {
+        let automaton = PlaceholderAutomaton {
+            ac: AhoCorasick::new(&[""]).unwrap(),
+            placeholder_values: vec![],
+            replacements: vec![],
+        };
+        let mut buffer = b"hello".to_vec();
+        let (tracker, count) = automaton.replace_placeholders(&mut buffer, "example.com", |_, _| true);
+        assert_eq!(count, 0);
+        assert!(tracker.replacements().is_empty());
+    }
+
+    #[test]
+    fn test_replace_placeholders_non_utf8() {
+        let mut secrets = HashMap::new();
+        secrets.insert("KEY".to_string(), "secret".to_string());
+        let mut generator = test_generator();
+        let automaton = PlaceholderAutomaton::build(&secrets, &mut generator).unwrap();
+        
+        // Non-UTF8 data should return 0 replacements
+        let mut buffer = vec![0xFF, 0xFE, 0x00];
+        let (tracker, count) = automaton.replace_placeholders(&mut buffer, "example.com", |_, _| true);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_replace_placeholders_no_matches() {
+        let mut secrets = HashMap::new();
+        secrets.insert("KEY".to_string(), "secret".to_string());
+        let mut generator = test_generator();
+        let automaton = PlaceholderAutomaton::build(&secrets, &mut generator).unwrap();
+        
+        let mut buffer = b"no placeholders here".to_vec();
+        let (tracker, count) = automaton.replace_placeholders(&mut buffer, "example.com", |_, _| true);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_replace_placeholders_domain_restricted() {
+        let mut secrets = HashMap::new();
+        secrets.insert("KEY".to_string(), "secret".to_string());
+        let mut generator = test_generator();
+        let automaton = PlaceholderAutomaton::build(&secrets, &mut generator).unwrap();
+        
+        let placeholder = generator.generate("KEY", "secret");
+        let mut buffer = format!("value: {}", placeholder.value).as_bytes().to_vec();
+        
+        // Domain checker rejects all
+        let (tracker, count) = automaton.replace_placeholders(&mut buffer, "other.com", |_, _| false);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
     fn test_multiple_placeholders() {
         // Use realistic-length secrets (placeholder format: prefix + "scrd-" + hex)
         // sk-scrd-XXXXXXXX needs at least 11 chars to have hex variation
@@ -105,4 +158,3 @@ mod tests {
         assert!(result.contains(&p_a));
         assert!(result.contains(&p_b));
     }
-}
