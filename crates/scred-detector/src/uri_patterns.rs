@@ -287,3 +287,65 @@ pub fn redact_uri_credentials(uri: &str, credential_type: &CredentialType) -> St
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_redact_uri_credentials_user_password_at_host() {
+        let result = redact_uri_credentials(
+            "mongodb://user:password@host:27017/db",
+            &CredentialType::UserPasswordAtHost,
+        );
+        assert_eq!(result, "mongodb://user:[REDACTED]@host:27017/db");
+    }
+
+    #[test]
+    fn test_redact_uri_credentials_no_password() {
+        let result = redact_uri_credentials(
+            "mongodb://user@host:27017/db",
+            &CredentialType::UserPasswordAtHost,
+        );
+        assert_eq!(result, "mongodb:[REDACTED]@host:27017/db");
+    }
+
+    #[test]
+    fn test_redact_uri_credentials_no_at() {
+        let result = redact_uri_credentials(
+            "mongodb://host:27017/db",
+            &CredentialType::UserPasswordAtHost,
+        );
+        assert_eq!(result, "mongodb://host:27017/db");
+    }
+
+    #[test]
+    fn test_redact_uri_credentials_user_password() {
+        let result = redact_uri_credentials(
+            "user:password",
+            &CredentialType::UserPassword,
+        );
+        assert_eq!(result, "user:password");
+    }
+
+    #[test]
+    fn test_redact_uri_credentials_token_only() {
+        let result = redact_uri_credentials(
+            "sk-abc123def456",
+            &CredentialType::TokenOnly,
+        );
+        assert_eq!(result, "[REDACTED]");
+    }
+
+    #[test]
+    fn test_credential_type_debug() {
+        let types = vec![
+            CredentialType::UserPassword,
+            CredentialType::TokenOnly,
+            CredentialType::UserPasswordAtHost,
+        ];
+        for t in types {
+            assert!(!format!("{:?}", t).is_empty());
+        }
+    }
+}
