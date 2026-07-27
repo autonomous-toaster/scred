@@ -463,3 +463,147 @@ impl PatternSelector {
 // ============================================================================
 // Tests
 // ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pattern_selector_all() {
+        let selector = PatternSelector::All;
+        assert!(selector.matches_pattern("any-pattern", RiskTier::Critical));
+        assert_eq!(selector.description(), "All patterns");
+    }
+
+    #[test]
+    fn test_pattern_selector_none() {
+        let selector = PatternSelector::None;
+        assert!(!selector.matches_pattern("any-pattern", RiskTier::Critical));
+        assert_eq!(selector.description(), "No patterns");
+    }
+
+    #[test]
+    fn test_pattern_selector_tiers() {
+        let selector = PatternSelector::Tiers(vec![RiskTier::Critical]);
+        assert!(selector.matches_pattern("any", RiskTier::Critical));
+        assert!(!selector.matches_pattern("any", RiskTier::ApiKeys));
+    }
+
+    #[test]
+    fn test_pattern_selector_patterns() {
+        let selector = PatternSelector::Patterns(vec!["jwt".to_string()]);
+        // matches_pattern returns true for non-Tier selectors (conservative)
+        assert!(selector.matches_pattern("any", RiskTier::Critical));
+        assert_eq!(selector.description(), "Patterns: 1");
+    }
+
+    #[test]
+    fn test_pattern_selector_tags() {
+        let selector = PatternSelector::Tags(vec!["auth".to_string()]);
+        assert!(selector.matches_pattern("any", RiskTier::Critical));
+        assert_eq!(selector.description(), "Tags: auth");
+    }
+
+    #[test]
+    fn test_pattern_selector_wildcard() {
+        let selector = PatternSelector::Wildcard("*.example.com".to_string());
+        assert!(selector.matches_pattern("any", RiskTier::Critical));
+        assert_eq!(selector.description(), "Wildcard: *.example.com");
+    }
+
+    #[test]
+    fn test_pattern_selector_regex() {
+        let selector = PatternSelector::Regex(vec!["^jwt_.*".to_string()]);
+        assert!(selector.matches_pattern("any", RiskTier::Critical));
+        assert_eq!(selector.description(), "Regex: ^jwt_.*");
+    }
+
+    #[test]
+    fn test_pattern_selector_type() {
+        let selector = PatternSelector::Type(vec!["credential".to_string()]);
+        assert!(selector.matches_pattern("any", RiskTier::Critical));
+        assert_eq!(selector.description(), "Pattern Types: credential");
+    }
+
+    #[test]
+    fn test_pattern_selector_from_string_all() {
+        let selector = PatternSelector::from_string("all").unwrap();
+        assert!(matches!(selector, PatternSelector::All));
+    }
+
+    #[test]
+    fn test_pattern_selector_from_string_none() {
+        let selector = PatternSelector::from_string("none").unwrap();
+        assert!(matches!(selector, PatternSelector::None));
+    }
+
+    #[test]
+    fn test_pattern_selector_from_string_tiers() {
+        let selector = PatternSelector::from_string("tier:critical").unwrap();
+        assert!(matches!(selector, PatternSelector::Tiers(_)));
+    }
+
+    #[test]
+    fn test_pattern_selector_from_string_patterns() {
+        let selector = PatternSelector::from_string("patterns:jwt,api-key").unwrap();
+        assert!(matches!(selector, PatternSelector::Patterns(_)));
+    }
+
+    #[test]
+    fn test_pattern_selector_from_string_tags() {
+        let selector = PatternSelector::from_string("tags:auth").unwrap();
+        assert!(matches!(selector, PatternSelector::Tags(_)));
+    }
+
+    #[test]
+    fn test_pattern_selector_from_string_wildcard() {
+        let selector = PatternSelector::from_string("wildcard:*.example.com").unwrap();
+        assert!(matches!(selector, PatternSelector::Wildcard(_)));
+    }
+
+    #[test]
+    fn test_pattern_selector_from_string_regex() {
+        let selector = PatternSelector::from_string("regex:^jwt").unwrap();
+        assert!(matches!(selector, PatternSelector::Regex(_)));
+    }
+
+    #[test]
+    fn test_pattern_selector_from_string_type() {
+        let selector = PatternSelector::from_string("type:credential").unwrap();
+        assert!(matches!(selector, PatternSelector::Type(_)));
+    }
+
+    #[test]
+    fn test_pattern_selector_from_string_invalid() {
+        assert!(PatternSelector::from_string("").is_err());
+    }
+
+    #[test]
+    fn test_pattern_selector_clone() {
+        let selector = PatternSelector::All;
+        let cloned = selector.clone();
+        assert!(matches!(cloned, PatternSelector::All));
+    }
+
+    #[test]
+    fn test_pattern_selector_debug() {
+        let selector = PatternSelector::All;
+        let debug = format!("{:?}", selector);
+        assert!(!debug.is_empty());
+    }
+
+    #[test]
+    fn test_count_matches() {
+        let selector = PatternSelector::All;
+        let cache = MetadataCache::new();
+        assert_eq!(selector.count_matches(&cache), 0);
+    }
+
+    #[test]
+    fn test_get_tier_distribution() {
+        let selector = PatternSelector::All;
+        let cache = MetadataCache::new();
+        let dist = selector.get_tier_distribution(&cache);
+        assert!(dist.is_empty());
+    }
+}

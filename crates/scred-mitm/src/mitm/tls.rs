@@ -430,3 +430,30 @@ pub struct CacheStats {
     pub disk_cached: usize,
     pub cache_dir: PathBuf,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cache_stats_default() {
+        let stats = CacheStats {
+            memory_cached: 0,
+            disk_cached: 0,
+            cache_dir: PathBuf::from("/tmp"),
+        };
+        assert_eq!(stats.memory_cached, 0);
+        assert_eq!(stats.disk_cached, 0);
+    }
+
+    #[test]
+    fn test_certificate_generator_new_fails_without_ca() {
+        // Without a valid CA, this should fail
+        let result = CertificateGenerator::new(
+            &PathBuf::from("/tmp/nonexistent-ca-key.pem"),
+            &PathBuf::from("/tmp/nonexistent-ca-cert.pem"),
+            &PathBuf::from("/tmp/nonexistent-cache"),
+        );
+        assert!(result.is_err());
+    }
+}

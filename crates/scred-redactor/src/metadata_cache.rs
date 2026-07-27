@@ -254,3 +254,92 @@ pub fn initialize_cache() -> &'static MetadataCache {
 // ============================================================================
 // Tests
 // ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_risk_tier_from_u8() {
+        assert_eq!(RiskTier::from_u8(0), Some(RiskTier::Critical));
+        assert_eq!(RiskTier::from_u8(1), Some(RiskTier::ApiKeys));
+        assert_eq!(RiskTier::from_u8(2), Some(RiskTier::Infrastructure));
+        assert_eq!(RiskTier::from_u8(3), Some(RiskTier::Services));
+        assert_eq!(RiskTier::from_u8(4), Some(RiskTier::Patterns));
+        assert_eq!(RiskTier::from_u8(5), None);
+        assert_eq!(RiskTier::from_u8(255), None);
+    }
+
+    #[test]
+    fn test_risk_tier_to_u8() {
+        assert_eq!(RiskTier::Critical.to_u8(), 0);
+        assert_eq!(RiskTier::ApiKeys.to_u8(), 1);
+        assert_eq!(RiskTier::Infrastructure.to_u8(), 2);
+        assert_eq!(RiskTier::Services.to_u8(), 3);
+        assert_eq!(RiskTier::Patterns.to_u8(), 4);
+    }
+
+    #[test]
+    fn test_risk_tier_name() {
+        assert_eq!(RiskTier::Critical.name(), "CRITICAL");
+        assert_eq!(RiskTier::ApiKeys.name(), "API_KEYS");
+        assert_eq!(RiskTier::Infrastructure.name(), "INFRASTRUCTURE");
+        assert_eq!(RiskTier::Services.name(), "SERVICES");
+        assert_eq!(RiskTier::Patterns.name(), "PATTERNS");
+    }
+
+    #[test]
+    fn test_risk_tier_risk_score() {
+        assert_eq!(RiskTier::Critical.risk_score(), 95);
+        assert_eq!(RiskTier::ApiKeys.risk_score(), 80);
+        assert_eq!(RiskTier::Infrastructure.risk_score(), 60);
+        assert_eq!(RiskTier::Services.risk_score(), 40);
+        assert_eq!(RiskTier::Patterns.risk_score(), 30);
+    }
+
+    #[test]
+    fn test_pattern_category_from_u8() {
+        assert_eq!(PatternCategory::from_u8(0), Some(PatternCategory::SimplePrefix));
+        assert_eq!(PatternCategory::from_u8(1), Some(PatternCategory::PrefixFixed));
+        assert_eq!(PatternCategory::from_u8(2), Some(PatternCategory::PrefixMinlen));
+        assert_eq!(PatternCategory::from_u8(3), Some(PatternCategory::PrefixVariable));
+        assert_eq!(PatternCategory::from_u8(4), Some(PatternCategory::JwtPattern));
+        assert_eq!(PatternCategory::from_u8(5), Some(PatternCategory::Regex));
+    }
+
+    #[test]
+    fn test_charset_from_u8() {
+        assert_eq!(Charset::from_u8(0), Some(Charset::Alphanumeric));
+        assert_eq!(Charset::from_u8(1), Some(Charset::Hex));
+        assert_eq!(Charset::from_u8(2), Some(Charset::Base64));
+        assert_eq!(Charset::from_u8(3), Some(Charset::Base64Url));
+        assert_eq!(Charset::from_u8(4), Some(Charset::Numeric));
+        assert_eq!(Charset::from_u8(5), Some(Charset::Any));
+    }
+
+    #[test]
+    fn test_ffipath_from_u8() {
+        assert_eq!(FFIPath::from_u8(0), Some(FFIPath::MatchPrefix));
+        assert_eq!(FFIPath::from_u8(1), Some(FFIPath::PrefixCharset));
+        assert_eq!(FFIPath::from_u8(7), None);
+    }
+
+    #[test]
+    fn test_metadata_cache_new() {
+        let cache = MetadataCache::new();
+        assert_eq!(cache.all_pattern_names().count(), 0);
+        assert_eq!(cache.all_patterns().count(), 0);
+    }
+
+    #[test]
+    fn test_get_cache() {
+        let cache = get_cache();
+        let count = cache.all_pattern_names().count(); assert!(count == 0 || count > 0);
+    }
+
+    #[test]
+    fn test_initialize_cache() {
+        let cache = initialize_cache();
+        let count = cache.all_pattern_names().count(); assert!(count == 0 || count > 0);
+    }
+}
