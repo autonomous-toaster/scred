@@ -455,4 +455,33 @@ mod tests {
         assert!(upstream_str.contains("Host: example.com"), "Should contain host header");
         assert!(upstream_str.contains("hello"), "Should contain body");
     }
+
+    #[tokio::test]
+    async fn test_stream_with_redaction_basic() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, BufReader, duplex};
+        use std::sync::Arc;
+        
+        let (mut input_write, mut input_read) = duplex(65536);
+        let (mut output_write, mut output_read) = duplex(65536);
+        
+        // Write data to input
+        input_write.write_all(b"hello world").await.unwrap();
+        drop(input_write);
+        
+        let engine = Arc::new(scred_policy::PolicyEngine::new(scred_config::PolicyConfig { enabled: false, providers: vec![], ..Default::default() }).unwrap());
+        let mut input_buf_reader = BufReader::new(&mut input_read);
+        
+        let result = stream_with_redaction(
+            &mut input_buf_reader,
+            &mut output_write,
+            &engine,
+        ).await;
+        assert!(result.is_ok(), "stream_with_redaction failed: {:?}", result);
+        
+        // Read output
+        drop(output_write);
+        let mut output_data = Vec::new();
+        output_read.read_to_end(&mut output_data).await.unwrap();
+        assert_eq!(output_data, b"hello world", "Should contain original data");
+    }
 }
