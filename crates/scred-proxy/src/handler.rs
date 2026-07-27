@@ -391,5 +391,34 @@ mod tests {
         assert_eq!(request_line, "POST /api");
     }
 
-
+    #[tokio::test]
+    async fn test_forward_simple_basic() {
+        use tokio::io::{AsyncWriteExt, AsyncReadExt, BufReader, duplex};
+        
+        // Create duplex pairs
+        let (mut client_write, mut client_read) = duplex(65536);
+        let (mut upstream_write, mut upstream_read) = duplex(65536);
+        
+        // Write client request data
+        client_write.write_all(b"GET /path HTTP/1.1\r\nHost: example.com\r\n\r\n").await.unwrap();
+        drop(client_write);
+        
+        let mut client_buf_reader = BufReader::new(&mut client_read);
+        
+        // Call forward_simple
+        let result = forward_simple(
+            &mut client_buf_reader,
+            &mut upstream_write,
+            "GET /path HTTP/1.1",
+        ).await;
+        assert!(result.is_ok(), "forward_simple failed: {:?}", result);
+        
+        // Read what was sent to upstream
+        drop(upstream_write);
+        let mut upstream_data = Vec::new();
+        upstream_read.read_to_end(&mut upstream_data).await.unwrap();
+        let upstream_str = String::from_utf8_lossy(&upstream_data);
+        assert!(upstream_str.contains("GET /path HTTP/1.1"), "Should contain request line");
+        assert!(upstream_str.contains("Host: example.com"), "Should contain host header");
+    }
 }
