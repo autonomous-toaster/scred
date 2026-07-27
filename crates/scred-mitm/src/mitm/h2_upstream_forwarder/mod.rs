@@ -32,6 +32,20 @@ use scred_http::upstream_connection::{
 // Helper Functions
 // ============================================================================
 
+/// Check if an I/O error indicates connection closed (not a real error)
+pub(crate) fn is_connection_closed_error(e: &std::io::Error) -> bool {
+    let err_msg = e.to_string();
+    let err_kind = e.kind();
+
+    err_msg.contains("EOF")
+        || err_msg.contains("Connection reset")
+        || err_msg.contains("connection closed")
+        || err_msg.contains("unexpected end of file")
+        || err_kind == std::io::ErrorKind::UnexpectedEof
+        || err_kind == std::io::ErrorKind::ConnectionReset
+        || err_kind == std::io::ErrorKind::ConnectionAborted
+}
+
 /// Read complete HTTP response directly without streaming redaction
 /// Used for PASSTHROUGH and DETECT modes
 #[allow(clippy::needless_borrow, clippy::doc_lazy_continuation)]
@@ -57,19 +71,7 @@ pub(crate) async fn read_response_direct(
                 );
             }
             Err(e) => {
-                // Check if this is a normal connection closure
-                let err_msg = e.to_string();
-                let err_kind = e.kind();
-
-                // Common EOF/closure errors - all legitimate
-                if err_msg.contains("EOF")
-                    || err_msg.contains("Connection reset")
-                    || err_msg.contains("connection closed")
-                    || err_msg.contains("unexpected end of file")
-                    || err_kind == std::io::ErrorKind::UnexpectedEof
-                    || err_kind == std::io::ErrorKind::ConnectionReset
-                    || err_kind == std::io::ErrorKind::ConnectionAborted
-                {
+                if is_connection_closed_error(&e) {
                     tracing::debug!(
                         "[H2 Upstream HTTP/1.1 Direct] Connection closed by peer: {}",
                         e

@@ -1,4 +1,4 @@
-use super::{extract_http_response_body, log_detected_secrets, read_response_direct};
+use super::{extract_http_response_body, is_connection_closed_error, log_detected_secrets, read_response_direct};
 use crate::mitm::config::RedactionMode;
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
@@ -118,20 +118,8 @@ async fn read_http1_response_redacted(
                     response_output.extend_from_slice(redacted.as_bytes());
                 }
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::ConnectionReset => {
-                tracing::debug!("[H2 Upstream HTTP/1.1] Connection reset by peer");
-                break;
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                tracing::debug!("[H2 Upstream HTTP/1.1] Unexpected EOF");
-                break;
-            }
             Err(e) => {
-                let err_msg = e.to_string();
-                if err_msg.contains("EOF")
-                    || err_msg.contains("Connection reset")
-                    || err_msg.contains("connection closed")
-                {
+                if is_connection_closed_error(&e) {
                     tracing::debug!("[H2 Upstream HTTP/1.1] Connection closed by peer: {}", e);
                     break;
                 } else {

@@ -93,4 +93,46 @@ mod h2_forwarder_tests {
 
         assert_eq!(result, b"My API key is sk-test123456789");
     }
+
+    #[test]
+    fn test_is_connection_closed_error_eof() {
+        let err = std::io::Error::new(std::io::ErrorKind::Other, "EOF");
+        assert!(crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&err));
+    }
+
+    #[test]
+    fn test_is_connection_closed_error_reset() {
+        let err = std::io::Error::new(std::io::ErrorKind::ConnectionReset, "connection reset");
+        assert!(crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&err));
+    }
+
+    #[test]
+    fn test_is_connection_closed_error_unexpected_eof() {
+        let err = std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "unexpected eof");
+        assert!(crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&err));
+    }
+
+    #[test]
+    fn test_is_connection_closed_error_aborted() {
+        let err = std::io::Error::new(std::io::ErrorKind::ConnectionAborted, "connection aborted");
+        assert!(crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&err));
+    }
+
+    #[test]
+    fn test_is_connection_closed_error_message_contains() {
+        let err = std::io::Error::new(std::io::ErrorKind::Other, "connection closed by peer");
+        assert!(crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&err));
+    }
+
+    #[test]
+    fn test_is_connection_closed_error_real_error() {
+        let err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "permission denied");
+        assert!(!crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&err));
+    }
+
+    #[test]
+    fn test_is_connection_closed_error_timedout() {
+        let err = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
+        assert!(!crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&err));
+    }
 }
