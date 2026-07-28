@@ -4,15 +4,11 @@ High-performance secret redaction system using Aho-Corasick automaton + memchr f
 
 ## Performance
 
-### Detection Throughput (scaling)
+### Detection Throughput (1MB realistic mixed data)
 
-| Benchmark | Throughput |
-|-----------|------------|
-| `detect_all_10kb` | ~860 MB/s |
-| `detect_all_100kb` | ~830 MB/s |
-| `detect_all_1mb` | ~790 MB/s |
-| `detect_all_10mb` | ~720 MB/s |
-| `detect_all_realistic_1mb` | ~250 MB/s |
+| Benchmark | Time | Throughput |
+|-----------|------|------------|
+| `detect_all_realistic_1mb` | ~20 ms | ~50 MB/s |
 
 ### Redactor Throughput (1MB, 64KB chunks)
 
@@ -60,7 +56,6 @@ cargo bench --workspace
 just bench-ci --quick
 
 # Individual benchmarks
-cargo bench -p scred-detector --bench scaling
 cargo bench -p scred-detector --bench realistic
 cargo bench -p scred-redactor --bench throughput
 cargo bench -p scred --bench streaming
@@ -68,7 +63,7 @@ cargo bench -p scred-proxy --bench throughput
 cargo bench -p scred-mitm --bench latency
 ```
 
-All benchmarks build data **outside** `b.iter()` to avoid measuring allocation time. Data covers all 5 detection tiers (simple prefix, prefix validation, JWT, multiline markers, URI patterns).
+All benchmarks build data **outside** `b.iter()` to avoid measuring allocation time.
 
 ## Quick Start
 
