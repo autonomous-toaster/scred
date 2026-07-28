@@ -169,19 +169,24 @@ Open `http://localhost:8081` to inspect the redaction in `mitmweb` (password: `p
 
 All examples use environment variables only — no code-level configuration.
 
+```sh
+export https_proxy=http://127.0.0.1:8080
+export HTTPS_PROXY=http://127.0.0.1:8080
+export http_proxy=http://127.0.0.1:8080
+export HTTP_PROXY=http://127.0.0.1:8080
+```
+
 ### curl
 
 ```sh
-HTTPS_PROXY=http://127.0.0.1:8080 \
-CURL_CA_BUNDLE=~/.scred/ca.pem \
+CURL_CA_BUNDLE=$HOME/.scred/ca.pem \
 curl https://httpbin.org/anything -H "some-thing: AKIAIOSFODNN7EXAMPLE"
 ```
 
 ### Python
 
 ```sh
-HTTPS_PROXY=http://127.0.0.1:8080 \
-REQUESTS_CA_BUNDLE=~/.scred/ca.pem \
+REQUESTS_CA_BUNDLE=$HOME/.scred/ca.pem \
 python3 -c "
 import requests
 r = requests.post('https://httpbin.org/anything',
@@ -194,8 +199,7 @@ print(r.json())
 ### Node.js
 
 ```sh
-HTTPS_PROXY=http://127.0.0.1:8080 \
-NODE_EXTRA_CA_CERTS=~/.scred/ca.pem \
+NODE_EXTRA_CA_CERTS=$HOME/.scred/ca.pem \
 node -e "
 const r = await fetch('https://httpbin.org/anything', {
   method: 'POST',

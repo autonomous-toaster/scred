@@ -28,6 +28,8 @@ use rustls::{ClientConfig, RootCertStore, ServerName};
 use tokio_rustls::TlsConnector;
 use scred_http::h2::alpn::HttpProtocol;
 use scred_http::upstream_h2_client::{extract_upstream_protocol, UpstreamConnectionInfo};
+use scred_http::http_headers::parse_http_headers;
+use bytes::Bytes;
 use scred_redactor::StreamingRedactor;
 use scred_http::streaming_response::{stream_response_to_client, StreamingResponseConfig};
 
@@ -344,7 +346,7 @@ async fn forward_response_no_redaction<U: AsyncReadExt + AsyncWriteExt + Unpin, 
 
 /// Handle HTTP/2 upstream request forwarding
 /// Builds an H2 request from H1.1 request line and forwards via h2::client
-async fn handle_h2_upstream_request<RW: AsyncWriteExt + Unpin>(
+async fn handle_h2_upstream_request<RW: AsyncReadExt + AsyncWriteExt + Unpin>(
     client_tls: &mut RW,
     request_line: &str,
     target_host: &str,
@@ -353,7 +355,6 @@ async fn handle_h2_upstream_request<RW: AsyncWriteExt + Unpin>(
     redact_responses: bool,
 ) -> std::io::Result<bool> {
     use http::Request;
-    use bytes::Bytes;
     use crate::mitm::config::RedactionMode;
     use crate::mitm::h2_upstream_forwarder::handle_upstream_h2_connection;
     
@@ -361,11 +362,44 @@ async fn handle_h2_upstream_request<RW: AsyncWriteExt + Unpin>(
     let method = parts.next().unwrap_or("GET");
     let path = parts.next().unwrap_or("/");
     
-    let request = Request::builder()
+    // Read client headers
+    let mut client_buf = BufReader::new(&mut *client_tls);
+    let headers = parse_http_headers(&mut client_buf, false)
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    
+    // Read client body if present
+    let body = if let Some(content_length) = headers.content_length {
+        if content_length > 0 {
+            let mut body_buf = vec![0u8; content_length];
+            client_buf.read_exact(&mut body_buf).await?;
+            body_buf
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    
+    // Build H2 request with all headers and body
+    let mut request_builder = Request::builder()
         .method(method)
-        .uri(path)
-        .header("host", target_host)
-        .body(Bytes::new())
+        .uri(path);
+    
+    // Forward all client headers
+    for (name, value) in &headers.headers {
+        let name_lower = name.to_lowercase();
+        // Skip hop-by-hop headers
+        if name_lower == "host" || name_lower == "connection" || name_lower == "transfer-encoding" {
+            continue;
+        }
+        request_builder = request_builder.header(name.as_str(), value.as_str());
+    }
+    // Ensure host header is set
+    request_builder = request_builder.header("host", target_host);
+    
+    let request = request_builder
+        .body(Bytes::from(body))
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
     
     let mode = if redact_responses {
