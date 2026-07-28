@@ -125,6 +125,100 @@ Both `scred-proxy` and `scred-mitm` redact request and response bodies through `
 SCRED_PROXY_UPSTREAM_URL=https://api.example.com scred-proxy
 ```
 
+## MITM Lab
+
+```sh
+podman compose build
+podman compose up
+```
+
+Use `127.0.0.1:9999` as proxy for curl.
+
+Example:
+
+export OPENAI_API_KEY="sk-fake-key-for-testing"
+
+curl --cacert ./data/scred-mitm/ca-cert.pem -x 127.0.0.1:9999 https://httpbin.org/anything -H "x-something: $OPENAI_API_KEY" -H "Authorization: $OPENAI_API_KEY"
+
+```json
+{
+  "args": {},
+  "data": "",
+  "files": {},
+  "form": {
+    "some": "sk-fxxxxxxxxxxxxxxxxxxx"
+  },
+  "headers": {
+    "Accept": "*/*",
+    "Authorization": "sk-fxxxxxxxxxxxxxxxxxxx",
+    "Host": "httpbin.org",
+    "User-Agent": "curl/8.7.1",
+    "X-Amzn-Trace-Id": "Root=1-69d903ea-7ef9e2cd1528443b3fb34073",
+    "X-Something": "sk-fxxxxxxxxxxxxxxxxxxx"
+  },
+  "json": null,
+  "method": "GET",
+  "origin": "x.y.z.a",
+  "url": "https://httpbin.org/anything"
+}
+```
+
+Open `http://localhost:8081` to inspect the redaction in `mitmweb` (password: `password`).
+
+## Policy-Based Secret Injection
+
+scred-mitm exposes placeholders for known secrets. The agent sees placeholders, which are replaced on the fly while streaming the request upstream.
+
+```sh
+# expose real key to scred-mitm
+export OPENAI_API_KEY="sk-fake-key-for-testing"
+podman compose up
+```
+
+```sh
+curl -s http://127.0.0.1:9998/placeholders
+OPENAI_API_KEY=sk-fake-scrd-7566da4420
+```
+
+```sh
+export $(curl -s http://127.0.0.1:9998/placeholders)
+echo $OPENAI_API_KEY
+# same length placeholder
+sk-fake-scrd-7566da4420
+
+curl --cacert ./data/scred-mitm/ca-cert.pem -x 127.0.0.1:9999 https://httpbin.org/anything -H "x-something: $OPENAI_API_KEY" -H "Authorization: $OPENAI_API_KEY"
+```
+
+```json
+{
+  "args": {},
+  "data": "",
+  "files": {},
+  "form": {},
+  "headers": {
+    "Accept": "*/*",
+    "Authorization": "sk-fake-key-for-testing",
+    "Host": "httpbin.org",
+    "User-Agent": "curl/8.7.1",
+    "X-Amzn-Trace-Id": "Root=1-69d93a99-2966910a60dcef0066bc84e0",
+    "X-Something": "sk-fxxxxxxxxxxxxxxxxxxx"
+  },
+  "json": null,
+  "method": "GET",
+  "origin": "x.y.z.a",
+  "url": "https://httpbin.org/anything"
+}
+```
+
+Open `http://localhost:8081` to inspect the placeholder replacements in `mitmweb` (password: `password`).
+
+### Build Docker Images
+
+```bash
+podman build -f Dockerfile.scred-mitm -t scred-mitm:latest .
+podman build -f Dockerfile.scred-proxy -t scred-proxy:latest .
+```
+
 ## Pattern Count
 
 **408 patterns** across 5 detection tiers:
