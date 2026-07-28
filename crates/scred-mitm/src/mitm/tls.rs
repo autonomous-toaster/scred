@@ -410,6 +410,9 @@ fn generate_cert_signed_by_ca(
     // Use ECDSA P-256 (same as CA)
     params.alg = alg;
 
+    // Include Authority Key Identifier extension (required by Python urllib3)
+    params.use_authority_key_identifier_extension = true;
+
     // Set validity period (1 year, starting 24h ago for clock skew)
     let now = OffsetDateTime::now_utc();
     params.not_before = now - Duration::days(1);

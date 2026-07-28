@@ -165,6 +165,47 @@ curl --cacert ./data/scred-mitm/ca-cert.pem -x 127.0.0.1:9999 https://httpbin.or
 
 Open `http://localhost:8081` to inspect the redaction in `mitmweb` (password: `password`).
 
+## Client Examples
+
+All examples use environment variables only — no code-level configuration.
+
+### curl
+
+```sh
+HTTPS_PROXY=http://127.0.0.1:8080 \
+CURL_CA_BUNDLE=~/.scred/ca.pem \
+curl https://httpbin.org/anything -H "some-thing: AKIAIOSFODNN7EXAMPLE"
+```
+
+### Python
+
+```sh
+HTTPS_PROXY=http://127.0.0.1:8080 \
+REQUESTS_CA_BUNDLE=~/.scred/ca.pem \
+python3 -c "
+import requests
+r = requests.post('https://httpbin.org/anything',
+    headers={'some-thing': 'AKIAIOSFODNN7EXAMPLE'},
+    data={'some-thing': 'AKIAIOSFODNN7EXAMPLE'})
+print(r.json())
+"
+```
+
+### Node.js
+
+```sh
+HTTPS_PROXY=http://127.0.0.1:8080 \
+NODE_EXTRA_CA_CERTS=~/.scred/ca.pem \
+node -e "
+const r = await fetch('https://httpbin.org/anything', {
+  method: 'POST',
+  headers: { 'some-thing': 'AKIAIOSFODNN7EXAMPLE' },
+  body: 'some-thing=AKIAIOSFODNN7EXAMPLE'
+});
+console.log(await r.json());
+"
+```
+
 ## Policy-Based Secret Injection
 
 scred-mitm exposes placeholders for known secrets. The agent sees placeholders, which are replaced on the fly while streaming the request upstream.
