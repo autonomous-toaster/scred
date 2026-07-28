@@ -20,6 +20,14 @@ webpki-roots = "0.25"
 http = "1.0"
 bytes = "1"
 
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+tokio = { workspace = true, features = ["rt", "macros", "io-util"] }
+
+[[bench]]
+name = "throughput"
+harness = false
+
 [[bin]]
 name = "scred-proxy"
 path = "src/main.rs"

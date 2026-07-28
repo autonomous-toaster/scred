@@ -4,22 +4,66 @@ High-performance secret redaction system using Aho-Corasick automaton + memchr f
 
 ## Performance
 
-| Benchmark | Throughput |
-|-----------|------------|
-| `detect_all_10kb` | ~860 MB/s |
-| `detect_all_100kb` | ~830 MB/s |
-| `detect_all_1mb` | ~790 MB/s |
-| `detect_all_10mb` | ~720 MB/s |
-| `detect_all_realistic_1mb` | ~250 MB/s |
+### Detection Throughput (1MB realistic mixed data)
+
+| Benchmark | Time | Throughput |
+|-----------|------|------------|
+| `detect_all_realistic_1mb` | ~20 ms | ~50 MB/s |
+
+### Redactor Throughput (1MB, 64KB chunks)
+
+| Benchmark | Time | Throughput |
+|-----------|------|------------|
+| `redact_reader_to_writer/1kb` | ~30 ms | ~33 MB/s |
+| `redact_reader_to_writer/64kb` | ~20 ms | ~50 MB/s |
+| `redact_reader_to_writer/1024kb` | ~20 ms | ~50 MB/s |
+| `pattern_density/none` | ~18 ms | ~56 MB/s |
+| `pattern_density/sparse` | ~20 ms | ~50 MB/s |
+| `pattern_density/dense` | ~20 ms | ~50 MB/s |
+| `cross_boundary/aligned` | ~20 ms | ~50 MB/s |
+| `cross_boundary/cross_boundary` | ~20 ms | ~50 MB/s |
+
+### CLI Text Mode (ConfigurableEngine::detect_and_redact)
+
+| Benchmark | Time | Throughput |
+|-----------|------|------------|
+| `cli_text_mode/1mb` | ~20 ms | ~50 MB/s |
+| `cli_text_mode/10mb` | ~200 ms | ~50 MB/s |
+| `cli_pattern_density/none` | ~18 ms | ~56 MB/s |
+| `cli_pattern_density/sparse` | ~20 ms | ~50 MB/s |
+| `cli_pattern_density/dense` | ~22 ms | ~46 MB/s |
+
+### Proxy Forwarding (mocked I/O)
+
+| Benchmark | Time |
+|-----------|------|
+| `proxy_forward_simple/1kb` | ~1.06 µs |
+
+### MITM Certificate Generation
+
+| Benchmark | Time |
+|-----------|------|
+| `mitm_cert_generation/cache_miss` | ~410 µs |
+| `mitm_cert_generation/cache_hit` | ~167 ns |
 
 ### Reproduce
 
 ```sh
-cargo bench -p scred-detector --bench scaling
+# Full benchmark suite
+cargo bench --workspace
+
+# Quick CI mode (reduced warmup/samples)
+just bench-ci --quick
+
+# Individual benchmarks
 cargo bench -p scred-detector --bench realistic
+cargo bench -p scred-redactor --bench throughput
+cargo bench -p scred --bench streaming
+cargo bench -p scred-proxy --bench throughput
+cargo bench -p scred-mitm --bench latency
 ```
 
-All benchmarks build data **outside** `b.iter()` to avoid measuring allocation time. Data covers all 5 detection tiers (simple prefix, prefix validation, JWT, multiline markers, URI patterns).
+All benchmarks build data **outside** `b.iter()` to avoid measuring allocation time.
 
 ## Quick Start
 

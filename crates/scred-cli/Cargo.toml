@@ -10,9 +10,17 @@ description = "Secret redaction CLI tool"
 scred-redactor = { path = "../scred-redactor" }
 scred-http = { path = "../scred-http", features = ["redaction"] }
 tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
 [[bin]]
 name = "scred"
 path = "src/main.rs"
+
+[[bench]]
+name = "streaming"
+harness = false
 
 [lints]
 workspace = true
