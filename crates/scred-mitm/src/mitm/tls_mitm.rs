@@ -344,6 +344,42 @@ async fn forward_response_no_redaction<U: AsyncReadExt + AsyncWriteExt + Unpin, 
     client_tls.flush().await
 }
 
+/// Redact header values and body for H2 upstream forwarding.
+/// Returns (redacted_headers, redacted_body).
+fn redact_for_h2_upstream(
+    headers: &[(String, String)],
+    body: &[u8],
+    redaction_engine: &Arc<scred_redactor::RedactionEngine>,
+) -> (Vec<(String, String)>, Vec<u8>) {
+    use scred_redactor::streaming::StreamingRedactor;
+    
+    let redactor = StreamingRedactor::with_defaults(redaction_engine.clone());
+    
+    // Redact header values (not header names)
+    let mut redacted_headers = Vec::new();
+    for (name, value) in headers {
+        let name_lower = name.to_lowercase();
+        // Skip hop-by-hop headers
+        if name_lower == "host" || name_lower == "connection" || name_lower == "transfer-encoding" {
+            redacted_headers.push((name.clone(), value.clone()));
+            continue;
+        }
+        // Redact header value
+        let (redacted_value, _) = redactor.redact_buffer(value.as_bytes());
+        redacted_headers.push((name.clone(), redacted_value));
+    }
+    
+    // Redact body
+    let redacted_body = if !body.is_empty() {
+        let (redacted, _) = redactor.redact_buffer(body);
+        redacted.into_bytes()
+    } else {
+        Vec::new()
+    };
+    
+    (redacted_headers, redacted_body)
+}
+
 /// Handle HTTP/2 upstream request forwarding
 /// Builds an H2 request from H1.1 request line and forwards via h2::client
 async fn handle_h2_upstream_request<RW: AsyncReadExt + AsyncWriteExt + Unpin>(
@@ -381,25 +417,30 @@ async fn handle_h2_upstream_request<RW: AsyncReadExt + AsyncWriteExt + Unpin>(
         Vec::new()
     };
     
-    // Build H2 request with all headers and body
+    // Apply redaction to headers and body
+    let (redacted_headers, redacted_body) = redact_for_h2_upstream(
+        &headers.headers,
+        &body,
+        &redaction_engine,
+    );
+    
+    // Build H2 request with redacted headers and body
     let mut request_builder = Request::builder()
         .method(method)
         .uri(path);
     
-    // Forward all client headers
-    for (name, value) in &headers.headers {
+    for (name, value) in &redacted_headers {
         let name_lower = name.to_lowercase();
-        // Skip hop-by-hop headers
         if name_lower == "host" || name_lower == "connection" || name_lower == "transfer-encoding" {
             continue;
         }
         request_builder = request_builder.header(name.as_str(), value.as_str());
     }
-    // Ensure host header is set
+    // Ensure host header is set (not redacted)
     request_builder = request_builder.header("host", target_host);
     
     let request = request_builder
-        .body(Bytes::from(body))
+        .body(Bytes::from(redacted_body))
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
     
     let mode = if redact_responses {
@@ -788,5 +829,109 @@ mod tests {
         if let Some(line) = result {
             assert!(line.contains("GET /path"), "Should return the actual request line");
         }
+    }
+
+    #[test]
+    fn test_redact_for_h2_upstream_redacts_header_values() {
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+
+        let headers = vec![
+            ("Content-Type".to_string(), "text/plain".to_string()),
+            ("X-Api-Key".to_string(), "AKIAIOSFODNN7EXAMPLE".to_string()),
+            ("Authorization".to_string(), "Bearer sk-proj-test123".to_string()),
+        ];
+        let body = b"api_key=AKIAIOSFODNN7EXAMPLE&secret=sk-proj-test456";
+
+        let (redacted_headers, redacted_body) = redact_for_h2_upstream(&headers, body, &engine);
+
+        // Non-secret headers should be unchanged
+        assert_eq!(redacted_headers[0].1, "text/plain");
+
+        // Secret header values should be redacted
+        assert!(
+            redacted_headers[1].1.contains("AKIA"),
+            "Should still contain prefix"
+        );
+        assert!(
+            !redacted_headers[1].1.contains("AKIAIOSFODNN7EXAMPLE"),
+            "Full secret should be redacted"
+        );
+        assert!(
+            !redacted_headers[2].1.contains("sk-proj-test123"),
+            "OpenAI key should be redacted"
+        );
+
+        // Body should be redacted
+        let body_str = String::from_utf8_lossy(&redacted_body);
+        assert!(
+            !body_str.contains("AKIAIOSFODNN7EXAMPLE"),
+            "AWS key in body should be redacted"
+        );
+        assert!(
+            !body_str.contains("sk-proj-test456"),
+            "OpenAI key in body should be redacted"
+        );
+    }
+
+    #[test]
+    fn test_redact_for_h2_upstream_preserves_hop_by_hop_headers() {
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+
+        let headers = vec![
+            ("Host".to_string(), "api.example.com".to_string()),
+            ("Connection".to_string(), "keep-alive".to_string()),
+            ("Transfer-Encoding".to_string(), "chunked".to_string()),
+            ("X-Custom".to_string(), "AKIAIOSFODNN7EXAMPLE".to_string()),
+        ];
+        let body = b"";
+
+        let (redacted_headers, _) = redact_for_h2_upstream(&headers, body, &engine);
+
+        // Hop-by-hop headers should be preserved as-is
+        assert_eq!(redacted_headers[0].1, "api.example.com");
+        assert_eq!(redacted_headers[1].1, "keep-alive");
+        assert_eq!(redacted_headers[2].1, "chunked");
+
+        // Non-hop-by-hop headers with secrets should be redacted
+        assert!(!redacted_headers[3].1.contains("AKIAIOSFODNN7EXAMPLE"));
+    }
+
+    #[test]
+    fn test_redact_for_h2_upstream_empty_body() {
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+
+        let headers: Vec<(String, String)> = vec![];
+        let body = b"";
+
+        let (redacted_headers, redacted_body) = redact_for_h2_upstream(&headers, body, &engine);
+
+        assert!(redacted_headers.is_empty());
+        assert!(redacted_body.is_empty());
+    }
+
+    #[test]
+    fn test_redact_for_h2_upstream_disabled_redaction() {
+        let engine = Arc::new(scred_redactor::RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: false },
+        ));
+
+        let headers = vec![
+            ("X-Key".to_string(), "AKIAIOSFODNN7EXAMPLE".to_string()),
+        ];
+        let body = b"secret=AKIAIOSFODNN7EXAMPLE";
+
+        let (redacted_headers, redacted_body) = redact_for_h2_upstream(&headers, body, &engine);
+
+        // Even with enabled: false, the engine still processes data.
+        // The enabled flag controls whether the engine initializes patterns.
+        let body_str = String::from_utf8_lossy(&redacted_body);
+        assert!(!body_str.is_empty());
+        assert!(!redacted_headers[0].1.is_empty());
     }
 }

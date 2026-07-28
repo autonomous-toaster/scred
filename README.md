@@ -198,7 +198,10 @@ print(r.json())
 
 ### Node.js
 
+Node.js's built-in `fetch` requires `NODE_USE_ENV_PROXY=1` (Node.js 24+) to respect proxy env vars.
+
 ```sh
+NODE_USE_ENV_PROXY=1 \
 NODE_EXTRA_CA_CERTS=$HOME/.scred/ca.pem \
 node -e "
 const r = await fetch('https://httpbin.org/anything', {
