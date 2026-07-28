@@ -1,13 +1,13 @@
 use anyhow::{anyhow, Result};
 /// Proxy Environment Variable Resolution
 ///
-/// Respects standard environment variables:
-///   - http_proxy / HTTP_PROXY
-///   - https_proxy / HTTPS_PROXY
-///   - no_proxy / NO_PROXY
+/// NOTE: The MITM proxy does NOT use http_proxy/https_proxy env vars for
+/// upstream routing. These env vars are meant for CLIENTS to find the proxy,
+/// not for the proxy to find upstreams. If upstream proxy routing is needed,
+/// configure it via scred.yaml or a dedicated SCRED_UPSTREAM_PROXY env var.
 ///
-/// When SCRED connects to upstream servers, it checks these env vars
-/// to determine if it should route through an intermediate proxy.
+/// This module is kept for reference but the MITM proxy's upstream connector
+/// should not call MitmConfig::from_env() for upstream routing decisions.
 use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone)]

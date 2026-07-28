@@ -10,7 +10,7 @@ mod forward;
 /// - Three modes: PASSTHROUGH (no redaction), DETECT (detect & log), REDACT (detect & redact)
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
-use forward::{forward_via_http1_1, forward_via_http1_1_with_body};
+use forward::{forward_via_http1_1};
 use http::Request;
 use scred_redactor::RedactionEngine;
 use std::sync::Arc;
@@ -187,37 +187,6 @@ pub async fn handle_upstream_h2_connection(
     // Extract body from request
     let (request_parts, request_body) = request.into_parts();
 
-    // Check if upstream proxy is active (non-empty env vars)
-    let has_proxy = (std::env::var("http_proxy")
-        .map(|v| !v.is_empty())
-        .unwrap_or(false))
-        || (std::env::var("https_proxy")
-            .map(|v| !v.is_empty())
-            .unwrap_or(false))
-        || (std::env::var("HTTP_PROXY")
-            .map(|v| !v.is_empty())
-            .unwrap_or(false))
-        || (std::env::var("HTTPS_PROXY")
-            .map(|v| !v.is_empty())
-            .unwrap_or(false));
-
-    if has_proxy {
-        tracing::info!("[H2 Upstream] Upstream proxy detected - using HTTP/1.1 fallback");
-        return forward_via_http1_1_with_body(
-            &request_parts,
-            &request_body,
-            &engine,
-            &upstream_addr,
-            mode,
-            &detect_patterns,
-            &redact_patterns,
-        )
-        .await;
-    }
-
-    // No proxy: try H2 first, then fallback to HTTP/1.1
-    tracing::debug!("[H2 Upstream] No upstream proxy - attempting H2 direct connection");
-
     // Rebuild request with parts and body for H2 attempt
     let h2_request = http::Request::from_parts(request_parts.clone(), request_body.clone());
 
@@ -237,6 +206,7 @@ pub async fn handle_upstream_h2_connection(
                 &http1_request,
                 &engine,
                 &upstream_addr,
+                host,
                 mode,
                 &detect_patterns,
                 &redact_patterns,

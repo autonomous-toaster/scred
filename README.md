@@ -187,6 +187,8 @@ curl https://httpbin.org/anything -H "some-thing: AKIAIOSFODNN7EXAMPLE"
 
 ```sh
 REQUESTS_CA_BUNDLE=$HOME/.scred/ca.pem \
+HTTP_PROXY=http://localhost:8080 \
+HTTPS_PROXY=http://localhost:8080 \
 python3 -c "
 import requests
 r = requests.post('https://httpbin.org/anything',
@@ -203,6 +205,8 @@ Node.js's built-in `fetch` requires `NODE_USE_ENV_PROXY=1` (Node.js 24+) to resp
 ```sh
 NODE_USE_ENV_PROXY=1 \
 NODE_EXTRA_CA_CERTS=$HOME/.scred/ca.pem \
+HTTP_PROXY=http://localhost:8080 \
+HTTPS_PROXY=http://localhost:8080 \
 node -e "
 const r = await fetch('https://httpbin.org/anything', {
   method: 'POST',

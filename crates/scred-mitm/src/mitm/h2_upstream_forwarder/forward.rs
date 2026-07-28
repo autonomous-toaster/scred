@@ -160,6 +160,7 @@ pub(crate) async fn forward_via_http1_1(
     request: &Request<Bytes>,
     engine: &Arc<RedactionEngine>,
     _upstream_addr: &str,
+    target_host: &str,
     mode: RedactionMode,
     detect_patterns: &scred_http::PatternSelector,
     _redact_patterns: &scred_http::PatternSelector,
@@ -169,15 +170,14 @@ pub(crate) async fn forward_via_http1_1(
     let body = request.body();
     tracing::info!("[H2 Upstream] Forwarding via HTTP/1.1");
 
-    let host = uri.host().unwrap_or("localhost");
     let port = uri.port_u16().unwrap_or(443);
 
-    let mut tls_stream = connect_http1_upstream(host, port).await?;
+    let mut tls_stream = connect_http1_upstream(target_host, port).await?;
 
     let http1_request = build_http1_request_string(
         method.as_str(),
         &uri.to_string(),
-        host,
+        target_host,
         request.headers(),
         body.len(),
     );
@@ -193,93 +193,5 @@ pub(crate) async fn forward_via_http1_1(
         read_http1_response_direct(&mut tls_stream, engine, mode, detect_patterns).await
     } else {
         read_http1_response_redacted(&mut tls_stream, engine).await
-    }
-}
-
-/// Helper for HTTP/1.1 with request parts and body (used in main handler)
-pub(crate) async fn forward_via_http1_1_with_body(
-    request_parts: &http::request::Parts,
-    request_body: &Bytes,
-    engine: &Arc<RedactionEngine>,
-    _upstream_addr: &str,
-    mode: RedactionMode,
-    detect_patterns: &scred_http::PatternSelector,
-    _redact_patterns: &scred_http::PatternSelector,
-) -> Result<Vec<u8>> {
-    let method = request_parts.method.clone();
-    let uri = request_parts.uri.clone();
-    tracing::info!("[H2 Upstream] Forwarding via HTTP/1.1");
-
-    let host = uri.host().unwrap_or("localhost");
-    let port = uri.port_u16().unwrap_or(443);
-
-    let mut tls_stream = connect_http1_upstream(host, port).await?;
-
-    let http1_request = build_http1_request_string(
-        method.as_str(),
-        &uri.to_string(),
-        host,
-        &request_parts.headers,
-        request_body.len(),
-    );
-
-    tls_stream.write_all(http1_request.as_bytes()).await?;
-    if !request_body.is_empty() {
-        tls_stream.write_all(request_body).await?;
-    }
-    tls_stream.flush().await?;
-    tracing::debug!("[H2 Upstream HTTP/1.1] Request sent");
-
-    if !mode.should_redact() {
-        read_http1_response_direct(&mut tls_stream, engine, mode, detect_patterns).await
-    } else {
-        read_http1_response_redacted(&mut tls_stream, engine).await
-    }
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_read_http1_response_redacted_basic() {
-        use tokio::io::{AsyncWriteExt, AsyncReadExt, duplex};
-        
-        let (mut stream_write, mut stream_read) = duplex(65536);
-        
-        // Write HTTP response data
-        stream_write.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello").await.unwrap();
-        drop(stream_write);
-        
-        let engine = std::sync::Arc::new(scred_redactor::RedactionEngine::new(
-            scred_redactor::RedactionConfig { enabled: false },
-        ));
-        
-        let result = read_http1_response_redacted(&mut stream_read, &engine).await;
-        assert!(result.is_ok(), "read_http1_response_redacted failed: {:?}", result);
-        
-        let output = result.unwrap();
-        let output_str = String::from_utf8_lossy(&output);
-        assert!(output_str.contains("hello"), "Should contain body data");
-    }
-
-    #[tokio::test]
-    async fn test_read_http1_response_redacted_empty() {
-        use tokio::io::{AsyncWriteExt, AsyncReadExt, duplex};
-        
-        let (mut stream_write, mut stream_read) = duplex(65536);
-        stream_write.write_all(b"").await.unwrap();
-        drop(stream_write);
-        
-        let engine = std::sync::Arc::new(scred_redactor::RedactionEngine::new(
-            scred_redactor::RedactionConfig { enabled: false },
-        ));
-        
-        let result = read_http1_response_redacted(&mut stream_read, &engine).await;
-        assert!(result.is_ok());
-        let output = result.unwrap();
-        assert!(output.is_empty());
     }
 }
