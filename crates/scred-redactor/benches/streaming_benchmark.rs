@@ -80,7 +80,7 @@ fn benchmark_chunk_sizes(c: &mut Criterion) {
     let data = black_box(create_test_data(10 * 1024 * 1024));
 
     let mut group = c.benchmark_group("chunk_sizes");
-    group.sample_size(5);
+    group.sample_size(10);
 
     for chunk_size in [8192, 16384, 32768, 65536, 131072].iter() {
         let config = StreamingConfig {
@@ -110,7 +110,7 @@ fn benchmark_lookahead_sizes(c: &mut Criterion) {
     let data = black_box(create_test_data(10 * 1024 * 1024));
 
     let mut group = c.benchmark_group("lookahead_sizes");
-    group.sample_size(5);
+    group.sample_size(10);
 
     for lookahead_size in [128, 256, 512, 1024, 2048].iter() {
         let config = StreamingConfig {

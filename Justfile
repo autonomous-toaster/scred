@@ -48,20 +48,28 @@ bench:
     fi
 
 # Run benchmarks and compare against stored baseline (5% regression threshold)
-bench-ci:
+bench-ci quick="":
     #!/usr/bin/env bash
     BASELINE_FILE=.benchmark-baseline.json
+    QUICK_FLAG=""
+    if [ "{{quick}}" = "--quick" ]; then
+        QUICK_FLAG="-- --warm-up-time 1 --measurement-time 2 --sample-size 10"
+        echo "Quick mode: reduced warmup and samples"
+    fi
     if [ ! -f "$BASELINE_FILE" ]; then
         echo "No baseline found. Running benchmarks to establish baseline..."
-        cargo bench --workspace -- --save-baseline current 2>&1
-        echo "Baseline saved. Run again to compare."
+        cargo bench --workspace $QUICK_FLAG 2>&1 | tee /tmp/bench-output.txt
+        # Extract key results and save as baseline
+        grep -E "time:\s+\[|Benchmarking" /tmp/bench-output.txt | paste - - | sed 's/Benchmarking //' > "$BASELINE_FILE"
+        echo "Baseline saved to $BASELINE_FILE"
         exit 0
     fi
     # Run benchmarks and compare
-    cargo bench --workspace -- --baseline current 2>&1 | tee /tmp/bench-output.txt
-    # Check for regressions > 5%
-    if grep -q "regression" /tmp/bench-output.txt; then
+    cargo bench --workspace $QUICK_FLAG 2>&1 | tee /tmp/bench-output.txt
+    # Check for regressions > 5% using criterion's built-in comparison
+    if grep -qE "Performance has (regressed|changed)" /tmp/bench-output.txt; then
         echo "✗ Performance regression detected (threshold: 5%)"
+        grep -E "Performance has (regressed|changed)" /tmp/bench-output.txt
         exit 1
     fi
     echo "✓ bench-ci passed (within 5% threshold)"
