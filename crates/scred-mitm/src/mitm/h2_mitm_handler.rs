@@ -147,10 +147,12 @@ impl H2MitmHandler {
     }
 
     /// Process H2 headers with policy actions (Replace, Redact, Detect, Passthrough)
+    /// Falls back to secret redaction when no policy engine is configured.
     fn process_h2_headers(
         headers: &http::HeaderMap,
         host: &str,
         policy: &Option<Arc<PolicyEngine>>,
+        redaction_engine: &Arc<RedactionEngine>,
     ) -> http::HeaderMap {
         let mut result = http::HeaderMap::new();
 
@@ -159,7 +161,7 @@ impl H2MitmHandler {
                 continue;
             }
 
-            let processed_value = Self::apply_header_policy(name, value, host, policy);
+            let processed_value = Self::apply_header_policy(name, value, host, policy, redaction_engine);
             result.insert(name.clone(), processed_value);
         }
 
@@ -180,21 +182,32 @@ impl H2MitmHandler {
         )
     }
 
-    /// Apply policy to a header value (redact, replace, detect, or passthrough)
+    /// Apply policy to a header value (redact, replace, detect, or passthrough).
+    /// Falls back to secret redaction when no policy engine is configured.
     fn apply_header_policy(
         name: &http::HeaderName,
         value: &http::HeaderValue,
         host: &str,
         policy: &Option<Arc<PolicyEngine>>,
+        redaction_engine: &Arc<RedactionEngine>,
     ) -> http::HeaderValue {
+        let value_str = value.to_str().unwrap_or("");
+
         let Some(ref engine) = policy else {
-            return value.clone();
+            // No policy engine: apply secret redaction directly
+            let redacted = redaction_engine.redact(value_str);
+            if !redacted.matches.is_empty() {
+                tracing::debug!(
+                    "[H2] Redacted {} secret(s) in header: {}",
+                    redacted.matches.len(), name
+                );
+            }
+            return http::HeaderValue::from_str(&redacted.redacted).unwrap_or(value.clone());
         };
 
         use scred_config::HeaderAction;
         let resolved = engine.resolve_for_host(host);
         let action = resolved.header_action(name.as_str());
-        let value_str = value.to_str().unwrap_or("");
 
         match action {
             HeaderAction::Replace => {
@@ -294,8 +307,8 @@ impl H2MitmHandler {
         // Apply redaction to request body
         let redacted_body = Self::redact_h2_body(&request_body, &engine, &redact_patterns);
 
-        // Process headers with policy actions
-        let processed_headers = Self::process_h2_headers(&request_parts.headers, host, &policy);
+        // Process headers with policy actions (or secret redaction if no policy)
+        let processed_headers = Self::process_h2_headers(&request_parts.headers, host, &policy, &engine);
 
         // Build upstream request
         let mut builder = http::Request::builder()
@@ -423,26 +436,53 @@ mod tests {
 
     #[test]
     fn test_apply_header_policy_no_policy() {
+        let engine = Arc::new(RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
         let name = http::HeaderName::from_static("content-type");
         let value = http::HeaderValue::from_static("text/html");
-        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &None);
+        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &None, &engine);
         assert_eq!(result, "text/html");
+    }
+
+    #[test]
+    fn test_apply_header_policy_no_policy_redacts_secrets() {
+        let engine = Arc::new(RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+        let name = http::HeaderName::from_static("x-api-key");
+        let value = http::HeaderValue::from_static("AKIAIOSFODNN7EXAMPLE");
+        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &None, &engine);
+        let result_str = result.to_str().unwrap();
+        assert!(
+            !result_str.contains("AKIAIOSFODNN7EXAMPLE"),
+            "Secret should be redacted, got: {}",
+            result_str
+        );
+        assert!(
+            result_str.contains("AKIA"),
+            "Prefix should be preserved, got: {}",
+            result_str
+        );
     }
 
     #[test]
     fn test_apply_header_policy_with_disabled_policy() {
         use std::sync::Arc;
         use scred_policy::PolicyEngine;
+        let engine = Arc::new(RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
         let config = scred_config::PolicyConfig {
             enabled: false,
             providers: vec![],
             ..Default::default()
         };
-        let engine = Arc::new(PolicyEngine::new(config).unwrap());
-        let policy = Some(engine);
+        let policy_engine = Arc::new(PolicyEngine::new(config).unwrap());
+        let policy = Some(policy_engine);
         let name = http::HeaderName::from_static("content-type");
         let value = http::HeaderValue::from_static("text/html");
-        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &policy);
+        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &policy, &engine);
         assert_eq!(result, "text/html");
     }
 
@@ -450,16 +490,78 @@ mod tests {
     fn test_apply_header_policy_with_enabled_policy() {
         use std::sync::Arc;
         use scred_policy::PolicyEngine;
+        let engine = Arc::new(RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
         let config = scred_config::PolicyConfig {
             enabled: true,
             providers: vec![],
             ..Default::default()
         };
-        let engine = Arc::new(PolicyEngine::new(config).unwrap());
-        let policy = Some(engine);
+        let policy_engine = Arc::new(PolicyEngine::new(config).unwrap());
+        let policy = Some(policy_engine);
         let name = http::HeaderName::from_static("authorization");
         let value = http::HeaderValue::from_static("Bearer token-12345");
-        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &policy);
+        let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &policy, &engine);
         assert_eq!(result, "Bearer token-12345");
+    }
+
+    #[test]
+    fn test_process_h2_headers_redacts_secrets() {
+        let engine = Arc::new(RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+        let mut headers = http::HeaderMap::new();
+        headers.insert("content-type", "text/plain".parse().unwrap());
+        headers.insert("x-api-key", "AKIAIOSFODNN7EXAMPLE".parse().unwrap());
+        headers.insert("authorization", "Bearer sk-proj-test123".parse().unwrap());
+
+        let result = H2MitmHandler::process_h2_headers(&headers, "example.com", &None, &engine);
+
+        // Non-secret header should be unchanged
+        assert_eq!(
+            result.get("content-type").unwrap().to_str().unwrap(),
+            "text/plain"
+        );
+
+        // Secret headers should be redacted
+        let api_key = result.get("x-api-key").unwrap().to_str().unwrap();
+        assert!(
+            !api_key.contains("AKIAIOSFODNN7EXAMPLE"),
+            "AWS key should be redacted, got: {}",
+            api_key
+        );
+
+        let auth = result.get("authorization").unwrap().to_str().unwrap();
+        assert!(
+            !auth.contains("sk-proj-test123"),
+            "OpenAI key should be redacted, got: {}",
+            auth
+        );
+    }
+
+    #[test]
+    fn test_process_h2_headers_preserves_hop_by_hop() {
+        let engine = Arc::new(RedactionEngine::new(
+            scred_redactor::RedactionConfig { enabled: true },
+        ));
+        let mut headers = http::HeaderMap::new();
+        headers.insert("connection", "keep-alive".parse().unwrap());
+        headers.insert("transfer-encoding", "chunked".parse().unwrap());
+        headers.insert("x-custom", "AKIAIOSFODNN7EXAMPLE".parse().unwrap());
+
+        let result = H2MitmHandler::process_h2_headers(&headers, "example.com", &None, &engine);
+
+        // Hop-by-hop headers should be removed
+        assert!(result.get("connection").is_none());
+        assert!(result.get("transfer-encoding").is_none());
+
+        // Non-hop-by-hop headers with secrets should be redacted
+        let custom = result.get("x-custom").unwrap().to_str().unwrap();
+        assert!(
+            !custom.contains("AKIAIOSFODNN7EXAMPLE"),
+            "Secret should be redacted, got: {}",
+            custom
+        );
     }
 }
