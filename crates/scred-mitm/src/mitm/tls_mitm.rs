@@ -351,33 +351,37 @@ fn redact_for_h2_upstream(
     body: &[u8],
     redaction_engine: &Arc<scred_redactor::RedactionEngine>,
 ) -> (Vec<(String, String)>, Vec<u8>) {
-    use scred_redactor::streaming::StreamingRedactor;
-    
-    let redactor = StreamingRedactor::with_defaults(redaction_engine.clone());
-    
-    // Redact header values (not header names)
-    let mut redacted_headers = Vec::new();
+    // Detect-only for headers: log secrets, pass through unchanged
+    let mut detected_headers = Vec::new();
     for (name, value) in headers {
         let name_lower = name.to_lowercase();
         // Skip hop-by-hop headers
         if name_lower == "host" || name_lower == "connection" || name_lower == "transfer-encoding" {
-            redacted_headers.push((name.clone(), value.clone()));
+            detected_headers.push((name.clone(), value.clone()));
             continue;
         }
-        // Redact header value
-        let (redacted_value, _) = redactor.redact_buffer(value.as_bytes());
-        redacted_headers.push((name.clone(), redacted_value));
+        // Detect secrets in header value (don't modify)
+        let detection = scred_redactor::scred_detector::detect_all(value.as_bytes());
+        for m in &detection.matches {
+            tracing::info!(
+                "[H2] Detected {} in header: {}",
+                m.pattern_type, name
+            );
+        }
+        detected_headers.push((name.clone(), value.clone()));
     }
     
     // Redact body
     let redacted_body = if !body.is_empty() {
+        use scred_redactor::streaming::StreamingRedactor;
+        let redactor = StreamingRedactor::with_defaults(redaction_engine.clone());
         let (redacted, _) = redactor.redact_buffer(body);
         redacted.into_bytes()
     } else {
         Vec::new()
     };
     
-    (redacted_headers, redacted_body)
+    (detected_headers, redacted_body)
 }
 
 /// Handle HTTP/2 upstream request forwarding
@@ -844,23 +848,21 @@ mod tests {
         ];
         let body = b"api_key=AKIAIOSFODNN7EXAMPLE&secret=sk-proj-test456";
 
-        let (redacted_headers, redacted_body) = redact_for_h2_upstream(&headers, body, &engine);
+        let (detected_headers, redacted_body) = redact_for_h2_upstream(&headers, body, &engine);
 
         // Non-secret headers should be unchanged
-        assert_eq!(redacted_headers[0].1, "text/plain");
+        assert_eq!(detected_headers[0].1, "text/plain");
 
-        // Secret header values should be redacted
-        assert!(
-            redacted_headers[1].1.contains("AKIA"),
-            "Should still contain prefix"
+        // Secret header values should pass through UNCHANGED (detect-only)
+        assert_eq!(
+            detected_headers[1].1,
+            "AKIAIOSFODNN7EXAMPLE",
+            "AWS key should pass through unchanged (detect-only)"
         );
-        assert!(
-            !redacted_headers[1].1.contains("AKIAIOSFODNN7EXAMPLE"),
-            "Full secret should be redacted"
-        );
-        assert!(
-            !redacted_headers[2].1.contains("sk-proj-test123"),
-            "OpenAI key should be redacted"
+        assert_eq!(
+            detected_headers[2].1,
+            "Bearer sk-proj-test123",
+            "OpenAI key should pass through unchanged (detect-only)"
         );
 
         // Body should be redacted
@@ -889,15 +891,19 @@ mod tests {
         ];
         let body = b"";
 
-        let (redacted_headers, _) = redact_for_h2_upstream(&headers, body, &engine);
+        let (detected_headers, _) = redact_for_h2_upstream(&headers, body, &engine);
 
         // Hop-by-hop headers should be preserved as-is
-        assert_eq!(redacted_headers[0].1, "api.example.com");
-        assert_eq!(redacted_headers[1].1, "keep-alive");
-        assert_eq!(redacted_headers[2].1, "chunked");
+        assert_eq!(detected_headers[0].1, "api.example.com");
+        assert_eq!(detected_headers[1].1, "keep-alive");
+        assert_eq!(detected_headers[2].1, "chunked");
 
-        // Non-hop-by-hop headers with secrets should be redacted
-        assert!(!redacted_headers[3].1.contains("AKIAIOSFODNN7EXAMPLE"));
+        // Non-hop-by-hop headers should pass through unchanged (detect-only)
+        assert_eq!(
+            detected_headers[3].1,
+            "AKIAIOSFODNN7EXAMPLE",
+            "Secret should pass through unchanged (detect-only)"
+        );
     }
 
     #[test]

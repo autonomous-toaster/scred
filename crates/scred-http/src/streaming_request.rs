@@ -79,18 +79,23 @@ where
     upstream_writer.write_all(req_line.as_bytes()).await?;
     debug!("[stream_request_to_upstream] STEP 2 DONE: Request line sent");
 
-    // 3. Forward headers to upstream (no redaction needed - headers don't contain secrets in body)
-    // Actually, headers might contain Authorization, so we should redact them too
-    debug!("[stream_request_to_upstream] STEP 3: Redacting and writing headers to upstream...");
-    let (redacted_headers, _) = redactor.redact_buffer(headers.raw_headers.as_bytes());
-    // NOTE: raw_headers already includes the final \r\n blank line, don't add another!
-    let headers_len = redacted_headers.len();
+    // 3. Forward headers to upstream (detect-only: log secrets, don't modify)
+    debug!("[stream_request_to_upstream] STEP 3: Detecting secrets in headers, forwarding unchanged...");
+    for (name, value) in &headers.headers {
+        let detection = scred_redactor::scred_detector::detect_all(value.as_bytes());
+        for m in &detection.matches {
+            tracing::info!(
+                "[proxy] Detected {} in header: {}",
+                m.pattern_type, name
+            );
+        }
+    }
     upstream_writer
-        .write_all(redacted_headers.as_bytes())
+        .write_all(headers.raw_headers.as_bytes())
         .await?;
     debug!(
         "[stream_request_to_upstream] STEP 3 DONE: Headers sent ({} bytes)",
-        headers_len
+        headers.raw_headers.len()
     );
 
     // 4. Stream body through redactor

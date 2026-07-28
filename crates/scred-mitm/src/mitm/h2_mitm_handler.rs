@@ -194,15 +194,15 @@ impl H2MitmHandler {
         let value_str = value.to_str().unwrap_or("");
 
         let Some(ref engine) = policy else {
-            // No policy engine: apply secret redaction directly
-            let redacted = redaction_engine.redact(value_str);
-            if !redacted.matches.is_empty() {
-                tracing::debug!(
-                    "[H2] Redacted {} secret(s) in header: {}",
-                    redacted.matches.len(), name
+            // No policy engine: detect-only for headers (log, don't modify)
+            let detection = scred_redactor::scred_detector::detect_all(value_str.as_bytes());
+            for m in &detection.matches {
+                tracing::info!(
+                    "[H2] Detected {} in header: {}",
+                    m.pattern_type, name
                 );
             }
-            return http::HeaderValue::from_str(&redacted.redacted).unwrap_or(value.clone());
+            return value.clone();
         };
 
         use scred_config::HeaderAction;
@@ -446,7 +446,7 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_header_policy_no_policy_redacts_secrets() {
+    fn test_apply_header_policy_no_policy_detects_secrets() {
         let engine = Arc::new(RedactionEngine::new(
             scred_redactor::RedactionConfig { enabled: true },
         ));
@@ -454,14 +454,11 @@ mod tests {
         let value = http::HeaderValue::from_static("AKIAIOSFODNN7EXAMPLE");
         let result = H2MitmHandler::apply_header_policy(&name, &value, "example.com", &None, &engine);
         let result_str = result.to_str().unwrap();
-        assert!(
-            !result_str.contains("AKIAIOSFODNN7EXAMPLE"),
-            "Secret should be redacted, got: {}",
-            result_str
-        );
-        assert!(
-            result_str.contains("AKIA"),
-            "Prefix should be preserved, got: {}",
+        // Detect-only: value should pass through unchanged
+        assert_eq!(
+            result_str,
+            "AKIAIOSFODNN7EXAMPLE",
+            "Secret should pass through unchanged (detect-only), got: {}",
             result_str
         );
     }
@@ -507,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_h2_headers_redacts_secrets() {
+    fn test_process_h2_headers_detects_secrets() {
         let engine = Arc::new(RedactionEngine::new(
             scred_redactor::RedactionConfig { enabled: true },
         ));
@@ -524,18 +521,20 @@ mod tests {
             "text/plain"
         );
 
-        // Secret headers should be redacted
+        // Secret headers should be forwarded UNCHANGED (detect-only)
         let api_key = result.get("x-api-key").unwrap().to_str().unwrap();
-        assert!(
-            !api_key.contains("AKIAIOSFODNN7EXAMPLE"),
-            "AWS key should be redacted, got: {}",
+        assert_eq!(
+            api_key,
+            "AKIAIOSFODNN7EXAMPLE",
+            "AWS key should pass through unchanged (detect-only), got: {}",
             api_key
         );
 
         let auth = result.get("authorization").unwrap().to_str().unwrap();
-        assert!(
-            !auth.contains("sk-proj-test123"),
-            "OpenAI key should be redacted, got: {}",
+        assert_eq!(
+            auth,
+            "Bearer sk-proj-test123",
+            "OpenAI key should pass through unchanged (detect-only), got: {}",
             auth
         );
     }
@@ -556,11 +555,12 @@ mod tests {
         assert!(result.get("connection").is_none());
         assert!(result.get("transfer-encoding").is_none());
 
-        // Non-hop-by-hop headers with secrets should be redacted
+        // Non-hop-by-hop headers should pass through unchanged (detect-only)
         let custom = result.get("x-custom").unwrap().to_str().unwrap();
-        assert!(
-            !custom.contains("AKIAIOSFODNN7EXAMPLE"),
-            "Secret should be redacted, got: {}",
+        assert_eq!(
+            custom,
+            "AKIAIOSFODNN7EXAMPLE",
+            "Secret should pass through unchanged (detect-only), got: {}",
             custom
         );
     }
