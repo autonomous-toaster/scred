@@ -402,6 +402,8 @@ async fn handle_h2_upstream_request<RW: AsyncReadExt + AsyncWriteExt + Unpin>(
     let method = parts.next().unwrap_or("GET");
     let path = parts.next().unwrap_or("/");
     
+    tracing::info!("{} https://{}{}", method, target_host, path);
+    
     // Read client headers
     let mut client_buf = BufReader::new(&mut *client_tls);
     let headers = parse_http_headers(&mut client_buf, false)
@@ -588,6 +590,11 @@ where
         ).await;
     }
 
+    // Access log for HTTP/1.1 upstream path
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or("GET");
+    let path = parts.next().unwrap_or("/");
+    info!("{} https://{}{}", method, target_host, path);
 
     // Step 3: Create redactor for streaming
     let redactor = Arc::new(StreamingRedactor::with_defaults(redaction_engine));

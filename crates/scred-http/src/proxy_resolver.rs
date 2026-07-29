@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 ///
 /// This module is kept for reference but the MITM proxy's upstream connector
 /// should not call MitmConfig::from_env() for upstream routing decisions.
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone)]
 pub struct MitmConfig {
@@ -251,8 +251,9 @@ pub async fn connect_through_proxy(
 
     let response = String::from_utf8_lossy(&response_buf[..n]);
     if !response.contains("200") {
-        error!("Proxy rejected CONNECT: {}", response);
-        return Err(anyhow!("Proxy rejected CONNECT (not 200 response)"));
+        let status_line = response.lines().next().unwrap_or("");
+        warn!("Proxy blocked CONNECT to {}:{} - {}", target_host, target_port, status_line);
+        return Err(anyhow!("Proxy blocked CONNECT to {}:{} - {}", target_host, target_port, status_line));
     }
 
     info!("CONNECT tunnel established (200 OK)");

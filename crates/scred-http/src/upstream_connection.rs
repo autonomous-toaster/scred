@@ -106,8 +106,8 @@ pub async fn connect_through_proxy(
     let response = String::from_utf8_lossy(&response_buf[..n]);
     if !response.contains("200") {
         let status_line = response.lines().next().unwrap_or("");
-        warn!("Proxy rejected CONNECT: {}", status_line);
-        return Err(anyhow!("Proxy rejected CONNECT: {}", status_line));
+        warn!("Proxy blocked CONNECT to {}:{} - {}", target_host, target_port, status_line);
+        return Err(anyhow!("Proxy blocked CONNECT to {}:{} - {}", target_host, target_port, status_line));
     }
 
     info!(

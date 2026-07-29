@@ -284,7 +284,7 @@ impl H2MitmHandler {
     ) -> Result<()> {
         let method = request.method().clone();
         let uri = request.uri().clone();
-        tracing::debug!("[H2] Stream: {} {}", method, uri);
+        tracing::info!("{} {}", method, uri);
 
         // Extract request parts and body
         let (request_parts, mut recv_stream) = request.into_parts();
