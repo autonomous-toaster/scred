@@ -265,6 +265,11 @@ async fn main() -> anyhow::Result<()> {
     let mut config =
         load_mitm_config_from_file()?.unwrap_or_else(|| Config::load().unwrap_or_default());
 
+    // The file build above starts from defaults, so the SCRED_* overrides have to
+    // be applied here as well -- otherwise SCRED_REDACTION_MODE=redact is dropped
+    // as soon as a config file is present, and response bodies are only scanned.
+    config.apply_env_overrides();
+
     // Apply environment overrides
     if let Ok(listen) = env::var("SCRED_MITM_LISTEN") {
         config.proxy.listen = listen;

@@ -233,7 +233,13 @@ impl Config {
     }
 
     /// Apply environment variable overrides to config
-    fn apply_env_overrides(&mut self) {
+    /// Apply the SCRED_* environment overrides on top of whatever was loaded.
+    ///
+    /// `load()` calls this itself; callers that build a config another way --
+    /// `main`, which prefers the combined scred.yaml -- must call it too, or a
+    /// setting such as SCRED_REDACTION_MODE is silently ignored whenever a
+    /// config file exists.
+    pub fn apply_env_overrides(&mut self) {
         self.apply_proxy_env_overrides();
         self.apply_tls_env_overrides();
         self.apply_logging_env_overrides();

@@ -102,91 +102,39 @@ async fn read_http1_response_direct(
     Ok((status, body))
 }
 
-/// Read HTTP/1.1 response with streaming redaction (for REDACT mode)
+/// Read HTTP/1.1 response in REDACT mode.
+///
+/// Buffer the response so the header block and the body can be told apart: the
+/// client must receive the body only, with the status carried separately. The
+/// earlier version piped the whole stream -- status line and headers included --
+/// through the redactor, so whenever the header/body boundary fell outside the
+/// first read the client got a body that began with "HTTP/1.1 200 OK" and was cut
+/// mid-header.
+///
+/// Redaction itself is length-preserving, so the buffered body can go through the
+/// redactor in one pass once EOF arrives (the upstream request asks for
+/// "Connection: close").
 async fn read_http1_response_redacted(
     tls_stream: &mut (impl AsyncReadExt + Unpin + AsyncWriteExt),
     engine: &Arc<RedactionEngine>,
 ) -> Result<(StatusCode, Vec<u8>)> {
-    tracing::debug!("[H2 Upstream HTTP/1.1] Mode: REDACT - Using streaming redaction");
+    tracing::debug!("[H2 Upstream HTTP/1.1] Mode: REDACT - buffering, then redacting the body");
+    let response_bytes = read_response_direct(tls_stream).await?;
+    let status = parse_status_from_response(&response_bytes)?;
+    let body = extract_http_response_body(&response_bytes)?;
 
-    // Read first chunk to extract status line
-    let mut first_buf = vec![0u8; 8192];
-    let first_n = tls_stream.read(&mut first_buf).await?;
-    if first_n == 0 {
-        return Err(anyhow!("Connection closed before response"));
-    }
-
-    // Parse status from the first chunk
-    let status = parse_status_from_response(&first_buf[..first_n])?;
-
-    let streaming_redactor = StreamingRedactor::with_defaults(engine.clone());
-    let config = StreamingConfig::default();
-    let mut response_output = Vec::new();
-    let mut lookahead = Vec::with_capacity(config.lookahead_size);
-    let mut body_started = false;
-
-    // Process the first chunk through redactor (skipping status line + headers)
-    let (redacted, _, _) =
-        streaming_redactor.process_chunk(&first_buf[..first_n], &mut lookahead, false);
-
-    if let Some(header_end) = redacted.find("\r\n\r\n") {
-        body_started = true;
-        response_output.extend_from_slice(redacted[header_end + 4..].as_bytes());
-    } else if let Some(header_end) = redacted.find("\n\n") {
-        body_started = true;
-        response_output.extend_from_slice(redacted[header_end + 2..].as_bytes());
-    }
-
-    // Continue reading remaining chunks
-    let mut read_buf = vec![0u8; config.chunk_size];
-    let mut bytes_read = first_n as u64;
-
-    loop {
-        match tls_stream.read(&mut read_buf).await {
-            Ok(0) => {
-                if !lookahead.is_empty() {
-                    let (redacted, _, _) =
-                        streaming_redactor.process_chunk(&lookahead, &mut vec![], true);
-                    response_output.extend_from_slice(redacted.as_bytes());
-                }
-                break;
-            }
-            Ok(n) => {
-                bytes_read += n as u64;
-                let (redacted, _, _) =
-                    streaming_redactor.process_chunk(&read_buf[..n], &mut lookahead, false);
-
-                if !body_started {
-                    if let Some(header_end) = redacted.find("\r\n\r\n") {
-                        body_started = true;
-                        response_output.extend_from_slice(redacted[header_end + 4..].as_bytes());
-                    } else if let Some(header_end) = redacted.find("\n\n") {
-                        body_started = true;
-                        response_output.extend_from_slice(redacted[header_end + 2..].as_bytes());
-                    }
-                } else {
-                    response_output.extend_from_slice(redacted.as_bytes());
-                }
-            }
-            Err(e) => {
-                if is_connection_closed_error(&e) {
-                    tracing::debug!("[H2 Upstream HTTP/1.1] Connection closed by peer: {}", e);
-                    break;
-                } else {
-                    tracing::warn!("[H2 Upstream HTTP/1.1] Real read error: {}", e);
-                    return Err(anyhow!("Read error: {}", e));
-                }
-            }
-        }
-    }
+    let redactor = StreamingRedactor::with_defaults(engine.clone());
+    let mut lookahead = Vec::new();
+    let (redacted, _patterns, _bytes) = redactor.process_chunk(&body, &mut lookahead, true);
 
     tracing::info!(
-        "[H2 Upstream HTTP/1.1] Response received: {} bytes read, {} bytes output",
-        bytes_read,
-        response_output.len()
+        "[H2 Upstream HTTP/1.1] Response: status={}, {} body bytes in, {} out",
+        status.as_u16(),
+        body.len(),
+        redacted.len()
     );
 
-    Ok((status, response_output))
+    Ok((status, redacted.into_bytes()))
 }
 
 /// Connect to upstream via HTTP/1.1 and establish TLS
