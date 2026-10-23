@@ -185,7 +185,13 @@ pub async fn handle_upstream_h2_connection(
     );
 
     // Extract body from request
-    let (request_parts, request_body) = request.into_parts();
+    let (mut request_parts, request_body) = request.into_parts();
+
+    // A forward-proxy client sends an absolute-form target ("https://host/path")
+    // and we forward it verbatim; an origin server -- or anything that only
+    // speaks origin-form, such as a credential-injecting interceptor -- answers
+    // 400 to that. Send "/path" with the host in Host/:authority instead.
+    origin_form(&mut request_parts.uri);
 
     // Rebuild request with parts and body for H2 attempt
     let h2_request = http::Request::from_parts(request_parts.clone(), request_body.clone());
@@ -374,3 +380,16 @@ async fn try_forward_h2(
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+/// Rewrite an absolute-form request target to origin-form, leaving other forms
+/// untouched: a forward-proxy client sends `GET https://example.com/a?b HTTP/1.1`
+/// and upstream must receive `GET /a?b HTTP/1.1` with `Host: example.com`.
+fn origin_form(uri: &mut http::Uri) {
+    if uri.scheme().is_none() && uri.authority().is_none() {
+        return;
+    }
+    let target = uri.path_and_query().map(|p| p.as_str()).unwrap_or("/");
+    if let Ok(parsed) = target.parse::<http::Uri>() {
+        *uri = parsed;
+    }
+}

@@ -174,9 +174,12 @@ pub(crate) async fn forward_via_http1_1(
 
     let mut tls_stream = connect_http1_upstream(target_host, port).await?;
 
+    // Origin-form: the client's absolute-form proxy target is for proxies, not
+    // for the origin server we are now talking to directly.
+    let target = uri.path_and_query().map(|p| p.as_str()).unwrap_or("/");
     let http1_request = build_http1_request_string(
         method.as_str(),
-        &uri.to_string(),
+        target,
         target_host,
         request.headers(),
         body.len(),
