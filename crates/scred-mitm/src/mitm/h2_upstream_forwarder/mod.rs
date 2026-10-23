@@ -159,7 +159,7 @@ fn parse_header_lines(header_block: &[u8]) -> Vec<(String, String)> {
 
 /// Decode a chunked body, stopping at the terminating chunk. Tolerates a
 /// truncated tail: whatever was decoded so far is returned.
-fn dechunk(body: &[u8]) -> Vec<u8> {
+pub(crate) fn dechunk(body: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(body.len());
     let mut pos = 0usize;
     while pos < body.len() {

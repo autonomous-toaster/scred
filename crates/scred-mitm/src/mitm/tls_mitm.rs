@@ -322,28 +322,97 @@ async fn forward_response_no_redaction<U: AsyncReadExt + AsyncWriteExt + Unpin, 
     client_tls: &mut C,
     response_line: &str,
 ) -> std::io::Result<()> {
+    use crate::mitm::h2_upstream_forwarder::dechunk;
+
     let mut upstream_buf_reader = BufReader::new(&mut *upstream);
-    
+
     let headers = scred_http::http_headers::parse_http_headers(&mut upstream_buf_reader, true)
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-    
-    client_tls.write_all(format!("{}\r\n", response_line).as_bytes()).await?;
-    client_tls.write_all(headers.raw_headers.as_bytes()).await?;
-    client_tls.write_all(b"\r\n").await?;
-    
+
+    // Read the body the way it is framed upstream, then hand the client a plain
+    // Content-Length body. Forwarding the bytes verbatim used to break: the client
+    // was told "transfer-encoding: chunked" but received framing it could not
+    // parse ("Illegal or missing hexadecimal sequence"), and a keep-alive upstream
+    // meant EOF never arrived and the client hung.
+    let mut raw = Vec::new();
     let mut buffer = vec![0u8; 65536];
-    loop {
-        match upstream_buf_reader.get_mut().read(&mut buffer).await {
-            Ok(0) => break,
-            Ok(n) => client_tls.write_all(&buffer[..n]).await?,
-            Err(e) => {
-                warn!("Error reading response body: {}", e);
-                return Err(e);
+    if let Some(content_length) = headers.content_length {
+        let mut remaining = content_length;
+        while remaining > 0 {
+            let take = std::cmp::min(remaining, buffer.len());
+            match upstream_buf_reader.read(&mut buffer[..take]).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    raw.extend_from_slice(&buffer[..n]);
+                    remaining -= n;
+                }
+                Err(e) => {
+                    if crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&e) {
+                        break;
+                    }
+                    warn!("Error reading response body: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+    } else if headers.is_chunked() {
+        loop {
+            match upstream_buf_reader.read(&mut buffer).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    raw.extend_from_slice(&buffer[..n]);
+                    if raw.ends_with(b"0\r\n\r\n") || raw.ends_with(b"0\r\n\n") {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    if crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&e) {
+                        break;
+                    }
+                    warn!("Error reading response body: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+    } else {
+        loop {
+            match upstream_buf_reader.read(&mut buffer).await {
+                Ok(0) => break,
+                Ok(n) => raw.extend_from_slice(&buffer[..n]),
+                Err(e) => {
+                    if crate::mitm::h2_upstream_forwarder::is_connection_closed_error(&e) {
+                        break;
+                    }
+                    warn!("Error reading response body: {}", e);
+                    return Err(e);
+                }
             }
         }
     }
-    
+
+    let body = if headers.is_chunked() {
+        dechunk(&raw)
+    } else {
+        raw
+    };
+
+    client_tls.write_all(format!("{}\r\n", response_line).as_bytes()).await?;
+    for (name, value) in &headers.headers {
+        if name.eq_ignore_ascii_case("content-length")
+            || name.eq_ignore_ascii_case("transfer-encoding")
+            || name.eq_ignore_ascii_case("connection")
+        {
+            continue;
+        }
+        client_tls
+            .write_all(format!("{}: {}\r\n", name, value).as_bytes())
+            .await?;
+    }
+    client_tls
+        .write_all(format!("Content-Length: {}\r\n\r\n", body.len()).as_bytes())
+        .await?;
+    client_tls.write_all(&body).await?;
     client_tls.flush().await
 }
 
