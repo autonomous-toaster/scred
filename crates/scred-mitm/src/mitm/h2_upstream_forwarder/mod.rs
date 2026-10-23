@@ -94,30 +94,91 @@ pub(crate) async fn read_response_direct(
 
 /// Extract HTTP response body from full HTTP response (headers + body)
 pub(crate) fn extract_http_response_body(response: &[u8]) -> Result<Vec<u8>> {
-    let response_str = String::from_utf8_lossy(response);
-
-    // Find HTTP header terminator
-    if let Some(pos) = response_str.find("\r\n\r\n") {
-        let body = &response[pos + 4..];
+    let Some((header_end, body_start)) = find_header_end(response) else {
         tracing::debug!(
-            "[H2 Upstream HTTP/1.1] Extracted body: {} bytes",
-            body.len()
+            "[H2 Upstream HTTP/1.1] No header terminator found, returning full response"
         );
-        return Ok(body.to_vec());
+        return Ok(response.to_vec());
+    };
+
+    let headers = parse_header_lines(&response[..header_end]);
+    let mut chunked = false;
+    let mut content_length: Option<usize> = None;
+    for (name, value) in &headers {
+        match name.as_str() {
+            "transfer-encoding" if value.to_ascii_lowercase().contains("chunked") => chunked = true,
+            "content-length" => content_length = value.trim().parse::<usize>().ok(),
+            _ => {}
+        }
     }
 
-    if let Some(pos) = response_str.find("\n\n") {
-        let body = &response[pos + 2..];
+    let raw = &response[body_start..];
+    let body = if chunked {
+        // A chunked body arrives with its framing ("1a2b\r\n<data>\r\n…0\r\n\r\n"). We
+        // answer the client with a Content-Length, so the framing must go: without
+        // this the client reads "174" as the first bytes of its JSON or SSE stream.
+        let decoded = dechunk(raw);
         tracing::debug!(
-            "[H2 Upstream HTTP/1.1] Extracted body (LF only): {} bytes",
-            body.len()
+            "[H2 Upstream HTTP/1.1] De-chunked body: {} -> {} bytes",
+            raw.len(),
+            decoded.len()
         );
-        return Ok(body.to_vec());
-    }
+        decoded
+    } else if let Some(len) = content_length {
+        raw[..len.min(raw.len())].to_vec()
+    } else {
+        raw.to_vec()
+    };
 
-    // No headers found - return response as-is
-    tracing::debug!("[H2 Upstream HTTP/1.1] No header terminator found, returning full response");
-    Ok(response.to_vec())
+    tracing::debug!("[H2 Upstream HTTP/1.1] Extracted body: {} bytes", body.len());
+    Ok(body)
+}
+
+/// Offset of the header block and of the first body byte.
+fn find_header_end(response: &[u8]) -> Option<(usize, usize)> {
+    if let Some(p) = response.windows(4).position(|w| w == b"\r\n\r\n") {
+        return Some((p, p + 4));
+    }
+    response
+        .windows(2)
+        .position(|w| w == b"\n\n")
+        .map(|p| (p, p + 2))
+}
+
+/// Lowercased (name, value) pairs from a raw header block.
+fn parse_header_lines(header_block: &[u8]) -> Vec<(String, String)> {
+    let text = String::from_utf8_lossy(header_block);
+    text.lines()
+        .skip(1) // status line
+        .filter_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            Some((name.trim().to_ascii_lowercase(), value.trim().to_string()))
+        })
+        .collect()
+}
+
+/// Decode a chunked body, stopping at the terminating chunk. Tolerates a
+/// truncated tail: whatever was decoded so far is returned.
+fn dechunk(body: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(body.len());
+    let mut pos = 0usize;
+    while pos < body.len() {
+        let Some(eol) = body[pos..].windows(2).position(|w| w == b"\r\n") else {
+            break;
+        };
+        let size_line = &body[pos..pos + eol];
+        let size_hex = size_line.split(|b| *b == b';').next().unwrap_or(size_line);
+        let Ok(size_str) = std::str::from_utf8(size_hex) else { break };
+        let Ok(size) = usize::from_str_radix(size_str.trim(), 16) else { break };
+        pos += eol + 2;
+        if size == 0 {
+            break;
+        }
+        let end = (pos + size).min(body.len());
+        out.extend_from_slice(&body[pos..end]);
+        pos = end + 2;
+    }
+    out
 }
 
 /// Log detected secrets in response without redacting
@@ -187,11 +248,9 @@ pub async fn handle_upstream_h2_connection(
     // Extract body from request
     let (mut request_parts, request_body) = request.into_parts();
 
-    // Clients that reach us as a forward proxy send an absolute-form target
-    // ("https://host/path?q"), and we used to forward that verbatim. An origin
-    // server -- and anything that only speaks origin-form, such as a credential
-    // interceptor -- needs "/path?q" with the host in the Host/:authority field.
-    origin_form(&mut request_parts.uri);
+    // Keep the absolute target here: HTTP/2 derives :scheme and :authority from
+    // the URI, and an origin-form URI produces an invalid request. The HTTP/1.1
+    // writer takes path_and_query() itself (see forward_via_http1_1).
 
     // Rebuild request with parts and body for H2 attempt
     let h2_request = http::Request::from_parts(request_parts.clone(), request_body.clone());
@@ -236,6 +295,28 @@ async fn connect_h2_upstream(host: &str) -> Result<(client::SendRequest<Bytes>, 
     let tcp_stream = connect_tcp(&conn_config).await?;
     let tls_stream = establish_tls_h2(tcp_stream, host).await?;
     tracing::debug!("[H2 Upstream] TLS handshake complete with {}", host);
+
+    // Speak h2 only if the peer actually agreed to it. Announcing h2 and then
+    // sending HTTP/2 frames to a hop that negotiated http/1.1 is how a request
+    // ends up answered with a bogus 400 (or an empty 200): the hop parses our
+    // frames as HTTP/1.1. Return an error so the caller takes the HTTP/1.1 path,
+    // which is what the peer asked for.
+    let negotiated = tls_stream
+        .get_ref()
+        .1
+        .alpn_protocol()
+        .map(|p| p.to_vec());
+    if negotiated.as_deref() != Some(b"h2") {
+        let shown = negotiated
+            .as_deref()
+            .map(|p| String::from_utf8_lossy(p).to_string())
+            .unwrap_or_else(|| "none".to_string());
+        return Err(anyhow!(
+            "upstream {} negotiated ALPN {}, not h2",
+            host,
+            shown
+        ));
+    }
 
     let (send_request, connection) = client::handshake(tls_stream).await?;
     tracing::debug!("[H2 Upstream] H2 client handshake complete");
@@ -385,16 +466,3 @@ async fn try_forward_h2(
 #[cfg(test)]
 pub(crate) mod tests;
 
-/// Rewrite an absolute-form request target to origin-form, leaving "/" alone.
-///
-/// A forward-proxy client sends `GET https://example.com/a?b HTTP/1.1`; upstream
-/// must receive `GET /a?b HTTP/1.1` plus `Host: example.com`.
-fn origin_form(uri: &mut http::Uri) {
-    if uri.scheme().is_none() && uri.authority().is_none() {
-        return;
-    }
-    let target = uri.path_and_query().map(|p| p.as_str()).unwrap_or("/");
-    if let Ok(parsed) = target.parse::<http::Uri>() {
-        *uri = parsed;
-    }
-}

@@ -337,16 +337,23 @@ where
     loop {
         let (data, chunk_stats) = parser.next_chunk(upstream_reader, redactor.clone()).await?;
 
-        if data.is_empty() {
-            break;
+        // Empty data does not mean "end of body": the redactor holds back its
+        // lookahead window, so a short response produces no output until the
+        // terminating chunk finalizes it. Stopping here dropped whole bodies --
+        // a streamed chat completion arrived at the client as zero bytes, while
+        // the tail was reported as "lookahead lost".
+        if !data.is_empty() {
+            client_writer.write_all(&data).await?;
         }
-
-        client_writer.write_all(&data).await?;
 
         total_stats.bytes_read += chunk_stats.total_data_bytes;
         total_stats.bytes_written += data.len() as u64;
         total_stats.patterns_found += chunk_stats.patterns_found;
         total_stats.chunks_processed += chunk_stats.chunks_read;
+
+        if parser.is_complete() {
+            break;
+        }
     }
 
     debug!(

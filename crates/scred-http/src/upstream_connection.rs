@@ -172,7 +172,7 @@ pub async fn establish_tls_h2(
     tcp_stream: TcpStream,
     host: &str,
 ) -> Result<tokio_rustls::client::TlsStream<TcpStream>> {
-    establish_tls_with_alpn(tcp_stream, host, upstream_h2_enabled()).await
+    establish_tls_with_alpn(tcp_stream, host, upstream_h2_enabled(host)).await
 }
 
 /// Whether to advertise h2 to upstream servers.
@@ -183,7 +183,26 @@ pub async fn establish_tls_h2(
 /// interceptor, for instance -- because a body sent over h2 to such a hop is
 /// rejected (the request line and framing arrive as HTTP/2, the hop parses
 /// HTTP/1.1 and answers 400).
-fn upstream_h2_enabled() -> bool {
+pub fn upstream_h2_enabled(host: &str) -> bool {
+    // Per-host opt-out, for a hop that advertises h2 in ALPN but mishandles
+    // HTTP/2 framing -- a credential-injecting interceptor, for instance, which
+    // answers 400 to any h2 request that carries a body. h2 stays in use
+    // everywhere else.
+    if let Ok(list) = std::env::var("SCRED_UPSTREAM_HTTP1_HOSTS") {
+        let host = host.to_ascii_lowercase();
+        let listed = list.split(',').map(str::trim).filter(|e| !e.is_empty()).any(|entry| {
+            let entry = entry.to_ascii_lowercase();
+            match entry.strip_prefix("*.") {
+                Some(suffix) => host == suffix || host.ends_with(&format!(".{}", suffix)),
+                None => host == entry,
+            }
+        });
+        if listed {
+            return false;
+        }
+    }
+
+    // Blunt global switch, for "this whole network cannot do h2".
     match std::env::var("SCRED_UPSTREAM_ALPN") {
         Ok(value) => {
             let value = value.to_ascii_lowercase();

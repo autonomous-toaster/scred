@@ -295,12 +295,7 @@ async fn connect_upstream_tls(
         .with_no_client_auth();
 
     use scred_http::h2::alpn::alpn_protocols;
-    let http1_only = std::env::var("SCRED_UPSTREAM_ALPN")
-        .map(|v| {
-            let v = v.to_ascii_lowercase();
-            v == "http1.1" || v == "http/1.1" || v == "1" || v == "false"
-        })
-        .unwrap_or(false);
+    let http1_only = !scred_http::upstream_connection::upstream_h2_enabled(target_host);
     client_config.alpn_protocols = if http1_only {
         vec![b"http/1.1".to_vec()]
     } else {

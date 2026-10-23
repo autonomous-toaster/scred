@@ -43,6 +43,8 @@ pub struct ChunkedParser {
     current_chunk_size: usize,
     bytes_remaining_in_chunk: usize,
     stream: Option<RedactionStream>,
+    /// Tail released by finalize(), handed to the caller exactly once.
+    pending_tail: Vec<u8>,
 }
 
 impl ChunkedParser {
@@ -53,6 +55,7 @@ impl ChunkedParser {
             current_chunk_size: 0,
             bytes_remaining_in_chunk: 0,
             stream: None,
+            pending_tail: Vec::new(),
         }
     }
 
@@ -82,11 +85,11 @@ impl ChunkedParser {
                     return self.handle_reading_data(reader, &mut stats).await;
                 }
                 ChunkState::ReadingTrailers => {
-                    self.handle_reading_trailers(reader).await?;
-                    return Ok((Vec::new(), stats));
+                    let tail = self.handle_reading_trailers(reader).await?;
+                    return Ok((tail, stats));
                 }
                 ChunkState::Complete => {
-                    return Ok((Vec::new(), stats));
+                    return Ok((std::mem::take(&mut self.pending_tail), stats));
                 }
             }
         }
@@ -150,7 +153,7 @@ impl ChunkedParser {
     async fn handle_reading_trailers<R: AsyncReadExt + Unpin>(
         &mut self,
         reader: &mut BufReader<R>,
-    ) -> Result<()> {
+    ) -> Result<Vec<u8>> {
         let mut line = String::new();
         loop {
             line.clear();
@@ -160,15 +163,23 @@ impl ChunkedParser {
             }
         }
 
-        if let Some(stream) = self.stream.as_mut() {
-            let (final_output, _final_stats) = stream.finalize();
-            if !final_output.is_empty() {
-                debug!("[chunked] Final lookahead: {} bytes", final_output.len());
+        // The redactor holds back its lookahead window until finalize(); those
+        // bytes are the tail of the body. Dropping them silently truncated every
+        // chunked response (a short SSE reply lost its entire body).
+        let tail = match self.stream.as_mut() {
+            Some(stream) => {
+                let (final_output, _final_stats) = stream.finalize();
+                if !final_output.is_empty() {
+                    debug!("[chunked] Final lookahead: {} bytes", final_output.len());
+                }
+                final_output
             }
-        }
+            None => Vec::new(),
+        };
 
+        self.pending_tail = tail;
         self.state = ChunkState::Complete;
-        Ok(())
+        Ok(std::mem::take(&mut self.pending_tail))
     }
 
     /// Check if parsing is complete
