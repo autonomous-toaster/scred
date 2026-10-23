@@ -172,7 +172,25 @@ pub async fn establish_tls_h2(
     tcp_stream: TcpStream,
     host: &str,
 ) -> Result<tokio_rustls::client::TlsStream<TcpStream>> {
-    establish_tls_with_alpn(tcp_stream, host, true).await
+    establish_tls_with_alpn(tcp_stream, host, upstream_h2_enabled()).await
+}
+
+/// Whether to advertise h2 to upstream servers.
+///
+/// Default: yes. `SCRED_UPSTREAM_ALPN=http1.1` turns it off, which makes every
+/// upstream request take the HTTP/1.1 path. Set it when something between the
+/// proxy and the origin only speaks HTTP/1.1 -- a credential-injecting
+/// interceptor, for instance -- because a body sent over h2 to such a hop is
+/// rejected (the request line and framing arrive as HTTP/2, the hop parses
+/// HTTP/1.1 and answers 400).
+fn upstream_h2_enabled() -> bool {
+    match std::env::var("SCRED_UPSTREAM_ALPN") {
+        Ok(value) => {
+            let value = value.to_ascii_lowercase();
+            !(value == "http1.1" || value == "http/1.1" || value == "1" || value == "false")
+        }
+        Err(_) => true,
+    }
 }
 
 /// Connect to upstream with full proxy/TLS handling
