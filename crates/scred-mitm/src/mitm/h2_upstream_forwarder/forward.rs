@@ -2,7 +2,7 @@ use super::{extract_http_response_body, is_connection_closed_error, log_detected
 use crate::mitm::config::RedactionMode;
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
-use http::Request;
+use http::{Request, StatusCode};
 use scred_http::upstream_connection::{
     connect_tcp, establish_tls, get_proxy_url, UpstreamConnectionConfig,
 };
@@ -58,15 +58,40 @@ fn build_http1_request_string(
     request
 }
 
+/// Parse HTTP status code from the first line of an HTTP response.
+/// Handles both "HTTP/1.1 200 OK" and "HTTP/1.0 401 Unauthorized" formats.
+pub(crate) fn parse_status_from_response(response: &[u8]) -> Result<StatusCode> {
+    let response_str = String::from_utf8_lossy(response);
+    // Find the end of the first line
+    let line_end = response_str
+        .find("\r\n")
+        .or_else(|| response_str.find('\n'));
+    let first_line = match line_end {
+        Some(pos) => &response_str[..pos],
+        None => response_str.as_ref(),
+    };
+    // Extract the status code (second space-separated token)
+    let status_str = first_line.split(' ').nth(1).ok_or_else(|| {
+        anyhow!("Cannot parse status code from response line: {}", first_line)
+    })?;
+    let code: u16 = status_str.parse().map_err(|e| {
+        anyhow!("Cannot parse status code '{}': {}", status_str, e)
+    })?;
+    StatusCode::from_u16(code).map_err(|e| {
+        anyhow!("Invalid status code {}: {}", code, e)
+    })
+}
+
 /// Read HTTP/1.1 response directly (for PASSTHROUGH and DETECT modes)
 async fn read_http1_response_direct(
     tls_stream: &mut (impl AsyncReadExt + Unpin + AsyncWriteExt),
     engine: &Arc<RedactionEngine>,
     mode: RedactionMode,
     detect_patterns: &scred_http::PatternSelector,
-) -> Result<Vec<u8>> {
+) -> Result<(StatusCode, Vec<u8>)> {
     tracing::debug!("[H2 Upstream HTTP/1.1] Mode: {:?} - Reading response directly", mode);
     let response_bytes = read_response_direct(tls_stream).await?;
+    let status = parse_status_from_response(&response_bytes)?;
     let body = extract_http_response_body(&response_bytes)?;
 
     if mode.should_detect() {
@@ -74,22 +99,47 @@ async fn read_http1_response_direct(
         log_detected_secrets(engine, &response_bytes, detect_patterns);
     }
 
-    Ok(body)
+    Ok((status, body))
 }
 
 /// Read HTTP/1.1 response with streaming redaction (for REDACT mode)
 async fn read_http1_response_redacted(
     tls_stream: &mut (impl AsyncReadExt + Unpin + AsyncWriteExt),
     engine: &Arc<RedactionEngine>,
-) -> Result<Vec<u8>> {
+) -> Result<(StatusCode, Vec<u8>)> {
     tracing::debug!("[H2 Upstream HTTP/1.1] Mode: REDACT - Using streaming redaction");
+
+    // Read first chunk to extract status line
+    let mut first_buf = vec![0u8; 8192];
+    let first_n = tls_stream.read(&mut first_buf).await?;
+    if first_n == 0 {
+        return Err(anyhow!("Connection closed before response"));
+    }
+
+    // Parse status from the first chunk
+    let status = parse_status_from_response(&first_buf[..first_n])?;
+
     let streaming_redactor = StreamingRedactor::with_defaults(engine.clone());
     let config = StreamingConfig::default();
     let mut response_output = Vec::new();
     let mut lookahead = Vec::with_capacity(config.lookahead_size);
-    let mut read_buf = vec![0u8; config.chunk_size];
-    let mut bytes_read = 0u64;
     let mut body_started = false;
+
+    // Process the first chunk through redactor (skipping status line + headers)
+    let (redacted, _, _) =
+        streaming_redactor.process_chunk(&first_buf[..first_n], &mut lookahead, false);
+
+    if let Some(header_end) = redacted.find("\r\n\r\n") {
+        body_started = true;
+        response_output.extend_from_slice(redacted[header_end + 4..].as_bytes());
+    } else if let Some(header_end) = redacted.find("\n\n") {
+        body_started = true;
+        response_output.extend_from_slice(redacted[header_end + 2..].as_bytes());
+    }
+
+    // Continue reading remaining chunks
+    let mut read_buf = vec![0u8; config.chunk_size];
+    let mut bytes_read = first_n as u64;
 
     loop {
         match tls_stream.read(&mut read_buf).await {
@@ -136,7 +186,7 @@ async fn read_http1_response_redacted(
         response_output.len()
     );
 
-    Ok(response_output)
+    Ok((status, response_output))
 }
 
 /// Connect to upstream via HTTP/1.1 and establish TLS
@@ -164,7 +214,7 @@ pub(crate) async fn forward_via_http1_1(
     mode: RedactionMode,
     detect_patterns: &scred_http::PatternSelector,
     _redact_patterns: &scred_http::PatternSelector,
-) -> Result<Vec<u8>> {
+) -> Result<(StatusCode, Vec<u8>)> {
     let method = request.method().clone();
     let uri = request.uri().clone();
     let body = request.body();
@@ -174,8 +224,7 @@ pub(crate) async fn forward_via_http1_1(
 
     let mut tls_stream = connect_http1_upstream(target_host, port).await?;
 
-    // Origin-form: the client's absolute-form proxy target is for proxies, not
-    // for the origin server we are now talking to directly.
+    // Origin-form, not the client's absolute-form proxy target.
     let target = uri.path_and_query().map(|p| p.as_str()).unwrap_or("/");
     let http1_request = build_http1_request_string(
         method.as_str(),

@@ -32,16 +32,21 @@
         let matches = vec![Match::new(0, text.len(), 304)]; // Pattern type 304 = certificate
         let redacted = redact_text(text, &matches);
 
-        // Certificates should be fully redacted with 'x' (consistent with all redaction)
-        for (i, &byte) in redacted.iter().enumerate() {
-            if i < text.len() {
-                assert_eq!(
-                    byte, b'x',
-                    "Certificate bytes should be redacted with 'x' at position {}",
-                    i
-                );
-            }
-        }
+        // Certificates should preserve PEM markers, redact body
+        let redacted_str = std::str::from_utf8(&redacted).unwrap();
+        assert!(
+            redacted_str.starts_with("-----BEGIN CERTIFICATE-----"),
+            "Start marker should be preserved"
+        );
+        assert!(
+            redacted_str.contains("-----END CERTIFICATE-----"),
+            "End marker should be preserved"
+        );
+        // Body content should be redacted
+        assert!(
+            redacted_str.contains("\nxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n"),
+            "Body should be redacted with 'x'"
+        );
         assert_eq!(text.len(), redacted.len(), "Redaction must preserve length");
     }
 

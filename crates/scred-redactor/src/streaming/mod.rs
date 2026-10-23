@@ -1,4 +1,5 @@
 use crate::RedactionEngine;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -61,16 +62,25 @@ pub struct RedactionStream {
     lookahead: Vec<u8>,
     is_finalized: bool,
     stats: StreamingStats,
+    /// Optional set of allowed pattern type IDs. Empty = all patterns allowed.
+    allowed_patterns: HashSet<u16>,
 }
 
 impl RedactionStream {
     /// Create a new streaming redactor.
     pub fn new(engine: Arc<RedactionEngine>) -> Self {
+        Self::with_allowed_patterns(engine, HashSet::new())
+    }
+
+    /// Create a new streaming redactor with an optional set of allowed pattern type IDs.
+    /// Empty set = all patterns allowed.
+    pub fn with_allowed_patterns(engine: Arc<RedactionEngine>, allowed: HashSet<u16>) -> Self {
         Self {
             _engine: engine,
             lookahead: Vec::with_capacity(LOOKAHEAD_SIZE),
             is_finalized: false,
             stats: StreamingStats::default(),
+            allowed_patterns: allowed,
         }
     }
 
@@ -86,8 +96,18 @@ impl RedactionStream {
         // Detect and redact
         let detection = detect_all(&combined);
         let patterns_found = detection.matches.len() as u64;
+
+        // Filter matches by allowed patterns (if set is non-empty)
+        let filtered: Vec<_> = if self.allowed_patterns.is_empty() {
+            detection.matches
+        } else {
+            detection.matches.into_iter()
+                .filter(|m| self.allowed_patterns.contains(&m.pattern_type))
+                .collect()
+        };
+
         let mut redacted = combined;
-        redact_in_place(&mut redacted, &detection.matches);
+        redact_in_place(&mut redacted, &filtered);
 
         // Calculate output boundaries
         let redacted_len = redacted.len();

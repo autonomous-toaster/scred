@@ -114,11 +114,6 @@ pub const SIMPLE_PREFIX_PATTERNS: &[SimplePrefixPattern] = &[
         prefix: "sk-proj-",
         tier: PatternTier::Critical,
     },
-    SimplePrefixPattern {
-        name: "openai-sk",
-        prefix: "sk-",
-        tier: PatternTier::Critical,
-    },
     // NOTE: Removed 4 overly broad generic patterns (generic-password, generic-password-colon,
     // generic-password-lower, generic-secret) to eliminate false positives.
     // Real secrets are caught by more specific patterns:

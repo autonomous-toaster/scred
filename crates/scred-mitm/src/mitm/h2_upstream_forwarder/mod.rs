@@ -11,7 +11,7 @@ mod forward;
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use forward::{forward_via_http1_1};
-use http::Request;
+use http::{Request, StatusCode};
 use scred_redactor::RedactionEngine;
 use std::sync::Arc;
 use tokio::io::AsyncReadExt;
@@ -172,7 +172,7 @@ pub async fn handle_upstream_h2_connection(
     mode: RedactionMode,
     detect_patterns: scred_http::PatternSelector,
     redact_patterns: scred_http::PatternSelector,
-) -> Result<Vec<u8>> {
+) -> Result<(StatusCode, Vec<u8>)> {
     let _method = request.method().clone();
     let _uri = request.uri().clone();
 
@@ -187,19 +187,19 @@ pub async fn handle_upstream_h2_connection(
     // Extract body from request
     let (mut request_parts, request_body) = request.into_parts();
 
-    // A forward-proxy client sends an absolute-form target ("https://host/path")
-    // and we forward it verbatim; an origin server -- or anything that only
-    // speaks origin-form, such as a credential-injecting interceptor -- answers
-    // 400 to that. Send "/path" with the host in Host/:authority instead.
+    // Clients that reach us as a forward proxy send an absolute-form target
+    // ("https://host/path?q"), and we used to forward that verbatim. An origin
+    // server -- and anything that only speaks origin-form, such as a credential
+    // interceptor -- needs "/path?q" with the host in the Host/:authority field.
     origin_form(&mut request_parts.uri);
 
     // Rebuild request with parts and body for H2 attempt
     let h2_request = http::Request::from_parts(request_parts.clone(), request_body.clone());
 
     match try_forward_h2(h2_request, engine.clone(), host, mode, &detect_patterns, &redact_patterns).await {
-        Ok(response) => {
-            tracing::info!("[H2 Upstream] H2 forward successful");
-            Ok(response)
+        Ok((status, response)) => {
+            tracing::info!("[H2 Upstream] H2 forward successful, status={}", status);
+            Ok((status, response))
         }
         Err(e) => {
             tracing::warn!(
@@ -356,14 +356,14 @@ async fn try_forward_h2(
     mode: RedactionMode,
     detect_patterns: &scred_http::PatternSelector,
     _redact_patterns: &scred_http::PatternSelector,
-) -> Result<Vec<u8>> {
+) -> Result<(StatusCode, Vec<u8>)> {
     let (request_parts, request_body) = request.into_parts();
 
     // Connect to upstream via H2
     let (mut send_request, connection_handle) = connect_h2_upstream(host).await?;
 
     // Send request with optional body
-    let (_response, mut recv_stream) = send_h2_request(
+    let (response, mut recv_stream) = send_h2_request(
         &mut send_request,
         request_parts,
         request_body,
@@ -371,19 +371,24 @@ async fn try_forward_h2(
     )
     .await?;
 
+    let status = response.status();
+
     // Read response body
     let response_body = read_h2_response_body(&mut recv_stream).await?;
 
     // Apply redaction based on mode
-    apply_h2_response_redaction(&response_body, &engine, mode, detect_patterns)
+    let redacted_body = apply_h2_response_redaction(&response_body, &engine, mode, detect_patterns)?;
+
+    Ok((status, redacted_body))
 }
 
 #[cfg(test)]
 pub(crate) mod tests;
 
-/// Rewrite an absolute-form request target to origin-form, leaving other forms
-/// untouched: a forward-proxy client sends `GET https://example.com/a?b HTTP/1.1`
-/// and upstream must receive `GET /a?b HTTP/1.1` with `Host: example.com`.
+/// Rewrite an absolute-form request target to origin-form, leaving "/" alone.
+///
+/// A forward-proxy client sends `GET https://example.com/a?b HTTP/1.1`; upstream
+/// must receive `GET /a?b HTTP/1.1` plus `Host: example.com`.
 fn origin_form(uri: &mut http::Uri) {
     if uri.scheme().is_none() && uri.authority().is_none() {
         return;

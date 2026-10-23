@@ -21,9 +21,26 @@ fn apply_redaction_rule(buffer: &mut [u8], match_: &Match, original: &[u8]) {
             }
         }
     } else if match_.pattern_type >= 300 {
-        // SSH keys and certificates: fully redacted with 'x'
-        for i in match_.start..match_.end {
-            if i < buffer.len() {
+        // SSH keys and certificates: preserve PEM markers, redact body
+        let region = &original[match_.start..match_.end];
+
+        // Find end of start marker line (first newline)
+        let body_start = region
+            .iter()
+            .position(|&b| b == b'\n')
+            .map(|pos| match_.start + pos + 1)
+            .unwrap_or(match_.end);
+
+        // Find start of end marker line ("-----END")
+        let end_marker_start = region
+            .windows(8)
+            .position(|w| w == b"-----END")
+            .map(|pos| match_.start + pos)
+            .unwrap_or(match_.end);
+
+        // Redact body content between markers, preserve newlines
+        for i in body_start..end_marker_start {
+            if i < buffer.len() && buffer[i] != b'\n' {
                 buffer[i] = b'x';
             }
         }
@@ -67,7 +84,7 @@ pub fn redact_text(text: &[u8], matches: &[Match]) -> Vec<u8> {
 ///
 /// Critical constraint: output length MUST equal input length
 /// All redaction uses consistent 'x' character:
-/// - SSH keys: Replace ALL chars with 'x' (full redaction)
+/// - SSH keys: Preserve PEM markers (-----BEGIN...----- / -----END...-----), redact body with 'x'
 /// - Environment variables: Keep key=value structure, redact only value with 'x'
 /// - API keys: Keep first 4 chars (prefix), replace rest with 'x'
 ///

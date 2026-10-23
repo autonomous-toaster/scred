@@ -33,16 +33,21 @@
         let matches = vec![Match::new(0, text.len(), 300)]; // Pattern type 300 = SSH key
         let redacted = redact_text(text, &matches);
 
-        // SSH keys should be fully redacted with 'x' (consistent with all redaction)
-        for (i, &byte) in redacted.iter().enumerate() {
-            if i < text.len() {
-                assert_eq!(
-                    byte, b'x',
-                    "SSH key bytes should be redacted with 'x' at position {}",
-                    i
-                );
-            }
-        }
+        // SSH keys should preserve PEM markers, redact body
+        let redacted_str = std::str::from_utf8(&redacted).unwrap();
+        assert!(
+            redacted_str.starts_with("-----BEGIN RSA PRIVATE KEY-----"),
+            "Start marker should be preserved"
+        );
+        assert!(
+            redacted_str.contains("-----END RSA PRIVATE KEY-----"),
+            "End marker should be preserved"
+        );
+        // Body content should be redacted
+        assert!(
+            redacted_str.contains("\nxxxxxxxxxxxxxxxx\n"),
+            "Body should be redacted with 'x'"
+        );
         assert_eq!(text.len(), redacted.len(), "Redaction must preserve length");
     }
 

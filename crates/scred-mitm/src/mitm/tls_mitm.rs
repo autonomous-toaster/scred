@@ -466,9 +466,9 @@ async fn handle_h2_upstream_request<RW: AsyncReadExt + AsyncWriteExt + Unpin>(
         detect_patterns,
         redact_patterns,
     ).await {
-        Ok(response_body) => {
-            let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", 
-                response_body.len(), String::from_utf8_lossy(&response_body));
+        Ok((status, response_body)) => {
+            let response = format!("HTTP/1.1 {}\r\nContent-Length: {}\r\n\r\n{}",
+                status, response_body.len(), String::from_utf8_lossy(&response_body));
             client_tls.write_all(response.as_bytes()).await?;
             client_tls.flush().await?;
             Ok(true)

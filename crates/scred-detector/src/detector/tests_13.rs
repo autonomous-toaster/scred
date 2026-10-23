@@ -4,16 +4,21 @@
         let matches = vec![Match::new(0, text.len(), 308)]; // Pattern type 308 = PGP private key
         let redacted = redact_text(text, &matches);
 
-        // PGP keys should be fully redacted with 'x' (consistent with all redaction)
-        for (i, &byte) in redacted.iter().enumerate() {
-            if i < text.len() {
-                assert_eq!(
-                    byte, b'x',
-                    "PGP key bytes should be redacted with 'x' at position {}",
-                    i
-                );
-            }
-        }
+        // PGP keys should preserve PEM markers, redact body
+        let redacted_str = std::str::from_utf8(&redacted).unwrap();
+        assert!(
+            redacted_str.starts_with("-----BEGIN PGP PRIVATE KEY BLOCK-----"),
+            "Start marker should be preserved"
+        );
+        assert!(
+            redacted_str.contains("-----END PGP PRIVATE KEY BLOCK-----"),
+            "End marker should be preserved"
+        );
+        // Body content should be redacted (newlines preserved)
+        assert!(
+            redacted_str.contains("\nxxxxxxxxxxxxxxxxx\nxxxxxxx\n"),
+            "Body should be redacted with 'x'"
+        );
         assert_eq!(text.len(), redacted.len(), "Redaction must preserve length");
     }
 

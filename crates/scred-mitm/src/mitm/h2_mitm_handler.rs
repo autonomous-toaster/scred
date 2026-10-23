@@ -6,6 +6,7 @@ use anyhow::Result;
 use bytes::Bytes;
 use h2::server;
 use http::Response;
+use http::StatusCode;
 use scred_policy::PolicyEngine;
 use scred_redactor::RedactionEngine;
 use std::sync::Arc;
@@ -252,9 +253,10 @@ impl H2MitmHandler {
     /// Send HTTP/2 response to client
     fn send_h2_response(
         respond: &mut server::SendResponse<Bytes>,
+        status: StatusCode,
         response_bytes: &[u8],
     ) -> Result<()> {
-        let response = match Response::builder().status(200).body(()) {
+        let response = match Response::builder().status(status).body(()) {
             Ok(r) => r,
             Err(e) => unreachable!("valid HTTP status: {}", e),
         };
@@ -335,12 +337,13 @@ impl H2MitmHandler {
         )
         .await
         {
-            Ok(response_bytes) => {
+            Ok((status, response_bytes)) => {
                 tracing::debug!(
-                    "[H2 MITM] Got response from upstream: {} bytes",
-                    response_bytes.len()
+                    "[H2 MITM] Got response from upstream: {} bytes, status={}",
+                    response_bytes.len(),
+                    status
                 );
-                Self::send_h2_response(&mut respond, &response_bytes)
+                Self::send_h2_response(&mut respond, status, &response_bytes)
             }
             Err(e) => {
                 tracing::error!("[H2] Upstream forwarding failed: {}", e);

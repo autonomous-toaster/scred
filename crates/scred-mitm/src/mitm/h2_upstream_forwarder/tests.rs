@@ -53,7 +53,7 @@ mod h2_forwarder_tests {
     #[test]
     fn test_redact_mode_redact() {
         let engine = Arc::new(RedactionEngine::new(RedactionConfig { enabled: true }));
-        let body = b"My API key is sk-test123456789".to_vec();
+        let body = b"My API key is sk-test1234567890123456789012345678901234567890".to_vec();
         let mode = RedactionMode::Redact;
         let detect_patterns = scred_http::PatternSelector::default_detect();
 
@@ -69,7 +69,7 @@ mod h2_forwarder_tests {
         };
 
         let result_str = String::from_utf8_lossy(&result);
-        assert!(!result_str.contains("sk-test123456789"), "API key should be redacted");
+        assert!(!result_str.contains("sk-test1234567890123456789012345678901234567890"), "API key should be redacted");
         assert!(result_str.contains("My API key is"), "Prefix should remain");
     }
 
@@ -159,5 +159,40 @@ mod h2_forwarder_tests {
         let result = crate::mitm::h2_upstream_forwarder::read_response_direct(&mut reader).await.unwrap();
         let text = String::from_utf8_lossy(&result);
         assert!(text.contains("hello"));
+    }
+
+    #[test]
+    fn test_parse_status_from_response_200() {
+        let response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
+        let status = crate::mitm::h2_upstream_forwarder::forward::parse_status_from_response(response).unwrap();
+        assert_eq!(status, http::StatusCode::OK);
+    }
+
+    #[test]
+    fn test_parse_status_from_response_401() {
+        let response = b"HTTP/1.1 401 Unauthorized\r\nContent-Type: text/plain\r\n\r\n{\"error\":\"unauthorized\"}";
+        let status = crate::mitm::h2_upstream_forwarder::forward::parse_status_from_response(response).unwrap();
+        assert_eq!(status, http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_parse_status_from_response_502() {
+        let response = b"HTTP/1.1 502 Bad Gateway\r\n\r\n";
+        let status = crate::mitm::h2_upstream_forwarder::forward::parse_status_from_response(response).unwrap();
+        assert_eq!(status, http::StatusCode::BAD_GATEWAY);
+    }
+
+    #[test]
+    fn test_parse_status_from_response_empty_fails() {
+        let response = b"";
+        let result = crate::mitm::h2_upstream_forwarder::forward::parse_status_from_response(response);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_status_from_response_http10() {
+        let response = b"HTTP/1.0 404 Not Found\r\n\r\n";
+        let status = crate::mitm::h2_upstream_forwarder::forward::parse_status_from_response(response).unwrap();
+        assert_eq!(status, http::StatusCode::NOT_FOUND);
     }
 }

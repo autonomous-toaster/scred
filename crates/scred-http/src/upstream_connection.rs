@@ -250,8 +250,10 @@ async fn connect_upstream_tls_with_alpn(
 /// - no_proxy / NO_PROXY for bypassing proxy
 pub fn get_proxy_url(target_host: &str, is_https: bool) -> Option<String> {
     use crate::proxy_resolver::MitmConfig;
+    use std::sync::OnceLock;
 
-    let resolver = MitmConfig::from_env();
+    static RESOLVER: OnceLock<MitmConfig> = OnceLock::new();
+    let resolver = RESOLVER.get_or_init(|| MitmConfig::from_env());
     resolver.get_proxy_for(target_host, is_https)
 }
 
