@@ -5,7 +5,7 @@
 use anyhow::{anyhow, Result};
 use scred_redactor::{RedactionStream, StreamingRedactor};
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::debug;
 
 use crate::http_headers::parse_http_headers;
@@ -73,6 +73,48 @@ where
         debug!("[streaming] Headers parsed: {:?}", headers);
     }
 
+    // A chunked request body has to be re-framed: we decode it, redact it and send
+    // it with a Content-Length of our own. It used to be refused outright
+    // ("Chunked requests not supported"), which broke every client that streams a
+    // body -- Node's undici among them.
+    if headers.is_chunked() {
+        debug!("[stream_request_to_upstream] STEP 4b: Chunked body, decoding");
+        let raw = read_chunked_body(client_reader).await?;
+        let redactor_stream = redactor.clone();
+        let (redacted, patterns, _bytes) =
+            redactor_stream.process_chunk_bytes(&raw, &mut Vec::new(), true);
+
+        upstream_writer
+            .write_all(format!("{}\r\n", request_line).as_bytes())
+            .await?;
+        for (name, value) in &headers.headers {
+            let lower = name.to_ascii_lowercase();
+            if lower == "transfer-encoding" || lower == "content-length" || lower == "connection" {
+                continue;
+            }
+            upstream_writer
+                .write_all(format!("{}: {}\r\n", name, value).as_bytes())
+                .await?;
+        }
+        upstream_writer
+            .write_all(format!("Content-Length: {}\r\n\r\n", redacted.len()).as_bytes())
+            .await?;
+        upstream_writer.write_all(&redacted).await?;
+        upstream_writer.flush().await?;
+        debug!(
+            "[stream_request_to_upstream] STEP 4b DONE: chunked body {} -> {} bytes, {} patterns",
+            raw.len(),
+            redacted.len(),
+            patterns
+        );
+        return Ok(StreamingStats {
+            bytes_read: raw.len() as u64,
+            bytes_written: redacted.len() as u64,
+            chunks_processed: 1,
+            patterns_found: patterns,
+        });
+    }
+
     // 2. Forward request line to upstream
     debug!("[stream_request_to_upstream] STEP 2: Writing request line to upstream...");
     let req_line = format!("{}\r\n", request_line);
@@ -118,10 +160,6 @@ where
         )
         .await?;
         debug!("[stream_request_to_upstream] STEP 4a DONE: Body streamed (bytes_read={}, bytes_written={})", stats.bytes_read, stats.bytes_written);
-    } else if headers.is_chunked() {
-        // Transfer-Encoding: chunked
-        debug!("[stream_request_to_upstream] STEP 4b: ERROR - Chunked requests not supported");
-        return Err(anyhow!("Chunked requests not yet supported in Phase 3b"));
     } else {
         // No body
         debug!("[stream_request_to_upstream] STEP 4c: No body");
@@ -282,4 +320,41 @@ mod tests {
         ).await;
         assert!(result.is_ok(), "stream_request_to_upstream failed: {:?}", result);
     }
+}
+
+/// Decode a chunked request body into memory.
+///
+/// Framing follows RFC 9112: `size[;ext]\r\n` then `size` bytes then CRLF, ending
+/// with a zero-size chunk and optional trailers.
+async fn read_chunked_body<R: AsyncReadExt + Unpin>(reader: &mut BufReader<R>) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    loop {
+        let mut size_line = String::new();
+        reader.read_line(&mut size_line).await?;
+        if size_line.is_empty() {
+            break;
+        }
+        let size_str = size_line.split(';').next().unwrap_or("").trim();
+        if size_str.is_empty() {
+            continue;
+        }
+        let size = usize::from_str_radix(size_str, 16)
+            .map_err(|e| anyhow!("invalid chunk size '{}': {}", size_str, e))?;
+        if size == 0 {
+            // trailers, then a final blank line
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).await? == 0 || line == "\r\n" || line == "\n" {
+                    break;
+                }
+            }
+            break;
+        }
+        let mut chunk = vec![0u8; size];
+        reader.read_exact(&mut chunk).await?;
+        out.extend_from_slice(&chunk);
+        let mut crlf = [0u8; 2];
+        reader.read_exact(&mut crlf).await?;
+    }
+    Ok(out)
 }

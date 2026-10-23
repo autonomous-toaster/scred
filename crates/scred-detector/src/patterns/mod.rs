@@ -35,6 +35,12 @@ pub enum Charset {
     Base64Url,
     Hex,
     Any,
+    /// A value inside a line: printable characters that can appear in an
+    /// unquoted token. Deliberately excludes whitespace, quotes, commas, brackets
+    /// and braces, so a match cannot run past the end of the value it belongs to --
+    /// `POSTGRES_PASSWORD=, REDIS_PASSWORD=` used to match 100 bytes of prose,
+    /// including the punctuation of the surrounding JSON.
+    Value,
 }
 
 #[derive(Debug, Clone)]

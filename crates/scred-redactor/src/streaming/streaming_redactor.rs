@@ -69,7 +69,12 @@ impl StreamingRedactor {
         let mut combined = std::mem::take(lookahead);
         combined.extend_from_slice(chunk);
 
-        let detection = detect_all(&combined);
+        let mut detection = detect_all(&combined);
+        // Honour the engine's selector here too: the streaming paths used to
+        // redact every pattern no matter what the configuration said.
+        detection
+            .matches
+            .retain(|m| self.engine.pattern_allowed(m.pattern_type));
         let patterns_found = detection.matches.len() as u64;
 
         let mut redacted = combined;
@@ -111,7 +116,12 @@ impl StreamingRedactor {
         let mut combined = std::mem::take(lookahead);
         combined.extend_from_slice(chunk);
 
-        let detection = detect_all(&combined);
+        let mut detection = detect_all(&combined);
+        // Honour the engine's selector here too: the streaming paths used to
+        // redact every pattern no matter what the configuration said.
+        detection
+            .matches
+            .retain(|m| self.engine.pattern_allowed(m.pattern_type));
         let patterns_found = detection.matches.len() as u64;
 
         let mut redacted = combined;

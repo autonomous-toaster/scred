@@ -97,14 +97,15 @@ impl RedactionStream {
         let detection = detect_all(&combined);
         let patterns_found = detection.matches.len() as u64;
 
-        // Filter matches by allowed patterns (if set is non-empty)
-        let filtered: Vec<_> = if self.allowed_patterns.is_empty() {
-            detection.matches
-        } else {
-            detection.matches.into_iter()
-                .filter(|m| self.allowed_patterns.contains(&m.pattern_type))
-                .collect()
-        };
+        // Filter matches by the engine's pattern selector, then by any explicit
+        // allow-list. Without the first half, the streaming paths applied every
+        // pattern regardless of configuration.
+        let filtered: Vec<_> = detection
+            .matches
+            .into_iter()
+            .filter(|m| self._engine.pattern_allowed(m.pattern_type))
+            .filter(|m| self.allowed_patterns.is_empty() || self.allowed_patterns.contains(&m.pattern_type))
+            .collect();
 
         let mut redacted = combined;
         redact_in_place(&mut redacted, &filtered);

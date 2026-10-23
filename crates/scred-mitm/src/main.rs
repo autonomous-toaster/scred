@@ -281,11 +281,34 @@ async fn main() -> anyhow::Result<()> {
         config.tls.ca_key = ca_key.into();
     }
 
+    // Load the configuration file once: it drives both the proxy settings above and
+    // the policy below.
+    let file_config = ConfigLoader::load().ok();
+
+    // The body redaction runs on the proxy-level pattern selector, which had no
+    // config-file path at all -- it always used every pattern, so a tier full of
+    // false positives (INFRASTRUCTURE matches documentation text such as
+    // "# ======" or "POSTGRES_PASSWORD=,") could redact across JSON structure and
+    // hand the upstream an invalid body. Let the file decide, like the rest of the
+    // policy does.
+    if let Some(ref fc) = file_config {
+        let filter = &fc.policy.defaults.patterns;
+        if !filter.redact.is_empty() && filter.redact != ["*"] {
+            match config.proxy.set_redact_patterns(&filter.redact.join(",")) {
+                Ok(()) => info!(
+                    "Redaction patterns from config: {}",
+                    filter.redact.join(",")
+                ),
+                Err(e) => tracing::warn!(
+                    "Invalid policy.defaults.patterns.redact ({}), redacting all patterns",
+                    e
+                ),
+            }
+        }
+    }
+
     info!("scred-mitm starting");
     info!("Listening on {}", config.proxy.listen);
-
-    // Load config file for policy
-    let file_config = ConfigLoader::load().ok();
 
     // Initialize policy engine
     let policy = if let Some(ref fc) = file_config {

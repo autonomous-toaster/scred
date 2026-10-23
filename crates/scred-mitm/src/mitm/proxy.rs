@@ -33,8 +33,15 @@ impl ProxyServer {
             std::path::Path::new(&config.tls.cert_cache_dir),
         )?;
 
-        let redaction_engine =
-            scred_redactor::RedactionEngine::new(scred_redactor::RedactionConfig { enabled: true });
+        // Build the engine with the configured pattern selector. It used to be
+        // created without one, i.e. with every pattern, so the selector in the
+        // configuration (and SCRED_REDACT_PATTERNS) never applied to bodies: a tier
+        // full of false positives could redact across JSON punctuation and hand the
+        // upstream an invalid request body.
+        let redaction_engine = scred_redactor::RedactionEngine::with_selector(
+            scred_redactor::RedactionConfig { enabled: true },
+            config.proxy.redact_patterns.clone(),
+        );
 
         let traffic_policy = config.traffic.into_policy()?;
 

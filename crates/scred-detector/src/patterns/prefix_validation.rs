@@ -581,7 +581,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 50,
         max_len: 200,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "redis-url-env",
@@ -589,7 +589,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 40,
         max_len: 150,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "github-token-env",
@@ -693,7 +693,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 40,
         max_len: 200,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "gcp-private-key-id",
@@ -1659,7 +1659,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // RabbitMQ default password environment variable (standard in Docker)
     PrefixValidationPattern {
@@ -1668,7 +1668,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // Redis password environment variable
     PrefixValidationPattern {
@@ -1677,7 +1677,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // PostgreSQL root password (different from PGPASSWORD which is for client connections)
     PrefixValidationPattern {
@@ -1686,7 +1686,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // Docker Registry password for authentication (CI/CD)
     PrefixValidationPattern {
@@ -1695,7 +1695,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // HashiCorp Vault token (auth token enables full vault access)
     PrefixValidationPattern {
@@ -1714,7 +1714,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // LDAP bind password (service account authentication)
     PrefixValidationPattern {
@@ -1723,7 +1723,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // Apache Cassandra NoSQL database password
     PrefixValidationPattern {
@@ -1732,7 +1732,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // Elasticsearch search engine password
     PrefixValidationPattern {
@@ -1741,7 +1741,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // Apache CouchDB document database password
     PrefixValidationPattern {
@@ -1750,7 +1750,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // Apache Kafka SASL authentication password
     PrefixValidationPattern {
@@ -1759,7 +1759,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // Apache ActiveMQ message broker password
     PrefixValidationPattern {
@@ -1768,7 +1768,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // Bitbucket Git server password (for CI/CD authentication)
     PrefixValidationPattern {
@@ -1777,7 +1777,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Infrastructure,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // SMTP mail server password (email authentication)
     PrefixValidationPattern {
@@ -1786,7 +1786,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 15,
         max_len: 100,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     // Generic environment variable KEY=VALUE patterns (hardcoded for common naming conventions)
     // These are added to catch PASSWORD=, SECRET=, TOKEN=, API_KEY=, APIKEY= in various forms
@@ -1799,7 +1799,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-password-prefix-lenient",
@@ -1807,7 +1807,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-password-suffix",
@@ -1824,7 +1824,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-secret-prefix-lenient",
@@ -1832,7 +1832,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-secret-suffix",
@@ -1857,7 +1857,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-token-suffix",
@@ -1874,7 +1874,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-api-key-prefix-lenient",
@@ -1882,7 +1882,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-api-key-suffix",
@@ -1899,7 +1899,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-apikey-prefix",
@@ -1907,7 +1907,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-apikey-suffix",
@@ -1924,7 +1924,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-passphrase-prefix-lenient",
@@ -1932,7 +1932,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 1,
         max_len: 500,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "env-passphrase-suffix",
@@ -1972,7 +1972,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 20,
         max_len: 0,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "github-token-env",
@@ -2060,7 +2060,7 @@ pub const PREFIX_VALIDATION_PATTERNS: &[PrefixValidationPattern] = &[
         tier: PatternTier::Critical,
         min_len: 40,
         max_len: 0,
-        charset: Charset::Any,
+        charset: Charset::Value,
     },
     PrefixValidationPattern {
         name: "gcp-private-key-id",

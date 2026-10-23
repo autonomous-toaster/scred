@@ -81,6 +81,38 @@ impl RedactionEngine {
     }
 
     #[inline(never)]
+    /// The pattern selector this engine was built with, if any.
+    pub fn selector(&self) -> Option<&crate::pattern_selector::PatternSelector> {
+        self.selector.as_ref()
+    }
+
+    /// Tier a numeric pattern type belongs to.
+    ///
+    /// The detector hands back a `u16` type, and the tiers are laid out in ranges
+    /// (see the mapping in `redact`), so the tier is derivable without a name.
+    fn tier_of(pattern_type: u16) -> crate::metadata_cache::RiskTier {
+        use crate::metadata_cache::RiskTier;
+        match pattern_type {
+            0..=99 => RiskTier::Critical,
+            100..=199 => RiskTier::ApiKeys,
+            200..=299 => RiskTier::Patterns,
+            300..=399 => RiskTier::Infrastructure,
+            _ => RiskTier::Services,
+        }
+    }
+
+    /// Is a detected pattern allowed by this engine's selector?
+    ///
+    /// Every redaction path must ask this -- the engine's own buffer path and the
+    /// streaming paths alike -- or a pattern tier that the configuration excluded
+    /// still gets applied.
+    pub fn pattern_allowed(&self, pattern_type: u16) -> bool {
+        match self.selector() {
+            Some(sel) => sel.allows_tier(Self::tier_of(pattern_type)).unwrap_or(true),
+            None => true,
+        }
+    }
+
     pub fn redact(&self, text: &str) -> RedactionResult {
         if !self.config.enabled {
             return RedactionResult {
@@ -99,11 +131,18 @@ impl RedactionEngine {
         let detection_result = detect_all(text_bytes);
 
         // Redact matched regions
-        let redacted_bytes = if detection_result.count() > 0 {
-            redact_text(text_bytes, &detection_result.matches)
+        let allowed: Vec<_> = detection_result
+            .matches
+            .iter()
+            .filter(|m| self.pattern_allowed(m.pattern_type))
+            .copied()
+            .collect();
+        let redacted_bytes = if !allowed.is_empty() {
+            redact_text(text_bytes, &allowed)
         } else {
             text_bytes.to_vec()
         };
+        let detection_result = scred_detector::DetectionResult { matches: allowed };
 
         let redacted_text = String::from_utf8_lossy(&redacted_bytes).into_owned();
 

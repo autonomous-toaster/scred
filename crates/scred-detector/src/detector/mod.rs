@@ -162,6 +162,16 @@ fn get_any_lut() -> &'static CharsetLut {
     })
 }
 
+fn get_value_lut() -> &'static CharsetLut {
+    static VALUE_CHARSET: std::sync::OnceLock<CharsetLut> = std::sync::OnceLock::new();
+    VALUE_CHARSET.get_or_init(|| {
+        // No space, tab, newline, quote, comma, semicolon, brackets or braces.
+        CharsetLut::new(
+            b"!#$%&'()*+-./0123456789:<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\^_`abcdefghijklmnopqrstuvwxyz|~",
+        )
+    })
+}
+
 /// Build a simple first-byte index for patterns (computed once, cached)
 /// Maps first byte -> vec of pattern indices
 fn build_first_byte_index() -> &'static Vec<Vec<usize>> {
@@ -192,6 +202,7 @@ pub fn get_charset_lut(charset: Charset) -> &'static CharsetLut {
         Charset::Base64Url => get_base64url_lut(),
         Charset::Hex => get_hex_lut(),
         Charset::Any => get_any_lut(),
+        Charset::Value => get_value_lut(),
     }
 }
 
