@@ -414,11 +414,21 @@ fn apply_h2_response_redaction(
 ) -> Result<Vec<u8>> {
     if mode.should_redact() {
         tracing::debug!("[H2 Upstream] Mode: REDACT - Applying redaction to H2 response");
-        let response_str = String::from_utf8_lossy(response_body);
-        let result = engine.redact(&response_str);
-        tracing::info!("[H2 Upstream] Redacted H2 response: {} bytes -> {} bytes ({} matches)",
-            response_body.len(), result.redacted.len(), result.matches.len());
-        Ok(result.redacted.into_bytes())
+        // Byte-preserving: a String round-trip turns every non-UTF-8 byte into
+        // U+FFFD, so a binary response came back longer and corrupt (1000 random
+        // bytes arrived as 1787).
+        let _ = engine;
+        let mut redacted = response_body.to_vec();
+        let detection = scred_redactor::scred_detector::detect_all(&redacted);
+        let matches = detection.matches.len();
+        scred_redactor::scred_detector::redact_in_place(&mut redacted, &detection.matches);
+        tracing::info!(
+            "[H2 Upstream] Redacted H2 response: {} bytes -> {} bytes ({} matches)",
+            response_body.len(),
+            redacted.len(),
+            matches
+        );
+        Ok(redacted)
     } else if mode.should_detect() {
         tracing::debug!("[H2 Upstream] Mode: DETECT - Scanning H2 response for secrets");
         log_detected_secrets(engine, response_body, detect_patterns);
