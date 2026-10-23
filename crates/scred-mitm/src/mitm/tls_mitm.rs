@@ -283,21 +283,29 @@ async fn connect_upstream_tls(
         }
     };
     
-    let mut root_store = RootCertStore::empty();
-    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    // Same roots as the other upstream paths: public CAs plus whatever the
+    // environment adds (SSL_CERT_FILE / CURL_CA_BUNDLE). webpki-roots alone made
+    // this path unable to verify a hop whose certificate is issued by a local CA --
+    // a credential-injecting interceptor, for instance -- so every request from an
+    // HTTP/1.1 client (Node, undici) failed with UnknownIssuer and surfaced 502.
+    let root_store = scred_http::tls_roots::build_root_cert_store();
     let mut client_config = ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store)
         .with_no_client_auth();
-    
+
     use scred_http::h2::alpn::alpn_protocols;
-    client_config.alpn_protocols = alpn_protocols();
+    let http1_only = std::env::var("SCRED_UPSTREAM_ALPN")
+        .map(|v| {
+            let v = v.to_ascii_lowercase();
+            v == "http1.1" || v == "http/1.1" || v == "1" || v == "false"
+        })
+        .unwrap_or(false);
+    client_config.alpn_protocols = if http1_only {
+        vec![b"http/1.1".to_vec()]
+    } else {
+        alpn_protocols()
+    };
     
     let connector = TlsConnector::from(Arc::new(client_config));
     let server_name = ServerName::try_from(target_host)

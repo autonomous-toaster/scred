@@ -125,7 +125,9 @@ async fn read_http1_response_redacted(
 
     let redactor = StreamingRedactor::with_defaults(engine.clone());
     let mut lookahead = Vec::new();
-    let (redacted, _patterns, _bytes) = redactor.process_chunk(&body, &mut lookahead, true);
+    // Byte-preserving: process_chunk() goes through String and would replace every
+    // non-UTF-8 byte with U+FFFD, corrupting (and lengthening) binary bodies.
+    let (redacted, _patterns, _bytes) = redactor.process_chunk_bytes(&body, &mut lookahead, true);
 
     tracing::info!(
         "[H2 Upstream HTTP/1.1] Response: status={}, {} body bytes in, {} out",
@@ -134,7 +136,7 @@ async fn read_http1_response_redacted(
         redacted.len()
     );
 
-    Ok((status, redacted.into_bytes()))
+    Ok((status, redacted))
 }
 
 /// Connect to upstream via HTTP/1.1 and establish TLS

@@ -119,7 +119,15 @@ impl H2MitmHandler {
         let mut body = Vec::new();
         while let Some(chunk) = recv_stream.data().await {
             let chunk = chunk?;
+            let len = chunk.len();
             body.extend_from_slice(&chunk);
+            // Return the flow-control credit. Without it the peer may only send
+            // the initial 64 KiB window: a larger request body (a prompt with a
+            // file pasted in, say) stalls mid-send until the client times out.
+            recv_stream
+                .flow_control()
+                .release_capacity(len)
+                .map_err(|e| anyhow::anyhow!("releasing h2 request capacity: {}", e))?;
         }
         tracing::debug!("[H2] Request body received: {} bytes", body.len());
         Ok(body)
@@ -134,17 +142,16 @@ impl H2MitmHandler {
         if body.is_empty() {
             return Bytes::new();
         }
-        let body_str = String::from_utf8_lossy(body);
-        let redacted = if !matches!(redact_patterns, scred_http::PatternSelector::None) {
-            let selective_engine = Arc::new(RedactionEngine::with_selector(
-                engine.config().clone(),
-                redact_patterns.clone(),
-            ));
-            selective_engine.redact(&body_str)
-        } else {
-            engine.redact(&body_str)
-        };
-        Bytes::from(redacted.redacted.into_bytes())
+        if matches!(redact_patterns, scred_http::PatternSelector::None) {
+            return Bytes::from(body.to_vec());
+        }
+        // Byte-preserving: going through String would replace every non-UTF-8 byte
+        // with U+FFFD, so a binary request body (a tarball, an image) came out
+        // longer and unusable.
+        let mut out = body.to_vec();
+        let detection = scred_redactor::scred_detector::detect_all(&out);
+        scred_redactor::scred_detector::redact_in_place(&mut out, &detection.matches);
+        Bytes::from(out)
     }
 
     /// Process H2 headers with policy actions (Replace, Redact, Detect, Passthrough)
